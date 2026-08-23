@@ -215,11 +215,17 @@ class OverlaySupervisor:
         self._writer_failed: threading.Event | None = None
         self._config: dict[str, object] | None = None
         self._restarts = 0
+        self._session_generation = 0
         self.disabled = False
 
     @property
     def process_context(self) -> object:
         return self._context
+
+    @property
+    def session_generation(self) -> int:
+        with self._active_lock:
+            return self._session_generation
 
     def start(self, config: OverlayConfig) -> bool:
         """Start the renderer, or report cosmetic unavailability without raising."""
@@ -329,6 +335,7 @@ class OverlaySupervisor:
             self._mailbox = resources.mailbox
             self._writer = resources.writer
             self._writer_failed = resources.writer_failed
+            self._session_generation += 1
 
     def _detach_active(self) -> _ActiveResources | None:
         with self._active_lock:

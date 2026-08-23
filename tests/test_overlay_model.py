@@ -133,6 +133,46 @@ class OverlayReducerTests(unittest.TestCase):
 
 
 class OverlayProtocolTests(unittest.TestCase):
+    def test_snapshot_and_child_actions_carry_strict_nonnegative_generation(self):
+        from word_factori.overlay_protocol import (
+            decode_child_action, decode_parent_message, encode_parent_message, snapshot_message,
+        )
+
+        self.assertEqual(4, snapshot(OverlayState.closed(), generation=4).generation)
+        with self.assertRaises(ValueError):
+            snapshot(OverlayState.closed(), generation=True)
+        with self.assertRaises(ValueError):
+            snapshot(OverlayState.closed(), generation=-1)
+
+        snapshot_payload = json.loads(encode_parent_message(
+            snapshot_message(snapshot(OverlayState.closed(), generation=3)),
+        ))
+        self.assertEqual(3, snapshot_payload["payload"]["generation"])
+        for generation in (None, True, -1):
+            invalid_snapshot = json.loads(json.dumps(snapshot_payload))
+            if generation is None:
+                del invalid_snapshot["payload"]["generation"]
+            else:
+                invalid_snapshot["payload"]["generation"] = generation
+            with self.subTest(snapshot_generation=generation), self.assertRaises(ValueError):
+                decode_parent_message(json.dumps(invalid_snapshot))
+        invalid_snapshot = json.loads(json.dumps(snapshot_payload))
+        invalid_snapshot["payload"]["extra_generation"] = 3
+        with self.assertRaises(ValueError):
+            decode_parent_message(json.dumps(invalid_snapshot))
+
+        encoded = '{"version":1,"type":"action","payload":{"generation":7,"kind":"open","value":null}}'
+        self.assertEqual(OverlayAction("open", generation=7), decode_child_action(encoded))
+        invalid = (
+            '{"version":1,"type":"action","payload":{"kind":"open","value":null}}',
+            '{"version":1,"type":"action","payload":{"generation":true,"kind":"open","value":null}}',
+            '{"version":1,"type":"action","payload":{"generation":-1,"kind":"open","value":null}}',
+            '{"version":1,"type":"action","payload":{"generation":0,"kind":"open","value":null,"extra":1}}',
+        )
+        for value in invalid:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                decode_child_action(value)
+
     def test_snapshot_message_round_trip_and_unknown_type_rejection(self):
         from word_factori.overlay_protocol import decode_parent_message, encode_parent_message, snapshot_message
 
@@ -151,9 +191,9 @@ class OverlayProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "version"):
             decode_parent_message('{"version":true,"type":"shutdown","payload":{}}')
         with self.assertRaisesRegex(ValueError, "string"):
-            decode_child_action('{"version":1,"type":"action","payload":{"kind":"open","value":"' + "x" * 8193 + '"}}')
+            decode_child_action('{"version":1,"type":"action","payload":{"generation":0,"kind":"open","value":"' + "x" * 8193 + '"}}')
         with self.assertRaisesRegex(ValueError, "action"):
-            decode_child_action('{"version":1,"type":"action","payload":{"kind":"execute","value":null}}')
+            decode_child_action('{"version":1,"type":"action","payload":{"generation":0,"kind":"execute","value":null}}')
 
     def test_snapshot_payload_rejects_wrong_scalar_types(self):
         from word_factori.overlay_protocol import decode_parent_message, snapshot_message
@@ -168,11 +208,11 @@ class OverlayProtocolTests(unittest.TestCase):
         from word_factori.overlay_protocol import decode_child_action
 
         cases = (
-            '{"version":1,"type":"action","payload":{"kind":"open","value":"extra"}}',
-            '{"version":1,"type":"action","payload":{"kind":"filter","value":"other"}}',
-            '{"version":1,"type":"action","payload":{"kind":"expire","value":" "}}',
-            '{"version":1,"type":"action","payload":{"kind":"reload-required","value":"yes"}}',
-            '{"version":1,"type":"action","payload":{"kind":"connection-status","value":"offline"}}',
+            '{"version":1,"type":"action","payload":{"generation":0,"kind":"open","value":"extra"}}',
+            '{"version":1,"type":"action","payload":{"generation":0,"kind":"filter","value":"other"}}',
+            '{"version":1,"type":"action","payload":{"generation":0,"kind":"expire","value":" "}}',
+            '{"version":1,"type":"action","payload":{"generation":0,"kind":"reload-required","value":"yes"}}',
+            '{"version":1,"type":"action","payload":{"generation":0,"kind":"connection-status","value":"offline"}}',
         )
         for encoded in cases:
             with self.subTest(encoded=encoded), self.assertRaisesRegex(ValueError, "action"):

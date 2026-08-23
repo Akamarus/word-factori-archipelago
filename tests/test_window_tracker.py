@@ -153,6 +153,12 @@ class WindowTrackerTests(unittest.TestCase):
 
 
 class RendererBoundaryTests(unittest.TestCase):
+    def test_renderer_action_encoding_requires_current_snapshot_generation(self):
+        with self.assertRaises(ValueError):
+            OverlayGeometry.encode_action("open", generation=None)
+        decoded = decode_child_action(OverlayGeometry.encode_action("open", generation=9))
+        self.assertEqual(("open", 9), (decoded.kind, decoded.generation))
+
     def test_production_visibility_adapter_uses_verified_no_activate_show_and_hide(self):
         user32 = FakeVisibilityUser32()
         adapter = CtypesOverlayHookAPI.__new__(CtypesOverlayHookAPI)
@@ -440,8 +446,8 @@ class RendererBoundaryTests(unittest.TestCase):
 
         connection = Connection()
         writer = ChildActionWriter(connection, capacity=4)
-        self.assertTrue(writer.enqueue("open"))
-        self.assertTrue(writer.enqueue("close"))
+        self.assertTrue(writer.enqueue("open", generation=3))
+        self.assertTrue(writer.enqueue("close", generation=3))
         self.assertTrue(connection.ready.wait(1.0))
         writer.stop(0.2)
         self.assertEqual(["open", "close"], connection.values)
@@ -453,7 +459,7 @@ class RendererBoundaryTests(unittest.TestCase):
 
         broken = ChildActionWriter(Broken(), capacity=2)
         started = time.monotonic()
-        self.assertTrue(broken.enqueue("open"))
+        self.assertTrue(broken.enqueue("open", generation=3))
         self.assertLess(time.monotonic() - started, 0.1)
         deadline = time.monotonic() + 1.0
         while not broken.failed and time.monotonic() < deadline:
@@ -471,10 +477,10 @@ class RendererBoundaryTests(unittest.TestCase):
                 release.wait(1.0)
 
         writer = ChildActionWriter(Blocking(), capacity=1)
-        self.assertTrue(writer.enqueue("open"))
+        self.assertTrue(writer.enqueue("open", generation=3))
         self.assertTrue(entered.wait(1.0))
-        self.assertTrue(writer.enqueue("close"))
-        self.assertFalse(writer.enqueue("toggle"))
+        self.assertTrue(writer.enqueue("close", generation=3))
+        self.assertFalse(writer.enqueue("toggle", generation=3))
         self.assertTrue(writer.failed)
         release.set()
         writer.stop(0.2)
@@ -558,7 +564,7 @@ class RendererBoundaryTests(unittest.TestCase):
             self.assertLessEqual(region.top, 720)
 
     def test_child_action_encoding_matches_strict_parent_decoder(self):
-        encoded = OverlayGeometry.encode_action("filter", "received")
+        encoded = OverlayGeometry.encode_action("filter", "received", generation=3)
         self.assertEqual(("filter", "received"), (
             decode_child_action(encoded).kind,
             decode_child_action(encoded).value,

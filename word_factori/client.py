@@ -131,9 +131,37 @@ class WordFactoriContext(CommonContext):
         self.overlay = overlay if overlay is not None else OverlaySupervisor()
         self.overlay_preferences = load_preferences(self.overlay_preferences_path())
         self.overlay_state = OverlayState.closed(max_visible=self.overlay_preferences.max_visible)
-        self.last_overlay_error: str | None = None
+        self.last_overlay_transport_error: str | None = None
+        self.last_overlay_persistence_error: str | None = None
         self.overlay_action_task: asyncio.Task | None = None
         self._overlay_identity: str | None = None
+        self._connection_generation = 0
+        self._presentation_generation = 0
+        self._overlay_session_generation = int(
+            getattr(self.overlay, "session_generation", 0),
+        )
+
+    @property
+    def last_overlay_error(self) -> str | None:
+        return self.last_overlay_persistence_error or self.last_overlay_transport_error
+
+    def _advance_connection_generation(self) -> int:
+        self._connection_generation += 1
+        self._presentation_generation += 1
+        return self._connection_generation
+
+    def _connection_epoch_matches(self, identity: str | None, generation: int) -> bool:
+        return (
+            identity is not None
+            and self.connected_identity == identity
+            and self._connection_generation == generation
+        )
+
+    def _sync_overlay_session(self) -> None:
+        current = int(getattr(self.overlay, "session_generation", 0))
+        if current != self._overlay_session_generation:
+            self._overlay_session_generation = current
+            self._presentation_generation += 1
 
     async def server_auth(self, password_requested: bool = False) -> None:
         self._set_overlay_connection_status("authenticating")
@@ -143,6 +171,7 @@ class WordFactoriContext(CommonContext):
         await self.send_connect()
 
     async def connection_closed(self) -> None:
+        self._advance_connection_generation()
         try:
             await super().connection_closed()
         finally:
@@ -171,6 +200,7 @@ class WordFactoriContext(CommonContext):
             seed_name = args.get("seed_name")
             self.room_seed_name = str(seed_name) if seed_name is not None else None
         elif cmd == "Connected":
+            connection_generation = self._advance_connection_generation()
             self.slot_data = dict(args.get("slot_data") or {})
             self.connected_identity = self.current_identity()
             try:
@@ -191,7 +221,7 @@ class WordFactoriContext(CommonContext):
                 ),
             )
             self._overlay_identity = self.connected_identity
-            self.publish_overlay(self.connected_identity)
+            self.publish_overlay(self.connected_identity, connection_generation)
             try:
                 self.bridge_state = load_state(self.state_path())
             except (OSError, ValueError, TypeError) as error:
@@ -205,7 +235,7 @@ class WordFactoriContext(CommonContext):
             self.last_render_signature = None
             asyncio.create_task(self._connected_reconcile(
                 self.connected_identity, self._snapshot_dispatch_items(self.items_received),
-                frozenset(self.checked_locations),
+                frozenset(self.checked_locations), connection_generation,
             ))
             asyncio.create_task(self._resend_pending_checks())
             if self.goal_identity == self.connected_identity:
@@ -213,12 +243,14 @@ class WordFactoriContext(CommonContext):
         elif cmd == "ReceivedItems":
             asyncio.create_task(self._received_items_reconcile(
                 self.connected_identity, self._snapshot_dispatch_items(self.items_received),
+                self._connection_generation,
             ))
         elif cmd == "LocationInfo" and self.connected_identity is not None:
             asyncio.create_task(self._backfill_location_info_safely(
                 self.connected_identity,
                 self._snapshot_dispatch_items(args.get("locations") or ()),
                 frozenset(self.checked_locations),
+                self._connection_generation,
             ))
         elif cmd == "RoomUpdate":
             if self.connected_identity is not None and self.compatible_campaign():
@@ -262,7 +294,8 @@ class WordFactoriContext(CommonContext):
         if not started:
             self._overlay_warning("overlay unavailable; using regular client")
             return
-        self.last_overlay_error = None
+        self._sync_overlay_session()
+        self.last_overlay_transport_error = None
         self._ensure_overlay_action_task()
         self.publish_overlay()
 
@@ -327,15 +360,21 @@ class WordFactoriContext(CommonContext):
             utc_observed_at(), self_item=self.slot_concerns_self(item.player),
         )
 
-    def _dispatch_room_matches(self, identity: str) -> bool:
+    def _dispatch_room_matches(
+        self, identity: str, connection_generation: int | None = None,
+    ) -> bool:
         return (
             self.connected_identity == identity
             and self.dispatch_ledger.identity == identity
+            and (
+                connection_generation is None
+                or self._connection_generation == connection_generation
+            )
         )
 
-    def _replace_overlay_room(
+    def _room_overlay_candidate(
         self, identity: str, ledger: DispatchLedger, notifications: tuple[DispatchEvent, ...],
-    ) -> None:
+    ) -> OverlayState:
         """Create a fresh room presentation without replaying retained history."""
         notification_keys = frozenset(event.key for event in notifications)
         state = OverlayState(
@@ -347,47 +386,91 @@ class WordFactoriContext(CommonContext):
                 event.key for event in ledger.events if event.key not in notification_keys
             ),
         )
-        self.overlay_state = apply_events(state, notifications)
-        self._overlay_identity = identity
-        self.pending_overlay_events = ()
+        return apply_events(state, notifications)
 
-    def _apply_pending_overlay_events(self, identity: str) -> None:
-        if self.connected_identity != identity or self.dispatch_ledger.identity != identity:
-            return
-        if self._overlay_identity is None:
-            self._overlay_identity = identity
-        if self._overlay_identity != identity:
-            return
-        pending, self.pending_overlay_events = self.pending_overlay_events, ()
-        if pending:
-            self.overlay_state = apply_events(self.overlay_state, pending)
-        if self.overlay_state.is_open and self.dispatch_ledger.unread_keys:
-            self.dispatch_ledger = mark_all_read(self.dispatch_ledger)
+    def _event_overlay_candidates(
+        self, identity: str, ledger: DispatchLedger,
+        notifications: tuple[DispatchEvent, ...],
+    ) -> tuple[DispatchLedger, OverlayState]:
+        state = self.overlay_state
+        if self._overlay_identity not in (None, identity):
+            return ledger, state
+        if notifications:
+            state = apply_events(state, notifications)
+        if state.is_open and ledger.unread_keys:
+            ledger = mark_all_read(ledger)
+        return ledger, state
+
+    def _commit_dispatch_candidates(
+        self, identity: str, connection_generation: int,
+        ledger: DispatchLedger, state: OverlayState,
+    ) -> bool:
+        if not self._connection_epoch_matches(identity, connection_generation):
+            return False
+        try:
+            save_ledger(self.dispatch_path(identity), ledger)
+        except Exception as error:
+            self._overlay_persistence_warning(
+                f"dispatch persistence failed: {error}; presentation state retained",
+            )
+            logger.error(
+                "Dispatch history could not be persisted; Word Factori unlocks remain active: %s",
+                error,
+            )
+            return False
+        if not self._connection_epoch_matches(identity, connection_generation):
+            return False
+        self.dispatch_ledger = ledger
+        self.overlay_state = state
+        self.pending_overlay_events = ()
+        self._overlay_identity = identity
+        self.last_overlay_persistence_error = None
+        self.publish_overlay(identity, connection_generation)
+        return True
 
     async def reconcile_dispatches(
         self, identity: str | None = None, items=None,
+        connection_generation: int | None = None,
     ) -> None:
         identity = identity or self.connected_identity or self.current_identity()
+        connection_generation = (
+            self._connection_generation
+            if connection_generation is None else connection_generation
+        )
         items = tuple(self.items_received) if items is None else tuple(items)
+        if not self._connection_epoch_matches(identity, connection_generation):
+            return
         async with self._dispatch_lock:
-            if not self._dispatch_room_matches(identity):
+            if not self._dispatch_room_matches(identity, connection_generation):
                 return
             events = tuple(
                 event for index, item in enumerate(items)
                 if (event := self.dispatch_received_event(index, item, identity)) is not None
             )
             update = reconcile_received(self.dispatch_ledger, events)
-            self.dispatch_ledger = update.state
-            self.pending_overlay_events += update.notify
-            self._apply_pending_overlay_events(identity)
-            save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
-            self.publish_overlay(identity)
+            ledger, state = self._event_overlay_candidates(
+                identity, update.state, update.notify,
+            )
+            self._commit_dispatch_candidates(
+                identity, connection_generation, ledger, state,
+            )
 
-    async def _connected_reconcile(self, identity: str, items, checked_locations) -> None:
+    async def _connected_reconcile(
+        self, identity: str, items, checked_locations,
+        connection_generation: int | None = None,
+    ) -> None:
+        connection_generation = (
+            self._connection_generation
+            if connection_generation is None else connection_generation
+        )
+        if not self._connection_epoch_matches(identity, connection_generation):
+            return
         await self.reconcile_received()
+        if not self._connection_epoch_matches(identity, connection_generation):
+            return
         try:
             async with self._dispatch_lock:
-                if self.connected_identity != identity:
+                if not self._connection_epoch_matches(identity, connection_generation):
                     return
                 try:
                     ledger = load_ledger(self.dispatch_path(identity), identity)
@@ -399,43 +482,58 @@ class WordFactoriContext(CommonContext):
                     if (event := self.dispatch_received_event(index, item, identity)) is not None
                 )
                 update = reconcile_received(ledger, events)
-                if self.connected_identity != identity or update.state.identity != identity:
+                if (
+                    not self._connection_epoch_matches(identity, connection_generation)
+                    or update.state.identity != identity
+                ):
                     return
-                self.pending_overlay_events = ()
-                self.dispatch_ledger = update.state
-                self.pending_overlay_events += update.notify
-                self._replace_overlay_room(identity, update.state, update.notify)
-                save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
-                self.publish_overlay(identity)
+                state = self._room_overlay_candidate(identity, update.state, update.notify)
+                ledger = mark_all_read(update.state) if state.is_open else update.state
+                self._commit_dispatch_candidates(
+                    identity, connection_generation, ledger, state,
+                )
         except Exception:
             logger.exception("Dispatch history reconciliation failed; Word Factori unlocks remain active.")
         try:
-            if not self._dispatch_room_matches(identity):
+            if not self._dispatch_room_matches(identity, connection_generation):
                 return
-            await self.request_checked_location_info(identity, checked_locations)
+            await self.request_checked_location_info(
+                identity, checked_locations, connection_generation,
+            )
+            if not self._connection_epoch_matches(identity, connection_generation):
+                return
         except Exception:
             logger.exception("Checked-location dispatch history could not be requested.")
 
-    async def _received_items_reconcile(self, identity: str | None, items) -> None:
+    async def _received_items_reconcile(
+        self, identity: str | None, items, connection_generation: int,
+    ) -> None:
+        if not self._connection_epoch_matches(identity, connection_generation):
+            return
         await self.reconcile_received()
-        if identity is None:
+        if not self._connection_epoch_matches(identity, connection_generation):
             return
         try:
-            await self.reconcile_dispatches(identity, items)
+            await self.reconcile_dispatches(identity, items, connection_generation)
         except Exception:
             logger.exception("Dispatch history reconciliation failed; Word Factori unlocks remain active.")
 
     async def request_checked_location_info(
         self, identity: str | None = None, checked_locations=None,
+        connection_generation: int | None = None,
     ) -> None:
         identity = identity or self.connected_identity or self.current_identity()
+        connection_generation = (
+            self._connection_generation
+            if connection_generation is None else connection_generation
+        )
         checked_locations = (
             frozenset(self.checked_locations)
             if checked_locations is None else frozenset(checked_locations)
         )
         local_ids = {location.code for location in LOCATIONS}
         locations = sorted(checked_locations & local_ids)
-        if locations and self._dispatch_room_matches(identity):
+        if locations and self._dispatch_room_matches(identity, connection_generation):
             await self.send_msgs([{
                 "cmd": "LocationScouts", "locations": locations,
                 "create_as_hint": 0,
@@ -456,13 +554,19 @@ class WordFactoriContext(CommonContext):
 
     async def _backfill_location_info_safely(
         self, identity: str, items, checked_locations,
+        connection_generation: int | None = None,
     ) -> None:
+        connection_generation = (
+            self._connection_generation
+            if connection_generation is None else connection_generation
+        )
         try:
             local_ids = {location.code for location in LOCATIONS}
             checked = checked_locations & local_ids
             async with self._dispatch_lock:
-                if not self._dispatch_room_matches(identity):
+                if not self._dispatch_room_matches(identity, connection_generation):
                     return
+                ledger = self.dispatch_ledger
                 changed = False
                 for item in items:
                     if getattr(item, "location", None) not in checked:
@@ -474,31 +578,38 @@ class WordFactoriContext(CommonContext):
                         existing.receive_index is not None
                         and existing.item_id == event.item_id
                         and existing.location_id == event.location_id
-                        for existing in self.dispatch_ledger.events
+                        for existing in ledger.events
                     ):
                         continue
-                    update = record_event(self.dispatch_ledger, event, notify=False)
-                    changed = changed or update.state is not self.dispatch_ledger
-                    self.dispatch_ledger = update.state
+                    update = record_event(ledger, event, notify=False)
+                    changed = changed or update.state is not ledger
+                    ledger = update.state
                 if changed:
-                    save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
-                    self.publish_overlay(identity)
+                    self._commit_dispatch_candidates(
+                        identity, connection_generation, ledger, self.overlay_state,
+                    )
         except Exception:
             logger.exception("Checked-location dispatch history could not be recorded.")
 
     async def _record_dispatch_event_safely(
         self, identity: str, event: DispatchEvent, *, notify: bool,
+        connection_generation: int | None = None,
     ) -> None:
+        connection_generation = (
+            self._connection_generation
+            if connection_generation is None else connection_generation
+        )
         try:
             async with self._dispatch_lock:
-                if not self._dispatch_room_matches(identity):
+                if not self._dispatch_room_matches(identity, connection_generation):
                     return
                 update = record_event(self.dispatch_ledger, event, notify=notify)
-                self.dispatch_ledger = update.state
-                self.pending_overlay_events += update.notify
-                self._apply_pending_overlay_events(identity)
-                save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
-                self.publish_overlay(identity)
+                ledger, state = self._event_overlay_candidates(
+                    identity, update.state, update.notify,
+                )
+                self._commit_dispatch_candidates(
+                    identity, connection_generation, ledger, state,
+                )
         except Exception:
             logger.exception("Dispatch packet could not be recorded; standard client output remains active.")
 
@@ -519,6 +630,7 @@ class WordFactoriContext(CommonContext):
         )
         asyncio.create_task(self._record_dispatch_event_safely(
             identity, event, notify=True,
+            connection_generation=self._connection_generation,
         ))
 
     def on_print_json(self, args: dict) -> None:
@@ -678,13 +790,26 @@ class WordFactoriContext(CommonContext):
         )
 
     def _overlay_warning(self, message: str) -> None:
-        if message != self.last_overlay_error:
+        if message != self.last_overlay_transport_error:
             logger.warning("Word Factori overlay: %s", message)
-            self.last_overlay_error = message
+            self.last_overlay_transport_error = message
 
-    def publish_overlay(self, expected_identity: str | None = None) -> bool:
+    def _overlay_persistence_warning(self, message: str) -> None:
+        if message != self.last_overlay_persistence_error:
+            logger.warning("Word Factori overlay state: %s", message)
+            self.last_overlay_persistence_error = message
+
+    def publish_overlay(
+        self, expected_identity: str | None = None,
+        expected_connection_generation: int | None = None,
+    ) -> bool:
         """Publish cosmetic presentation without exposing renderer failure to bridge work."""
         if not self.overlay_preferences.enabled:
+            return False
+        if (
+            expected_connection_generation is not None
+            and self._connection_generation != expected_connection_generation
+        ):
             return False
         if expected_identity is not None and (
             self.connected_identity != expected_identity
@@ -695,13 +820,14 @@ class WordFactoriContext(CommonContext):
         try:
             published = self.overlay.publish(snapshot(
                 self.overlay_state, self.dispatch_ledger, self.overlay_preferences,
+                generation=self._presentation_generation,
             ))
         except Exception as error:
             published = False
             self._overlay_warning(f"publish failed: {error}; using regular client")
         if published:
-            self.last_overlay_error = None
-        elif self.last_overlay_error is None:
+            self.last_overlay_transport_error = None
+        elif self.last_overlay_transport_error is None:
             self._overlay_warning("unavailable; using regular client")
         return published
 
@@ -714,25 +840,76 @@ class WordFactoriContext(CommonContext):
         except Exception as error:
             self._overlay_warning(f"status update failed: {error}; using regular client")
 
-    async def _apply_overlay_action(self, action: OverlayAction) -> None:
-        try:
-            previous = self.overlay_state
-            updated = apply_action(previous, action)
-        except Exception as error:
-            self._overlay_warning(f"action rejected: {error}; using regular client")
-            return
-        self.overlay_state = updated
-        opened = not previous.is_open and updated.is_open
-        if opened and self.connected_identity is not None:
+    async def _apply_overlay_action(
+        self, action: OverlayAction, *, expected_identity: str | None = None,
+        expected_connection_generation: int | None = None,
+    ) -> bool:
+        if expected_connection_generation is not None and (
+            not self._connection_epoch_matches(
+                expected_identity, expected_connection_generation,
+            )
+        ):
+            return False
+        if action.kind == "open" and self.connected_identity is not None:
             async with self._dispatch_lock:
                 identity = self.connected_identity
-                if self._dispatch_room_matches(identity) and self.dispatch_ledger.unread_keys:
-                    self.dispatch_ledger = mark_all_read(self.dispatch_ledger)
+                connection_generation = self._connection_generation
+                if expected_connection_generation is not None:
+                    identity = expected_identity
+                    connection_generation = expected_connection_generation
+                if not self._dispatch_room_matches(identity, connection_generation):
+                    return False
+                try:
+                    previous = self.overlay_state
+                    updated = apply_action(previous, action)
+                except Exception as error:
+                    self._overlay_warning(f"action rejected: {error}; using regular client")
+                    return False
+                candidate_ledger = self.dispatch_ledger
+                if not previous.is_open and updated.is_open and candidate_ledger.unread_keys:
+                    candidate_ledger = mark_all_read(candidate_ledger)
                     try:
-                        save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
+                        save_ledger(self.dispatch_path(identity), candidate_ledger)
                     except Exception as error:
-                        self._overlay_warning(f"mark-read persistence failed: {error}; using regular client")
+                        self._overlay_persistence_warning(
+                            f"mark-read persistence failed: {error}; presentation state retained",
+                        )
+                        self.publish_overlay(identity, connection_generation)
+                        return False
+                    if not self._connection_epoch_matches(identity, connection_generation):
+                        return False
+                    self.dispatch_ledger = candidate_ledger
+                    self.last_overlay_persistence_error = None
+                self.overlay_state = updated
+                self.publish_overlay(identity, connection_generation)
+                return True
+        try:
+            updated = apply_action(self.overlay_state, action)
+        except Exception as error:
+            self._overlay_warning(f"action rejected: {error}; using regular client")
+            return False
+        self.overlay_state = updated
         self.publish_overlay(self.connected_identity)
+        return True
+
+    async def _apply_child_overlay_action(self, action: OverlayAction) -> None:
+        if action.generation != self._presentation_generation:
+            return
+        identity = self.connected_identity
+        connection_generation = self._connection_generation
+        await self._apply_overlay_action(
+            action, expected_identity=identity,
+            expected_connection_generation=connection_generation,
+        )
+
+    async def _apply_local_overlay_action(self, action: OverlayAction) -> bool:
+        identity = self.connected_identity
+        if identity is None:
+            return await self._apply_overlay_action(action)
+        return await self._apply_overlay_action(
+            action, expected_identity=identity,
+            expected_connection_generation=self._connection_generation,
+        )
 
     async def process_overlay_actions_once(self) -> None:
         """Drain one nonblocking child-action batch; useful for deterministic tests."""
@@ -742,7 +919,7 @@ class WordFactoriContext(CommonContext):
             self._overlay_warning(f"action poll failed: {error}; using regular client")
             return
         for action in actions:
-            await self._apply_overlay_action(action)
+            await self._apply_child_overlay_action(action)
 
     async def _overlay_action_loop(self) -> None:
         while not self.exit_event.is_set():
@@ -757,6 +934,7 @@ class WordFactoriContext(CommonContext):
             return
         try:
             self.overlay.health_check()
+            self._sync_overlay_session()
             if bool(getattr(self.overlay, "disabled", False)):
                 self._overlay_warning("renderer stopped after restart attempt; using regular client")
                 return
@@ -766,26 +944,48 @@ class WordFactoriContext(CommonContext):
 
     async def overlay_control(self, action: str) -> None:
         if action == "show":
-            await self._apply_overlay_action(OverlayAction("open"))
+            if not self.overlay_preferences.enabled:
+                self._overlay_warning("disabled by preference; regular client active")
+                return
+            if bool(getattr(self.overlay, "disabled", False)):
+                self._overlay_warning("renderer disabled for this session; use restart")
+                return
+            if not self.publish_overlay(self.connected_identity):
+                try:
+                    started = bool(self.overlay.start(self.overlay_config()))
+                except Exception as error:
+                    started = False
+                    self._overlay_warning(f"overlay startup failed: {error}")
+                if started:
+                    self._sync_overlay_session()
+                    self._ensure_overlay_action_task()
+                if not started or not self.publish_overlay(self.connected_identity):
+                    self._overlay_warning("unavailable; using regular client")
+                    return
+            await self._apply_local_overlay_action(OverlayAction("open"))
             return
         if action == "hide":
-            await self._apply_overlay_action(OverlayAction("close"))
+            await self._apply_local_overlay_action(OverlayAction("close"))
             return
         if action != "restart":
             raise ValueError("unknown overlay control")
         if not self.overlay_preferences.enabled:
             self._overlay_warning("disabled by preference; regular client active")
             return
+        self._presentation_generation += 1
         try:
             restarted = bool(self.overlay.restart(self.overlay_config()))
         except Exception as error:
             restarted = False
             self._overlay_warning(f"restart failed: {error}; using regular client")
         if restarted:
-            self.last_overlay_error = None
+            self._overlay_session_generation = int(
+                getattr(self.overlay, "session_generation", self._overlay_session_generation),
+            )
+            self.last_overlay_transport_error = None
             self._ensure_overlay_action_task()
             self.publish_overlay(self.connected_identity)
-        elif self.last_overlay_error is None:
+        elif self.last_overlay_transport_error is None:
             self._overlay_warning("restart failed; using regular client")
 
     def _bridge_warning(self, message: str) -> None:

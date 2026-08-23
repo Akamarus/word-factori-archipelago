@@ -433,12 +433,12 @@ class OverlaySupervisorTests(unittest.TestCase):
         supervisor.start(make_config())
         connection = context.parent_connections[0]
         connection.incoming.extend((
-            json.dumps({"version": 1, "type": "action", "payload": {"kind": "open", "value": None}}),
+            json.dumps({"version": 1, "type": "action", "payload": {"generation": 4, "kind": "open", "value": None}}),
             "not-json",
-            json.dumps({"version": 1, "type": "action", "payload": {"kind": "filter", "value": "sent"}}),
+            json.dumps({"version": 1, "type": "action", "payload": {"generation": 4, "kind": "filter", "value": "sent"}}),
         ))
 
-        self.assertEqual(supervisor.poll_actions(), (OverlayAction("open"), OverlayAction("filter", "sent")))
+        self.assertEqual(supervisor.poll_actions(), (OverlayAction("open", generation=4), OverlayAction("filter", "sent", 4)))
         self.assertEqual(supervisor.poll_actions(), ())
 
     def test_poll_eof_is_cosmetic(self):
@@ -451,7 +451,7 @@ class OverlaySupervisorTests(unittest.TestCase):
 
     def test_poll_actions_reads_at_most_sixty_four_messages(self):
         encoded = json.dumps({
-            "version": 1, "type": "action", "payload": {"kind": "open", "value": None},
+            "version": 1, "type": "action", "payload": {"generation": 4, "kind": "open", "value": None},
         })
 
         class AlwaysReadyConnection(FakeConnection):
@@ -480,6 +480,18 @@ class OverlaySupervisorTests(unittest.TestCase):
         self.assertEqual(context.starts, 2)
         self.assertTrue(supervisor.disabled)
         self.assertFalse(supervisor.publish(snapshot(OverlayState.closed())))
+
+    def test_session_generation_changes_for_every_new_child(self):
+        context = FakeProcessContext(process_alive=False)
+        supervisor = self.make_supervisor(context)
+        self.assertEqual(0, supervisor.session_generation)
+        self.assertTrue(supervisor.start(make_config()))
+        first = supervisor.session_generation
+        supervisor.health_check()
+        second = supervisor.session_generation
+        self.assertGreater(second, first)
+        self.assertTrue(supervisor.restart(make_config()))
+        self.assertGreater(supervisor.session_generation, second)
 
     def test_explicit_restart_resets_session_disable_and_restart_budget(self):
         context = FakeProcessContext(process_alive=False)

@@ -130,9 +130,12 @@ class _FakeOverlaySupervisor:
         self.disable_on_health_check = False
         self.raise_on_health_check = False
         self.disabled = False
+        self.session_generation = 0
 
     def start(self, config):
         self.started.append(config)
+        if self.start_succeeds and self.session_generation == 0:
+            self.session_generation += 1
         return self.start_succeeds
 
     def publish(self, value):
@@ -153,6 +156,8 @@ class _FakeOverlaySupervisor:
     def restart(self, config):
         self.restarted.append(config)
         self.disabled = False
+        if self.start_succeeds:
+            self.session_generation += 1
         return self.start_succeeds
 
     def stop(self, timeout=2.0):
@@ -749,7 +754,10 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             unread_count=1,
             accepted_notification_keys=frozenset((event.key,)),
         )
-        self.overlay.actions = [OverlayAction("open"), OverlayAction("open")]
+        self.overlay.actions = [
+            OverlayAction("open", generation=self.ctx._presentation_generation),
+            OverlayAction("open", generation=self.ctx._presentation_generation),
+        ]
 
         with patch("word_factori.client.save_ledger", wraps=save_ledger) as persisted:
             await self.ctx.process_overlay_actions_once()
@@ -780,6 +788,247 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((), self.ctx.overlay_state.visible_notifications)
         self.assertIn(event.key, self.ctx.overlay_state.accepted_notification_keys)
 
+    async def test_old_same_room_reconcile_cannot_overwrite_new_connection_epoch(self):
+        first = make_network_item(item=7001, location=9001, player=2, flags=1)
+        second = make_network_item(item=7001, location=9002, player=2, flags=1)
+        first_event = self.ctx.dispatch_received_event(0, first)
+        second_event = self.ctx.dispatch_received_event(1, second)
+        authoritative = DispatchLedger(
+            self.ctx.connected_identity,
+            (first_event, second_event),
+            frozenset((first_event.key, second_event.key)),
+            True,
+            1,
+        )
+        save_ledger(self.ctx.dispatch_path(), authoritative)
+        old_generation = self.ctx._connection_generation
+        controlled = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = controlled
+        old = asyncio.create_task(self.ctx.reconcile_dispatches(
+            self.ctx.connected_identity,
+            self.ctx._snapshot_dispatch_items((first,)),
+            connection_generation=old_generation,
+        ))
+        entered = asyncio.create_task(controlled.entered.wait())
+        done, _ = await asyncio.wait((old, entered), return_when=asyncio.FIRST_COMPLETED)
+        if old in done:
+            await old
+        self.assertTrue(entered.done())
+
+        incompatible = dict(self.ctx.slot_data, manifest_digest="0" * 64)
+        self.ctx.on_package("Connected", {"slot_data": incompatible})
+        controlled.proceed.set()
+        await old
+
+        self.assertEqual(2, len(self.ctx.dispatch_ledger.events))
+        self.assertEqual(2, len(load_ledger(
+            self.ctx.dispatch_path(), self.ctx.connected_identity,
+        ).events))
+
+    async def test_stale_child_generation_cannot_open_or_mark_room_read(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        stored = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        save_ledger(self.ctx.dispatch_path(), stored)
+        stale_generation = self.ctx._presentation_generation
+        incompatible = dict(self.ctx.slot_data, manifest_digest="0" * 64)
+        self.ctx.on_package("Connected", {"slot_data": incompatible})
+        self.overlay.actions = [OverlayAction("open", generation=stale_generation)]
+
+        await self.ctx.process_overlay_actions_once()
+
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+
+    async def test_room_a_child_open_cannot_clear_room_b_unread(self):
+        room_a_generation = self.ctx._presentation_generation
+        self.ctx.room_seed_name = "Seed-B"
+        room_b_identity = self.ctx.current_identity()
+        room_b_event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2), room_b_identity,
+        )
+        room_b = DispatchLedger(
+            room_b_identity, (room_b_event,), frozenset((room_b_event.key,)), True, 0,
+        )
+        save_ledger(self.ctx.dispatch_path(room_b_identity), room_b)
+        incompatible = dict(self.ctx.slot_data, manifest_digest="0" * 64)
+        self.ctx.on_package("Connected", {"slot_data": incompatible})
+        self.overlay.actions = [OverlayAction("open", generation=room_a_generation)]
+
+        await self.ctx.process_overlay_actions_once()
+
+        self.assertEqual(room_b_identity, self.ctx.dispatch_ledger.identity)
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((room_b_event.key,)), self.ctx.dispatch_ledger.unread_keys)
+
+    async def test_local_open_waiting_on_lock_cannot_mark_new_room_read(self):
+        room_b_identity = self.ctx.current_identity().replace("Seed-A", "Seed-B")
+        room_b_event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2), room_b_identity,
+        )
+        room_b = DispatchLedger(
+            room_b_identity, (room_b_event,), frozenset((room_b_event.key,)), True, 0,
+        )
+        save_ledger(self.ctx.dispatch_path(room_b_identity), room_b)
+        controlled = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = controlled
+        opening = asyncio.create_task(self.ctx.overlay_control("show"))
+        entered = asyncio.create_task(controlled.entered.wait())
+        done, _ = await asyncio.wait((opening, entered), return_when=asyncio.FIRST_COMPLETED)
+        if opening in done:
+            await opening
+        self.assertTrue(entered.done())
+
+        self.ctx.room_seed_name = "Seed-B"
+        incompatible = dict(self.ctx.slot_data, manifest_digest="0" * 64)
+        self.ctx.on_package("Connected", {"slot_data": incompatible})
+        controlled.proceed.set()
+        await opening
+
+        self.assertEqual(room_b_identity, self.ctx.dispatch_ledger.identity)
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((room_b_event.key,)), self.ctx.dispatch_ledger.unread_keys)
+
+    async def test_open_waiting_on_persistence_lock_preserves_newer_cosmetic_action(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        self.ctx.dispatch_ledger = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1, accepted_notification_keys=frozenset((event.key,)),
+        )
+        controlled = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = controlled
+        opening = asyncio.create_task(self.ctx._apply_local_overlay_action(OverlayAction("open")))
+        entered = asyncio.create_task(controlled.entered.wait())
+        done, _ = await asyncio.wait((opening, entered), return_when=asyncio.FIRST_COMPLETED)
+        if opening in done:
+            await opening
+        self.assertTrue(entered.done())
+
+        await self.ctx._apply_local_overlay_action(OverlayAction("filter", "sent"))
+        controlled.proceed.set()
+        await opening
+
+        self.assertTrue(self.ctx.overlay_state.is_open)
+        self.assertEqual(OverlayFilter.SENT, self.ctx.overlay_state.active_filter)
+
+    async def test_disabled_or_unavailable_show_never_clears_unread(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        self.ctx.dispatch_ledger = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.overlay_state = OverlayState(unread_count=1)
+        self.ctx.overlay_preferences = OverlayPreferences(enabled=False)
+
+        await self.ctx.overlay_control("show")
+
+        self.assertEqual([], self.overlay.started)
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+
+        self.ctx.overlay_preferences = OverlayPreferences(enabled=True)
+        self.overlay.publish_succeeds = False
+        await self.ctx.overlay_control("show")
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+
+        self.overlay.publish_succeeds = True
+        self.overlay.disabled = True
+        await self.ctx.overlay_control("show")
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+
+    async def test_hide_closes_local_panel_without_marking_unread_ledger(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        self.ctx.dispatch_ledger = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.overlay_state = OverlayState(
+            is_open=True, unread_count=0,
+            accepted_notification_keys=frozenset((event.key,)),
+        )
+
+        await self.ctx.overlay_control("hide")
+
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+
+    async def test_open_mark_read_is_transactional_and_keeps_persistence_diagnostic(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        stored = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.dispatch_ledger = stored
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1, accepted_notification_keys=frozenset((event.key,)),
+        )
+        save_ledger(self.ctx.dispatch_path(), stored)
+        action = OverlayAction("open", generation=self.ctx._presentation_generation)
+        self.overlay.actions = [action]
+
+        with patch("word_factori.client.save_ledger", side_effect=OSError("replace failed")):
+            await self.ctx.process_overlay_actions_once()
+
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+        self.assertEqual(frozenset((event.key,)), load_ledger(
+            self.ctx.dispatch_path(), self.ctx.connected_identity,
+        ).unread_keys)
+        self.assertIn("replace failed", self.ctx.last_overlay_persistence_error)
+        self.ctx.publish_overlay(self.ctx.connected_identity)
+        self.assertIn("replace failed", self.ctx.last_overlay_persistence_error)
+
+        self.overlay.actions = [action]
+        await self.ctx.process_overlay_actions_once()
+        self.assertTrue(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset(), self.ctx.dispatch_ledger.unread_keys)
+        self.assertIsNone(self.ctx.last_overlay_persistence_error)
+
+    async def test_open_event_persistence_failure_leaves_memory_and_disk_unchanged(self):
+        empty = DispatchLedger.empty(self.ctx.connected_identity)
+        self.ctx.dispatch_ledger = empty
+        self.ctx.overlay_state = apply_action(self.ctx.overlay_state, OverlayAction("open"))
+        save_ledger(self.ctx.dispatch_path(), empty)
+        event = self.ctx.dispatch_sent_event(
+            make_network_item(item=7001, location=LOCATIONS[0].code, player=2),
+            historical=False,
+        )
+
+        with patch("word_factori.client.save_ledger", side_effect=OSError("replace failed")):
+            await self.ctx._record_dispatch_event_safely(
+                self.ctx.connected_identity, event, notify=True,
+                connection_generation=self.ctx._connection_generation,
+            )
+
+        self.assertEqual((), self.ctx.dispatch_ledger.events)
+        self.assertEqual((), load_ledger(
+            self.ctx.dispatch_path(), self.ctx.connected_identity,
+        ).events)
+        self.assertNotIn(event.key, self.ctx.overlay_state.accepted_notification_keys)
+        self.assertIn("replace failed", self.ctx.last_overlay_persistence_error)
+
+    async def test_restart_invalidates_buffered_child_actions(self):
+        buffered_generation = self.ctx._presentation_generation
+        await self.ctx.overlay_control("restart")
+        self.overlay.actions = [OverlayAction("open", generation=buffered_generation)]
+
+        await self.ctx.process_overlay_actions_once()
+
+        self.assertGreater(self.ctx._presentation_generation, buffered_generation)
+        self.assertFalse(self.ctx.overlay_state.is_open)
+
     async def test_disconnect_preserves_room_history_and_publishes_status(self):
         event = self.ctx.dispatch_received_event(
             0, make_network_item(item=7001, location=9001, player=2),
@@ -790,15 +1039,19 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.ctx.overlay_state = apply_action(
             self.ctx.overlay_state, OverlayAction("connection-status", "connected"),
         )
+        previous_generation = self.ctx._presentation_generation
 
         await self.ctx.connection_closed()
 
         self.assertEqual((event,), self.ctx.dispatch_ledger.events)
         self.assertEqual("disconnected", self.ctx.overlay_state.connection_status)
         self.assertEqual("disconnected", self.overlay.published[-1].connection_status)
+        self.assertGreater(self.overlay.published[-1].generation, previous_generation)
 
     async def test_action_poll_applies_filter_and_overlay_failure_isolated(self):
-        self.overlay.actions = [OverlayAction("filter", "sent")]
+        self.overlay.actions = [OverlayAction(
+            "filter", "sent", self.ctx._presentation_generation,
+        )]
         self.overlay.publish_succeeds = False
 
         await self.ctx.process_overlay_actions_once()
@@ -813,6 +1066,18 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(1, self.overlay.health_checks)
         self.assertIn("health", self.ctx.last_overlay_error)
+
+    async def test_health_restart_invalidates_actions_buffered_by_old_child(self):
+        self.ctx.start_overlay()
+        buffered_generation = self.ctx._presentation_generation
+        self.overlay.session_generation += 1
+        self.overlay.actions = [OverlayAction("open", generation=buffered_generation)]
+
+        self.ctx.check_overlay_health()
+        await self.ctx.process_overlay_actions_once()
+
+        self.assertGreater(self.ctx._presentation_generation, buffered_generation)
+        self.assertFalse(self.ctx.overlay_state.is_open)
 
     async def test_unlock_render_sets_reload_required_snapshot(self):
         self.ctx.items_received = [make_network_item(

@@ -232,13 +232,21 @@ class OverlayGeometry:
         return (self.mailbox, *self.toasts) + (() if self.ledger is None else (self.ledger,))
 
     @staticmethod
-    def encode_action(kind: str, value: str | None = None) -> str:
-        action = validate_action(OverlayAction(kind, value))
+    def encode_action(
+        kind: str, value: str | None = None, *, generation: int | None,
+    ) -> str:
+        if type(generation) is not int or generation < 0:
+            raise ValueError("renderer action generation is invalid")
+        action = validate_action(OverlayAction(kind, value, generation))
         return json.dumps(
             {
                 "version": PROTOCOL_VERSION,
                 "type": "action",
-                "payload": {"kind": action.kind, "value": action.value},
+                "payload": {
+                    "generation": action.generation,
+                    "kind": action.kind,
+                    "value": action.value,
+                },
             },
             separators=(",", ":"),
             sort_keys=True,
@@ -343,10 +351,12 @@ class ChildActionWriter:
     def failed(self) -> bool:
         return self._failed.is_set()
 
-    def enqueue(self, kind: str, value: str | None = None) -> bool:
+    def enqueue(
+        self, kind: str, value: str | None = None, *, generation: int | None,
+    ) -> bool:
         if self._stopping.is_set() or self._failed.is_set():
             return False
-        encoded = OverlayGeometry.encode_action(kind, value)
+        encoded = OverlayGeometry.encode_action(kind, value, generation=generation)
         try:
             self._queue.put_nowait(encoded)
         except queue.Full:
@@ -1059,6 +1069,7 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
             super().__init__()
             self.root_layout: FloatLayout | None = None
             self.snapshot: dict[str, object] = {}
+            self.snapshot_generation: int | None = None
             self.geometry: OverlayGeometry | None = None
             self.tracker = Win32WindowTracker()
             self.action_writer = ChildActionWriter(connection)
@@ -1087,8 +1098,12 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
             return root
 
         def send_action(self, kind: str, value: str | None = None) -> None:
+            if self.snapshot_generation is None:
+                return
             try:
-                accepted = self.action_writer.enqueue(kind, value)
+                accepted = self.action_writer.enqueue(
+                    kind, value, generation=self.snapshot_generation,
+                )
             except Exception:
                 accepted = False
             if not accepted:
@@ -1116,6 +1131,7 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                             validated[key] = value
                     continue
                 self.snapshot = dict(message.payload)
+                self.snapshot_generation = int(message.payload["generation"])
                 self.rebuild()
 
         def rebuild(self) -> None:

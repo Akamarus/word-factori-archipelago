@@ -28,6 +28,7 @@ class OverlayFilter(str, Enum):
 class OverlayAction:
     kind: str
     value: str | None = None
+    generation: int | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +141,7 @@ def _freeze_json(value: object) -> object:
 
 @dataclass(frozen=True)
 class OverlaySnapshot:
+    generation: int
     ledger_rows: tuple[JsonObject, ...]
     visible_notifications: tuple[JsonObject, ...]
     waiting_notifications: tuple[JsonObject, ...]
@@ -218,6 +220,10 @@ def validate_action(action: OverlayAction) -> OverlayAction:
     """Reject action values that cannot be safely applied by the reducer."""
     if not isinstance(action, OverlayAction) or not isinstance(action.kind, str) or action.kind not in _ACTION_KINDS:
         raise ValueError("overlay action is unknown")
+    if action.generation is not None and (
+        type(action.generation) is not int or action.generation < 0
+    ):
+        raise ValueError("overlay action generation is invalid")
     if action.kind in _NO_VALUE_ACTIONS:
         if action.value is not None:
             raise ValueError("overlay action does not accept a value")
@@ -267,10 +273,12 @@ def apply_action(state: OverlayState, action: OverlayAction) -> OverlayState:
 
 
 def snapshot(state: OverlayState, ledger: DispatchLedger | Iterable[DispatchEvent] | None = None,
-             preferences: object | None = None) -> OverlaySnapshot:
+             preferences: object | None = None, *, generation: int = 0) -> OverlaySnapshot:
     """Return a renderer-ready snapshot containing only JSON-compatible values."""
     if not isinstance(state, OverlayState):
         raise ValueError("overlay state is invalid")
+    if type(generation) is not int or generation < 0:
+        raise ValueError("overlay generation must be a non-negative integer")
     from word_factori.overlay_preferences import OverlayPreferences
 
     if ledger is None:
@@ -287,6 +295,7 @@ def snapshot(state: OverlayState, ledger: DispatchLedger | Iterable[DispatchEven
         raise ValueError("overlay state and preferences max_visible disagree")
     visible = () if not state.is_focused else tuple(_event_row(event) for event in state.visible_notifications)
     return OverlaySnapshot(
+        generation=generation,
         ledger_rows=tuple(_event_row(event) for event in _filtered(events, state.active_filter)),
         visible_notifications=visible,
         waiting_notifications=tuple(_event_row(event) for event in state.waiting_notifications),

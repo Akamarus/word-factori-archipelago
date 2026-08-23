@@ -144,6 +144,7 @@ def _validate_settings_payload(payload: dict[str, object]) -> None:
 
 
 def _validate_snapshot_payload(payload: dict[str, object]) -> None:
+    _require_int(payload["generation"], "generation", minimum=0)
     for field in ("ledger_rows", "visible_notifications", "waiting_notifications"):
         if not isinstance(payload[field], list):
             raise ValueError(f"{field} must be an array")
@@ -232,14 +233,19 @@ def decode_child_action(encoded: str) -> OverlayAction:
         raise ValueError("protocol version is not supported")
     if decoded["type"] != "action":
         raise ValueError("child message type is invalid")
-    payload = _require_exact_keys(decoded["payload"], frozenset(("kind", "value")), "action")
+    payload = _require_exact_keys(
+        decoded["payload"], frozenset(("generation", "kind", "value")), "action",
+    )
+    generation = payload["generation"]
     kind = payload["kind"]
     value = payload["value"]
     if not isinstance(kind, str):
         raise ValueError("child action is invalid")
     if value is not None and not isinstance(value, str):
         raise ValueError("child action value is invalid")
+    if type(generation) is not int or generation < 0:
+        raise ValueError("child action generation is invalid")
     try:
-        return validate_action(OverlayAction(kind, value))
+        return validate_action(OverlayAction(kind, value, generation))
     except ValueError as error:
         raise ValueError("child action is invalid") from error
