@@ -1106,6 +1106,109 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.ctx.dispatch_path(), self.ctx.connected_identity,
         ).unread_keys)
 
+    async def test_closed_toggle_marks_room_read_with_one_transactional_save(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        stored = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.dispatch_ledger = stored
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1, accepted_notification_keys=frozenset((event.key,)),
+        )
+        self.overlay.actions = [OverlayAction(
+            "toggle", generation=self.ctx._presentation_generation,
+        )]
+
+        with patch("word_factori.client.save_ledger", wraps=save_ledger) as persisted:
+            await self.ctx.process_overlay_actions_once()
+
+        self.assertEqual(1, persisted.call_count)
+        self.assertTrue(self.ctx.overlay_state.is_open)
+        self.assertEqual(0, self.ctx.overlay_state.unread_count)
+        self.assertEqual(frozenset(), self.ctx.dispatch_ledger.unread_keys)
+        self.assertEqual(frozenset(), load_ledger(
+            self.ctx.dispatch_path(), self.ctx.connected_identity,
+        ).unread_keys)
+
+    async def test_closed_toggle_save_failure_retains_state_ledger_and_disk(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        stored = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.dispatch_ledger = stored
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1, accepted_notification_keys=frozenset((event.key,)),
+        )
+        save_ledger(self.ctx.dispatch_path(), stored)
+        self.overlay.actions = [OverlayAction(
+            "toggle", generation=self.ctx._presentation_generation,
+        )]
+
+        with patch("word_factori.client.save_ledger", side_effect=OSError("replace failed")):
+            await self.ctx.process_overlay_actions_once()
+
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(1, self.ctx.overlay_state.unread_count)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+        self.assertEqual(frozenset((event.key,)), load_ledger(
+            self.ctx.dispatch_path(), self.ctx.connected_identity,
+        ).unread_keys)
+        self.assertIn("replace failed", self.ctx.last_overlay_persistence_error)
+
+    async def test_restart_invalidates_closed_toggle_already_waiting_on_lock(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        stored = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.dispatch_ledger = stored
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1, accepted_notification_keys=frozenset((event.key,)),
+        )
+        save_ledger(self.ctx.dispatch_path(), stored)
+        controlled = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = controlled
+        self.overlay.actions = [OverlayAction(
+            "toggle", generation=self.ctx._presentation_generation,
+        )]
+        processing = asyncio.create_task(self.ctx.process_overlay_actions_once())
+        entered = asyncio.create_task(controlled.entered.wait())
+        done, _ = await asyncio.wait((processing, entered), return_when=asyncio.FIRST_COMPLETED)
+        if processing in done:
+            await processing
+        self.assertTrue(entered.done())
+
+        await self.ctx.overlay_control("restart")
+        publications_after_restart = len(self.overlay.published)
+        with patch("word_factori.client.save_ledger", wraps=save_ledger) as persisted:
+            controlled.proceed.set()
+            await processing
+
+        self.assertEqual(0, persisted.call_count)
+        self.assertEqual(publications_after_restart, len(self.overlay.published))
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+        self.assertEqual(frozenset((event.key,)), load_ledger(
+            self.ctx.dispatch_path(), self.ctx.connected_identity,
+        ).unread_keys)
+
+    async def test_open_toggle_closes_without_saving_ledger(self):
+        self.ctx.overlay_state = OverlayState(is_open=True)
+        self.overlay.actions = [OverlayAction(
+            "toggle", generation=self.ctx._presentation_generation,
+        )]
+
+        with patch("word_factori.client.save_ledger", wraps=save_ledger) as persisted:
+            await self.ctx.process_overlay_actions_once()
+
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(0, persisted.call_count)
+
     async def test_disconnect_preserves_room_history_and_publishes_status(self):
         event = self.ctx.dispatch_received_event(
             0, make_network_item(item=7001, location=9001, player=2),

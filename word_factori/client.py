@@ -861,6 +861,11 @@ class WordFactoriContext(CommonContext):
             self._presentation_generation != expected_presentation_generation
         ):
             return False
+        if action.kind == "toggle":
+            action = OverlayAction(
+                "close" if self.overlay_state.is_open else "open",
+                generation=action.generation,
+            )
         if action.kind == "open" and self.connected_identity is not None:
             async with self._dispatch_lock:
                 identity = self.connected_identity
