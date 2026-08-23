@@ -34,7 +34,7 @@ If the frozen child cannot spawn or import Kivy, stop Task 6. Do not add a runti
 - [ ] **PENDING** — A new received item shows one blue popup on the **left**, with received wording, item, player, and game; a sent item uses sent wording; a self item appears only once as “for yourself.”
 - [ ] **PENDING** — The red mailbox shows unread count. Clicking it opens a dark rounded ledger with purple header, All/Received/Sent filters, direction icons, scrollable rows, and connection/reload status.
 - [ ] **PENDING** — Clicking mailbox, toasts, ledger rows/scrollbar, and filters works. Clicking the factory grid anywhere outside those current rectangles passes through and controls the game.
-- [ ] **PENDING** — `F8` toggles the ledger without focusing the overlay while closed. Escape/close behavior does not leave keyboard focus trapped.
+- [x] **PASS** — With one unread live cheat delivery, focused-game `F8` changed the durable unread set from one key to zero through the child action channel. Windows accessibility still reported Word Factori's pane as focused after both `F8` and Escape, so the overlay did not trap keyboard focus.
 - [ ] **PENDING** — Moving and resizing Word Factori moves/resizes the overlay within 200 ms; mailbox, toast, and ledger remain inside game bounds.
 - [ ] **PENDING** — Minimizing, switching focus away, and closing Word Factori hide the overlay. Restoring/refocusing shows it again and preserves queued notification order.
 - [ ] **PENDING** — Repeat the attachment/click-through check at 100%, 125%, and 150% Windows scaling and after moving between monitors with different scaling.
@@ -63,6 +63,14 @@ Task 7 may begin only after the controller records PASS evidence for the hard pr
   corrected build persisted and rendered-protocol-validated the signed sentinel.
 - Two pre-fallback F8 injections into the focused game produced no durable open
   action. A focus-gated `GetAsyncKeyState` fallback was then added for occupied F8
-  registrations and installed in the hash above, but the final injection retest was
-  interrupted by active user input and a minimized game window. The F8/Escape row
-  therefore remains PENDING rather than being promoted from automated coverage.
+  registrations and installed in the hash above. A later frozen-client retest sent
+  `F8` to the focused Word Factori window with one unread `Rotation Access` row; the
+  ledger persisted zero unread keys, and Word Factori remained the focused pane after
+  both `F8` and Escape. This promotes the F8/Escape row from automated coverage to
+  live PASS evidence even though Windows capture remains unavailable.
+- The exact release was reinstalled while Word Factori was closed, and
+  `verify_release.py --verify-installed` passed source/archive/installed-copy parity.
+  A frozen-client disconnect and reconnect retained exactly one authoritative
+  `Rotation Access` row and zero unread keys. No duplicate durable row or unread
+  replay occurred; the visual no-popup-storm portion of the reconnect row remains
+  PENDING because the capture provider cannot render either GameMaker or Kivy.
