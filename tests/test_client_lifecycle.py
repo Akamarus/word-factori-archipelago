@@ -2,6 +2,7 @@ import argparse
 import asyncio
 from dataclasses import FrozenInstanceError
 from datetime import datetime
+import importlib
 import json
 import logging
 import os
@@ -10,7 +11,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 
 class _NameLookup:
@@ -84,6 +85,9 @@ class _CommonContext:
     async def shutdown(self):
         return None
 
+    async def connection_closed(self):
+        self.server = None
+
     def run_cli(self):
         return None
 
@@ -107,9 +111,52 @@ class _ControlledAsyncLock:
 class _CommandProcessor:
     def __init__(self, ctx):
         self.ctx = ctx
+        self.outputs = []
 
     def output(self, text):
-        return None
+        self.outputs.append(text)
+
+
+class _FakeOverlaySupervisor:
+    def __init__(self, *, publish_succeeds=True, start_succeeds=True):
+        self.publish_succeeds = publish_succeeds
+        self.start_succeeds = start_succeeds
+        self.published = []
+        self.started = []
+        self.restarted = []
+        self.actions = []
+        self.stopped = 0
+        self.health_checks = 0
+        self.disable_on_health_check = False
+        self.raise_on_health_check = False
+        self.disabled = False
+
+    def start(self, config):
+        self.started.append(config)
+        return self.start_succeeds
+
+    def publish(self, value):
+        self.published.append(value)
+        return self.publish_succeeds
+
+    def poll_actions(self):
+        actions, self.actions = tuple(self.actions), []
+        return actions
+
+    def health_check(self):
+        self.health_checks += 1
+        if self.raise_on_health_check:
+            raise OSError("health pipe failed")
+        if self.disable_on_health_check:
+            self.disabled = True
+
+    def restart(self, config):
+        self.restarted.append(config)
+        self.disabled = False
+        return self.start_succeeds
+
+    def stop(self, timeout=2.0):
+        self.stopped += 1
 
 
 common_client = types.ModuleType("CommonClient")
@@ -129,13 +176,16 @@ net_utils = types.ModuleType("NetUtils")
 net_utils.ClientStatus = types.SimpleNamespace(CLIENT_GOAL=30)
 sys.modules.setdefault("NetUtils", net_utils)
 
-from word_factori.client import WordFactoriContext
+from word_factori.client import WordFactoriCommandProcessor, WordFactoriContext
 from word_factori.bridge import BridgeState
 from word_factori.data import (
     CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, ITEM_NAME_TO_ID, LOCATIONS,
 )
 from word_factori.dispatch import DispatchDirection
-from word_factori.dispatch_store import DispatchLedger
+from word_factori.dispatch_store import DispatchLedger, load_ledger, save_ledger
+from word_factori.overlay_model import OverlayAction, OverlayFilter, OverlayState, apply_action
+from word_factori.overlay_preferences import OverlayPreferences
+from word_factori.overlay_supervisor import OverlayConfig
 
 
 class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
@@ -145,7 +195,8 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.environment = patch.dict(os.environ, {"LOCALAPPDATA": self.directory.name})
         self.environment.start()
         self.addCleanup(self.environment.stop)
-        self.ctx = WordFactoriContext("localhost:38281", None)
+        self.overlay = _FakeOverlaySupervisor()
+        self.ctx = WordFactoriContext("localhost:38281", None, overlay=self.overlay)
         self.ctx.auth = "Factory Player"
         self.ctx.team = 0
         self.ctx.slot = 1
@@ -205,6 +256,10 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((), self.ctx.pending_overlay_events)
         self.assertTrue(self.ctx.dispatch_ledger.events[0].historical)
         self.assertIsNone(self.ctx.dispatch_ledger.events[0].observed_at)
+        self.assertEqual(
+            frozenset((self.ctx.dispatch_ledger.events[0].key,)),
+            self.ctx.overlay_state.accepted_notification_keys,
+        )
 
         self.ctx.on_package("ReceivedItems", {"index": 0, "items": [first]})
         await asyncio.sleep(0)
@@ -218,7 +273,8 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         self.assertEqual(2, len(self.ctx.dispatch_ledger.events))
-        self.assertEqual(1, len(self.ctx.pending_overlay_events))
+        self.assertEqual((), self.ctx.pending_overlay_events)
+        self.assertEqual(1, len(self.ctx.overlay_state.visible_notifications))
         live = self.ctx.dispatch_ledger.events[-1]
         self.assertFalse(live.historical)
         self.assertIsNotNone(live.observed_at)
@@ -516,6 +572,329 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("Contraption", self.ctx.bridge_state.applied[0])
         self.assertTrue(self.ctx.levels_path.is_file())
+
+    async def test_overlay_publish_failure_does_not_block_item_reconcile(self):
+        self.ctx.overlay = _FakeOverlaySupervisor(publish_succeeds=False)
+        self.ctx.items_received = [make_network_item(
+            item=7001, location=9001, player=2, flags=1,
+        )]
+
+        await self.ctx.reconcile_received()
+
+        location_id = LOCATIONS[0].code
+        self.ctx.missing_locations = {location_id}
+        await self.ctx.report_indices({0})
+
+        self.assertTrue(self.ctx.levels_path.exists())
+        self.assertEqual("Contraption", self.ctx.bridge_state.applied[0])
+        self.assertTrue(any(
+            message["cmd"] == "LocationChecks" for message in self.ctx.sent_messages
+        ))
+        self.assertIn("overlay", self.ctx.status_text().lower())
+
+    async def test_overlay_starts_after_explicit_runtime_start_with_visual_only_config(self):
+        executable = Path(self.directory.name) / "ArchipelagoLauncher.exe"
+        executable.touch()
+        executable.with_name("FredokaOne.ttf").touch()
+        self.ctx.overlay_preferences = OverlayPreferences(
+            interface_scale=1.25,
+            left_offset=-80,
+            notification_duration=8.5,
+            reduced_motion=True,
+            max_visible=4,
+        )
+        self.ctx.overlay_state = OverlayState.closed(max_visible=4)
+
+        with patch("word_factori.client.sys.executable", str(executable)):
+            self.ctx.start_overlay()
+
+        self.assertEqual(1, len(self.overlay.started))
+        config = self.overlay.started[0]
+        self.assertIsInstance(config, OverlayConfig)
+        self.assertIsNone(config.font_path)
+        self.assertEqual((1.25, -80, 8.5, True, 4), (
+            config.interface_scale,
+            config.left_offset,
+            config.notification_duration,
+            config.reduced_motion,
+            config.max_visible,
+        ))
+        self.assertNotIn("localhost", repr(config))
+        self.assertNotIn("password", repr(config).lower())
+        self.assertIsNotNone(self.ctx.overlay_action_task)
+        await self.ctx.shutdown()
+
+    async def test_disabled_overlay_skips_child_but_keeps_dispatch_ledger(self):
+        self.ctx.overlay_preferences = OverlayPreferences(enabled=False)
+        self.ctx.overlay_state = OverlayState.closed(
+            max_visible=self.ctx.overlay_preferences.max_visible,
+        )
+        self.ctx.start_overlay()
+        self.ctx.items_received = [make_network_item(
+            item=7001, location=9001, player=2, flags=1,
+        )]
+
+        await self.ctx.reconcile_dispatches()
+
+        self.assertEqual([], self.overlay.started)
+        self.assertEqual(1, len(self.ctx.dispatch_ledger.events))
+
+    def test_malformed_overlay_preferences_fall_back_to_valid_defaults(self):
+        path = self.ctx.overlay_preferences_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"version":1,"preferences":{"enabled":"yes"}}', encoding="utf-8")
+
+        recovered = WordFactoriContext("localhost:38281", None, overlay=_FakeOverlaySupervisor())
+
+        self.assertEqual(OverlayPreferences(), recovered.overlay_preferences)
+        self.assertEqual(3, recovered.overlay_state.max_visible)
+
+    async def test_room_load_seeds_history_then_reduces_new_notifications_once(self):
+        first = make_network_item(item=7001, location=9001, player=2, flags=1)
+        second = make_network_item(item=7001, location=9002, player=2, flags=1)
+        first_event = self.ctx.dispatch_received_event(0, first)
+        stored = DispatchLedger(
+            self.ctx.connected_identity,
+            (first_event,),
+            frozenset((first_event.key,)),
+            True,
+            0,
+        )
+        save_ledger(self.ctx.dispatch_path(), stored)
+        self.ctx.items_received = [first, second]
+
+        await self.ctx._connected_reconcile(
+            self.ctx.connected_identity,
+            self.ctx._snapshot_dispatch_items(self.ctx.items_received),
+            frozenset(),
+        )
+
+        self.assertEqual(2, self.ctx.overlay_state.unread_count)
+        self.assertEqual((self.ctx.dispatch_ledger.events[-1].key,), tuple(
+            event.key for event in self.ctx.overlay_state.visible_notifications
+        ))
+        self.assertEqual(
+            frozenset(event.key for event in self.ctx.dispatch_ledger.events),
+            self.ctx.overlay_state.accepted_notification_keys,
+        )
+
+        await self.ctx._connected_reconcile(
+            self.ctx.connected_identity,
+            self.ctx._snapshot_dispatch_items(self.ctx.items_received),
+            frozenset(),
+        )
+        self.assertEqual((), self.ctx.overlay_state.visible_notifications)
+        self.assertEqual(2, self.ctx.overlay_state.unread_count)
+
+    async def test_room_switch_replaces_overlay_state_instead_of_merging(self):
+        old_event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        old_key = old_event.key
+        self.ctx.dispatch_ledger = DispatchLedger(
+            self.ctx.connected_identity, (old_event,), frozenset((old_key,)), True, 0,
+        )
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1,
+            accepted_notification_keys=frozenset((old_key,)),
+        )
+        self.overlay.published.clear()
+        self.ctx.room_seed_name = "Seed-B"
+        self.ctx.connected_identity = self.ctx.current_identity()
+        self.ctx.dispatch_ledger = DispatchLedger.empty(self.ctx.connected_identity)
+        self.ctx.items_received = []
+
+        await self.ctx._connected_reconcile(
+            self.ctx.connected_identity, (), frozenset(),
+        )
+
+        self.assertEqual(0, self.ctx.overlay_state.unread_count)
+        self.assertEqual(frozenset(), self.ctx.overlay_state.accepted_notification_keys)
+        self.assertEqual("connected", self.ctx.overlay_state.connection_status)
+        self.assertFalse(any(
+            any(row.key == old_key for row in published.ledger_rows)
+            for published in self.overlay.published
+        ))
+
+    def test_incompatible_room_switch_immediately_replaces_old_cosmetic_history(self):
+        old_event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        self.ctx.dispatch_ledger = DispatchLedger(
+            self.ctx.connected_identity, (old_event,), frozenset((old_event.key,)), True, 0,
+        )
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1,
+            accepted_notification_keys=frozenset((old_event.key,)),
+        )
+        self.ctx.room_seed_name = "Seed-B"
+        self.ctx.connected_identity = None
+        incompatible = dict(self.ctx.slot_data, manifest_digest="0" * 64)
+
+        self.ctx.on_package("Connected", {"slot_data": incompatible})
+
+        self.assertEqual(self.ctx.current_identity(), self.ctx.dispatch_ledger.identity)
+        self.assertEqual((), self.ctx.dispatch_ledger.events)
+        self.assertEqual(frozenset(), self.ctx.overlay_state.accepted_notification_keys)
+        self.assertEqual("connected", self.ctx.overlay_state.connection_status)
+
+    async def test_open_action_marks_room_ledger_read_with_one_atomic_save(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        self.ctx.dispatch_ledger = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1,
+            accepted_notification_keys=frozenset((event.key,)),
+        )
+        self.overlay.actions = [OverlayAction("open"), OverlayAction("open")]
+
+        with patch("word_factori.client.save_ledger", wraps=save_ledger) as persisted:
+            await self.ctx.process_overlay_actions_once()
+
+        self.assertTrue(self.ctx.overlay_state.is_open)
+        self.assertEqual(0, self.ctx.overlay_state.unread_count)
+        self.assertEqual(frozenset(), self.ctx.dispatch_ledger.unread_keys)
+        self.assertEqual(1, persisted.call_count)
+        self.assertEqual(frozenset(), load_ledger(
+            self.ctx.dispatch_path(), self.ctx.connected_identity,
+        ).unread_keys)
+
+    async def test_event_received_while_ledger_open_is_read_without_toast(self):
+        self.ctx.dispatch_ledger = DispatchLedger(
+            self.ctx.connected_identity, (), frozenset(), True, -1,
+        )
+        self.ctx.overlay_state = apply_action(self.ctx.overlay_state, OverlayAction("open"))
+        event = self.ctx.dispatch_sent_event(
+            make_network_item(item=7001, location=LOCATIONS[0].code, player=2),
+            historical=False,
+        )
+
+        await self.ctx._record_dispatch_event_safely(
+            self.ctx.connected_identity, event, notify=True,
+        )
+
+        self.assertEqual(frozenset(), self.ctx.dispatch_ledger.unread_keys)
+        self.assertEqual((), self.ctx.overlay_state.visible_notifications)
+        self.assertIn(event.key, self.ctx.overlay_state.accepted_notification_keys)
+
+    async def test_disconnect_preserves_room_history_and_publishes_status(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        self.ctx.dispatch_ledger = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset(), True, 0,
+        )
+        self.ctx.overlay_state = apply_action(
+            self.ctx.overlay_state, OverlayAction("connection-status", "connected"),
+        )
+
+        await self.ctx.connection_closed()
+
+        self.assertEqual((event,), self.ctx.dispatch_ledger.events)
+        self.assertEqual("disconnected", self.ctx.overlay_state.connection_status)
+        self.assertEqual("disconnected", self.overlay.published[-1].connection_status)
+
+    async def test_action_poll_applies_filter_and_overlay_failure_isolated(self):
+        self.overlay.actions = [OverlayAction("filter", "sent")]
+        self.overlay.publish_succeeds = False
+
+        await self.ctx.process_overlay_actions_once()
+
+        self.assertEqual(OverlayFilter.SENT, self.ctx.overlay_state.active_filter)
+        self.assertIn("regular client", self.ctx.last_overlay_error)
+
+    def test_health_failure_sets_fallback_status_without_raising(self):
+        self.overlay.raise_on_health_check = True
+
+        self.ctx.check_overlay_health()
+
+        self.assertEqual(1, self.overlay.health_checks)
+        self.assertIn("health", self.ctx.last_overlay_error)
+
+    async def test_unlock_render_sets_reload_required_snapshot(self):
+        self.ctx.items_received = [make_network_item(
+            item=7001, location=9001, player=2, flags=1,
+        )]
+
+        await self.ctx.reconcile_received()
+
+        self.assertTrue(self.ctx.overlay_state.reload_required)
+        self.assertTrue(self.overlay.published[-1].reload_required)
+
+    async def test_overlay_command_supports_exact_controls_and_help(self):
+        processor = WordFactoriCommandProcessor(self.ctx)
+
+        task = self.capture_scheduled_task(lambda: processor._cmd_wf_overlay("show"))
+        await task
+        self.assertTrue(self.ctx.overlay_state.is_open)
+        task = self.capture_scheduled_task(lambda: processor._cmd_wf_overlay("hide"))
+        await task
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        task = self.capture_scheduled_task(lambda: processor._cmd_wf_overlay("restart"))
+        await task
+        self.assertEqual(1, len(self.overlay.restarted))
+        self.assertIsNotNone(self.ctx.overlay_action_task)
+        processor._cmd_wf_overlay("status")
+        self.assertIn("overlay", processor.outputs[-1].lower())
+        processor._cmd_wf_overlay("bogus")
+        self.assertEqual(
+            "Usage: /wf_overlay [status|show|hide|restart]",
+            processor.outputs[-1],
+        )
+        await self.ctx.shutdown()
+
+    async def test_shutdown_cancels_action_task_and_stops_overlay_even_if_base_fails(self):
+        self.ctx.start_overlay()
+        task = self.ctx.overlay_action_task
+
+        with patch.object(
+            _CommonContext, "shutdown", AsyncMock(side_effect=RuntimeError("base failed")),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "base failed"):
+                await self.ctx.shutdown()
+
+        self.assertTrue(task.done())
+        self.assertEqual(1, self.overlay.stopped)
+
+    def test_launcher_component_registers_one_client_and_imports_renderer_without_kivy(self):
+        launcher = types.ModuleType("worlds.LauncherComponents")
+        launcher.components = []
+        launcher.Type = types.SimpleNamespace(CLIENT="client")
+        launcher.Component = lambda *args, **kwargs: types.SimpleNamespace(
+            name=args[0], **kwargs,
+        )
+        launcher.launch = lambda *args, **kwargs: None
+        worlds = types.ModuleType("worlds")
+        worlds.__path__ = []
+        removed = {
+            name: sys.modules.pop(name, None)
+            for name in ("word_factori.Components", "word_factori.overlay_renderer", "kivy")
+        }
+        package = sys.modules["word_factori"]
+        renderer_attribute = getattr(package, "overlay_renderer", None)
+        if hasattr(package, "overlay_renderer"):
+            delattr(package, "overlay_renderer")
+        try:
+            with patch.dict(sys.modules, {
+                "worlds": worlds,
+                "worlds.LauncherComponents": launcher,
+            }):
+                importlib.import_module("word_factori.Components")
+                self.assertEqual(["Word Factori Client"], [
+                    component.name for component in launcher.components
+                ])
+                self.assertIn("word_factori.overlay_renderer", sys.modules)
+                self.assertNotIn("kivy", sys.modules)
+        finally:
+            for name, module in removed.items():
+                sys.modules.pop(name, None)
+                if module is not None:
+                    sys.modules[name] = module
+            if renderer_attribute is not None:
+                package.overlay_renderer = renderer_attribute
 
     async def test_manual_check_is_retained_until_server_acknowledges_it(self):
         location_id = LOCATIONS[0].code

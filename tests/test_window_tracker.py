@@ -18,10 +18,12 @@ from word_factori.overlay_renderer import (
     OverlayWindowHook,
     Rect,
     RowPresentation,
+    RuntimeFontResolver,
     WM_HOTKEY,
     WM_NCHITTEST,
     drain_parent_messages,
     present_dispatch_row,
+    runtime_font_path,
     row_height_for_texture,
     window_relative_regions,
     validated_renderer_config,
@@ -118,6 +120,36 @@ class WindowTrackerTests(unittest.TestCase):
         api.process_path = lambda handle: (_ for _ in ()).throw(OSError("gone"))
         self.assertIsNone(Win32WindowTracker(api=api).sample())
         self.assertEqual(["handle-44"], api.closed)
+
+    def test_renderer_discovers_font_only_beside_tracked_word_factori_process(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "word factori.exe"
+            executable.touch()
+            font = executable.with_name("FredokaOne.ttf")
+            font.touch()
+            tracker = Win32WindowTracker(api=FakeWin32(executable=str(executable)))
+
+            self.assertEqual(str(font), runtime_font_path(None, tracker))
+
+    def test_renderer_font_discovery_safely_falls_back_when_game_is_absent(self):
+        tracker = Win32WindowTracker(api=FakeWin32(windows=()))
+
+        self.assertIsNone(runtime_font_path(None, tracker))
+
+    def test_renderer_font_discovery_retries_when_game_starts_after_child(self):
+        resolver = RuntimeFontResolver(None)
+        self.assertIsNone(resolver.resolve(Win32WindowTracker(api=FakeWin32(windows=()))))
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "word factori.exe"
+            executable.touch()
+            font = executable.with_name("FredokaOne.ttf")
+            font.touch()
+
+            resolved = resolver.resolve(Win32WindowTracker(
+                api=FakeWin32(executable=str(executable)),
+            ))
+
+        self.assertEqual(str(font), resolved)
 
 
 class RendererBoundaryTests(unittest.TestCase):

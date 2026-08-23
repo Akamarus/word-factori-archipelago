@@ -413,6 +413,27 @@ class OverlaySupervisor:
                 return
             self._restart_active(config)
 
+    def restart(self, config: OverlayConfig) -> bool:
+        """Explicitly start a new renderer and reset the automatic-restart budget."""
+        copied = _validated_config_primitives(config)
+        if copied is None:
+            return False
+        with self._lifecycle_lock:
+            resources = self._detach_active()
+            if resources is not None:
+                self._cleanup_resources(resources, timeout=0.1, request_shutdown=True)
+            with self._active_lock:
+                self.disabled = False
+                self._restarts = 0
+                self._config = copied
+            created = self._create_resources(copied)
+            if created is None:
+                with self._active_lock:
+                    self.disabled = True
+                return False
+            self._attach_active(created)
+            return True
+
     def _cleanup_resources(self, resources: _ActiveResources, *, timeout: float, request_shutdown: bool) -> None:
         connection, process = resources.connection, resources.process
         mailbox, writer = resources.mailbox, resources.writer

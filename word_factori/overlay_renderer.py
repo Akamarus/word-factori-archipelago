@@ -17,6 +17,7 @@ import queue
 import threading
 from typing import Callable, Mapping, Protocol
 
+from word_factori.client_core import game_font_path
 from word_factori.overlay_model import OverlayAction, validate_action
 from word_factori.overlay_protocol import PROTOCOL_VERSION, ParentMessage, decode_parent_message
 from word_factori.overlay_supervisor import OverlayConfig
@@ -43,6 +44,51 @@ _SWP_NOSIZE = 0x0001
 _SWP_NOMOVE = 0x0002
 _SWP_NOZORDER = 0x0004
 _SWP_NOACTIVATE = 0x0010
+
+
+def runtime_font_path(configured: str | None, tracker: object | None) -> str | None:
+    """Resolve Fredoka only from a validated explicit path or tracked game process."""
+    if configured is not None:
+        return configured if Path(configured).is_file() else None
+    if tracker is None:
+        return None
+    try:
+        state = tracker.sample()  # type: ignore[attr-defined]
+        candidate = game_font_path(state.process_path) if state is not None else None
+    except Exception:
+        return None
+    return str(candidate) if candidate is not None else None
+
+
+class RuntimeFontResolver:
+    """Remember a discovered font while allowing retries until Word Factori appears."""
+
+    def __init__(self, configured: str | None) -> None:
+        self.configured = configured
+        self.resolved: str | None = None
+
+    def resolve_state(self, state: object | None) -> str | None:
+        if self.resolved is not None:
+            return self.resolved
+        if self.configured is not None:
+            self.resolved = self.configured if Path(self.configured).is_file() else None
+            return self.resolved
+        try:
+            process_path = state.process_path  # type: ignore[attr-defined]
+            candidate = game_font_path(process_path)
+        except Exception:
+            return None
+        self.resolved = str(candidate) if candidate is not None else None
+        return self.resolved
+
+    def resolve(self, tracker: object | None) -> str | None:
+        if self.resolved is not None:
+            return self.resolved
+        try:
+            state = tracker.sample() if tracker is not None else None  # type: ignore[attr-defined]
+        except Exception:
+            state = None
+        return self.resolve_state(state)
 _SWP_SHOWWINDOW = 0x0040
 _SWP_HIDEWINDOW = 0x0080
 _MAX_PIPE_MESSAGES_PER_TICK = 64
@@ -889,6 +935,12 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
     validated = validated_renderer_config(config)
     if not validated["enabled"]:
         return
+    try:
+        tracker = Win32WindowTracker()
+    except Exception:
+        tracker = None
+    font_resolver = RuntimeFontResolver(validated["font_path"])
+    validated["font_path"] = font_resolver.resolve(tracker)
 
     os.environ.setdefault("KIVY_NO_ARGS", "1")
     from kivy.config import Config
@@ -1128,12 +1180,23 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
             widget.pos = (rectangle.x, max(0, int(Window.height) - rectangle.top))  # type: ignore[attr-defined]
 
         def follow_game(self, _: float) -> None:
+            nonlocal font_name
             native_status = self.native.tick()
             if native_status == "failed":
                 self.stopping = True
                 self.stop()
                 return
             state = self.tracker.sample()
+            if font_name == "Roboto":
+                font_value = font_resolver.resolve_state(state)
+                if font_value is not None:
+                    try:
+                        LabelBase.register(name="WordFactoriFredoka", fn_regular=font_value)
+                    except Exception:
+                        pass
+                    else:
+                        font_name = "WordFactoriFredoka"
+                        self.rebuild()
             game_active = state is not None and state.visible and state.focused
             shown = game_active and native_status == "ready"
             was_shown = self.game_shown

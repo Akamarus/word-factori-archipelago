@@ -481,6 +481,23 @@ class OverlaySupervisorTests(unittest.TestCase):
         self.assertTrue(supervisor.disabled)
         self.assertFalse(supervisor.publish(snapshot(OverlayState.closed())))
 
+    def test_explicit_restart_resets_session_disable_and_restart_budget(self):
+        context = FakeProcessContext(process_alive=False)
+        supervisor = self.make_supervisor(context)
+        config = make_config(interface_scale=1.25)
+        self.assertTrue(supervisor.start(config))
+        supervisor.health_check()
+        supervisor.health_check()
+        self.assertTrue(supervisor.disabled)
+
+        self.assertTrue(supervisor.restart(config))
+
+        self.assertFalse(supervisor.disabled)
+        self.assertEqual(3, context.starts)
+        supervisor.health_check()
+        self.assertEqual(4, context.starts)
+        self.assertFalse(supervisor.disabled)
+
     def test_start_on_dead_child_restarts_with_new_config(self):
         context = FakeProcessContext(process_alive=False)
         supervisor = self.make_supervisor(context)

@@ -42,10 +42,13 @@ from .client_core import (
 from .data import GAME, ITEM_NAME_TO_ID, LOCATIONS
 from .dispatch import DispatchDirection, DispatchEvent, received_event, sent_event
 from .dispatch_store import (
-    DispatchLedger, ledger_path, load_ledger, reconcile_received, record_event,
+    DispatchLedger, ledger_path, load_ledger, mark_all_read, reconcile_received, record_event,
     save_ledger,
 )
 from .mod import render_levels, write_levels
+from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
+from .overlay_preferences import load_preferences
+from .overlay_supervisor import OverlayConfig, OverlaySupervisor
 from .save import ActiveSlot, find_save, read_active_slot
 
 MOD_FOLDER = "word factori archipelago"
@@ -87,6 +90,16 @@ class WordFactoriCommandProcessor(ClientCommandProcessor):
         """Show bridge, mod-selection, and received-item status."""
         self.output(self.ctx.status_text())
 
+    def _cmd_wf_overlay(self, action: str = "status") -> None:
+        """Show, hide, restart, or report the Word Factori overlay."""
+        action = action.strip().casefold()
+        if action == "status":
+            self.output(self.ctx.overlay_status_text())
+        elif action in {"show", "hide", "restart"}:
+            asyncio.create_task(self.ctx.overlay_control(action))
+        else:
+            self.output("Usage: /wf_overlay [status|show|hide|restart]")
+
 
 class WordFactoriContext(CommonContext):
     command_processor = WordFactoriCommandProcessor
@@ -94,7 +107,9 @@ class WordFactoriContext(CommonContext):
     items_handling = 0b111
     want_slot_data = True
 
-    def __init__(self, server_address: str | None, password: str | None):
+    def __init__(
+        self, server_address: str | None, password: str | None, *, overlay: object | None = None,
+    ):
         super().__init__(server_address, password)
         local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
         self.factori_root = local / "factori"
@@ -113,12 +128,43 @@ class WordFactoriContext(CommonContext):
         self.dispatch_ledger = DispatchLedger.empty("disconnected")
         self.pending_overlay_events: tuple[DispatchEvent, ...] = ()
         self._dispatch_lock = asyncio.Lock()
+        self.overlay = overlay if overlay is not None else OverlaySupervisor()
+        self.overlay_preferences = load_preferences(self.overlay_preferences_path())
+        self.overlay_state = OverlayState.closed(max_visible=self.overlay_preferences.max_visible)
+        self.last_overlay_error: str | None = None
+        self.overlay_action_task: asyncio.Task | None = None
+        self._overlay_identity: str | None = None
 
     async def server_auth(self, password_requested: bool = False) -> None:
+        self._set_overlay_connection_status("authenticating")
         if password_requested and not self.password:
             await super().server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
+
+    async def connection_closed(self) -> None:
+        try:
+            await super().connection_closed()
+        finally:
+            self._set_overlay_connection_status("disconnected")
+
+    async def shutdown(self) -> None:
+        action_task, self.overlay_action_task = self.overlay_action_task, None
+        if action_task is not None:
+            action_task.cancel()
+            try:
+                await action_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as error:
+                self._overlay_warning(f"overlay action loop stopped: {error}")
+        try:
+            await super().shutdown()
+        finally:
+            try:
+                self.overlay.stop(timeout=2.0)
+            except Exception as error:
+                self._overlay_warning(f"overlay shutdown failed: {error}")
 
     def on_package(self, cmd: str, args: dict) -> None:
         if cmd == "RoomInfo":
@@ -127,6 +173,25 @@ class WordFactoriContext(CommonContext):
         elif cmd == "Connected":
             self.slot_data = dict(args.get("slot_data") or {})
             self.connected_identity = self.current_identity()
+            try:
+                baseline_ledger = load_ledger(
+                    self.dispatch_path(self.connected_identity), self.connected_identity,
+                )
+            except (OSError, ValueError, TypeError) as error:
+                logger.warning("Ignoring invalid dispatch ledger; room history will rebuild it: %s", error)
+                baseline_ledger = DispatchLedger.empty(self.connected_identity)
+            self.dispatch_ledger = baseline_ledger
+            self.pending_overlay_events = ()
+            self.overlay_state = OverlayState(
+                unread_count=len(baseline_ledger.unread_keys),
+                max_visible=self.overlay_preferences.max_visible,
+                connection_status="connected",
+                accepted_notification_keys=frozenset(
+                    event.key for event in baseline_ledger.events
+                ),
+            )
+            self._overlay_identity = self.connected_identity
+            self.publish_overlay(self.connected_identity)
             try:
                 self.bridge_state = load_state(self.state_path())
             except (OSError, ValueError, TypeError) as error:
@@ -167,6 +232,45 @@ class WordFactoriContext(CommonContext):
     def dispatch_path(self, identity: str | None = None) -> Path:
         identity = identity or self.connected_identity or self.current_identity()
         return ledger_path(self.state_root, _safe_filename(identity))
+
+    def overlay_preferences_path(self) -> Path:
+        return self.state_root / "overlay_preferences.json"
+
+    def overlay_config(self) -> OverlayConfig:
+        preferences = self.overlay_preferences
+        return OverlayConfig(
+            enabled=preferences.enabled,
+            interface_scale=preferences.interface_scale,
+            left_offset=preferences.left_offset,
+            notification_duration=preferences.notification_duration,
+            reduced_motion=preferences.reduced_motion,
+            max_visible=preferences.max_visible,
+            # The renderer resolves the installed font from the tracked Word Factori process.
+            # sys.executable belongs to the Archipelago launcher and is intentionally ignored.
+            font_path=None,
+        )
+
+    def start_overlay(self) -> None:
+        """Start optional cosmetic work only after the async client runtime exists."""
+        if not self.overlay_preferences.enabled:
+            return
+        try:
+            started = bool(self.overlay.start(self.overlay_config()))
+        except Exception as error:
+            started = False
+            self._overlay_warning(f"overlay startup failed: {error}")
+        if not started:
+            self._overlay_warning("overlay unavailable; using regular client")
+            return
+        self.last_overlay_error = None
+        self._ensure_overlay_action_task()
+        self.publish_overlay()
+
+    def _ensure_overlay_action_task(self) -> None:
+        if self.overlay_action_task is None or self.overlay_action_task.done():
+            self.overlay_action_task = asyncio.create_task(
+                self._overlay_action_loop(), name="Word Factori overlay actions",
+            )
 
     def current_identity(self) -> str:
         return state_identity(self.room_seed_name, self.team, self.slot, self.auth)
@@ -229,6 +333,37 @@ class WordFactoriContext(CommonContext):
             and self.dispatch_ledger.identity == identity
         )
 
+    def _replace_overlay_room(
+        self, identity: str, ledger: DispatchLedger, notifications: tuple[DispatchEvent, ...],
+    ) -> None:
+        """Create a fresh room presentation without replaying retained history."""
+        notification_keys = frozenset(event.key for event in notifications)
+        state = OverlayState(
+            unread_count=len(ledger.unread_keys - notification_keys),
+            max_visible=self.overlay_preferences.max_visible,
+            connection_status="connected",
+            reload_required=self.overlay_state.reload_required,
+            accepted_notification_keys=frozenset(
+                event.key for event in ledger.events if event.key not in notification_keys
+            ),
+        )
+        self.overlay_state = apply_events(state, notifications)
+        self._overlay_identity = identity
+        self.pending_overlay_events = ()
+
+    def _apply_pending_overlay_events(self, identity: str) -> None:
+        if self.connected_identity != identity or self.dispatch_ledger.identity != identity:
+            return
+        if self._overlay_identity is None:
+            self._overlay_identity = identity
+        if self._overlay_identity != identity:
+            return
+        pending, self.pending_overlay_events = self.pending_overlay_events, ()
+        if pending:
+            self.overlay_state = apply_events(self.overlay_state, pending)
+        if self.overlay_state.is_open and self.dispatch_ledger.unread_keys:
+            self.dispatch_ledger = mark_all_read(self.dispatch_ledger)
+
     async def reconcile_dispatches(
         self, identity: str | None = None, items=None,
     ) -> None:
@@ -244,7 +379,9 @@ class WordFactoriContext(CommonContext):
             update = reconcile_received(self.dispatch_ledger, events)
             self.dispatch_ledger = update.state
             self.pending_overlay_events += update.notify
+            self._apply_pending_overlay_events(identity)
             save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
+            self.publish_overlay(identity)
 
     async def _connected_reconcile(self, identity: str, items, checked_locations) -> None:
         await self.reconcile_received()
@@ -267,7 +404,9 @@ class WordFactoriContext(CommonContext):
                 self.pending_overlay_events = ()
                 self.dispatch_ledger = update.state
                 self.pending_overlay_events += update.notify
+                self._replace_overlay_room(identity, update.state, update.notify)
                 save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
+                self.publish_overlay(identity)
         except Exception:
             logger.exception("Dispatch history reconciliation failed; Word Factori unlocks remain active.")
         try:
@@ -343,6 +482,7 @@ class WordFactoriContext(CommonContext):
                     self.dispatch_ledger = update.state
                 if changed:
                     save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
+                    self.publish_overlay(identity)
         except Exception:
             logger.exception("Checked-location dispatch history could not be recorded.")
 
@@ -356,7 +496,9 @@ class WordFactoriContext(CommonContext):
                 update = record_event(self.dispatch_ledger, event, notify=notify)
                 self.dispatch_ledger = update.state
                 self.pending_overlay_events += update.notify
+                self._apply_pending_overlay_events(identity)
                 save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
+                self.publish_overlay(identity)
         except Exception:
             logger.exception("Dispatch packet could not be recorded; standard client output remains active.")
 
@@ -414,6 +556,10 @@ class WordFactoriContext(CommonContext):
             write_levels(self.levels_path, levels)
             self.last_render_signature = signature
             logger.info("Word Factori unlocks updated. Reload the AP mod or reselect its save slot in game.")
+            self.overlay_state = apply_action(
+                self.overlay_state, OverlayAction("reload-required", "true"),
+            )
+            self.publish_overlay(self.connected_identity)
 
     def selected_mod(self) -> bool:
         try:
@@ -518,7 +664,129 @@ class WordFactoriContext(CommonContext):
         campaign = "compatible" if self.compatible_campaign() else "mismatched or missing"
         game_slot = "bound" if self.bridge_state.game_slot_id else "not bound"
         deliveries = max(0, len(self.bridge_state.applied) - 1)
-        return f"AP mod: {selected}; campaign: {campaign}; game save: {game_slot}; received item deliveries: {deliveries}; bridge: {self.last_bridge_error or 'ready'}"
+        return f"AP mod: {selected}; campaign: {campaign}; game save: {game_slot}; received item deliveries: {deliveries}; bridge: {self.last_bridge_error or 'ready'}; overlay: {self.last_overlay_error or 'ready'}"
+
+    def overlay_status_text(self) -> str:
+        if not self.overlay_preferences.enabled:
+            availability = "disabled by preference; regular client active"
+        else:
+            availability = self.last_overlay_error or "ready"
+        panel = "open" if self.overlay_state.is_open else "closed"
+        return (
+            f"Word Factori overlay: {availability}; panel: {panel}; "
+            f"connection: {self.overlay_state.connection_status}"
+        )
+
+    def _overlay_warning(self, message: str) -> None:
+        if message != self.last_overlay_error:
+            logger.warning("Word Factori overlay: %s", message)
+            self.last_overlay_error = message
+
+    def publish_overlay(self, expected_identity: str | None = None) -> bool:
+        """Publish cosmetic presentation without exposing renderer failure to bridge work."""
+        if not self.overlay_preferences.enabled:
+            return False
+        if expected_identity is not None and (
+            self.connected_identity != expected_identity
+            or self.dispatch_ledger.identity != expected_identity
+            or self._overlay_identity not in (None, expected_identity)
+        ):
+            return False
+        try:
+            published = self.overlay.publish(snapshot(
+                self.overlay_state, self.dispatch_ledger, self.overlay_preferences,
+            ))
+        except Exception as error:
+            published = False
+            self._overlay_warning(f"publish failed: {error}; using regular client")
+        if published:
+            self.last_overlay_error = None
+        elif self.last_overlay_error is None:
+            self._overlay_warning("unavailable; using regular client")
+        return published
+
+    def _set_overlay_connection_status(self, status: str) -> None:
+        try:
+            self.overlay_state = apply_action(
+                self.overlay_state, OverlayAction("connection-status", status),
+            )
+            self.publish_overlay(self.connected_identity)
+        except Exception as error:
+            self._overlay_warning(f"status update failed: {error}; using regular client")
+
+    async def _apply_overlay_action(self, action: OverlayAction) -> None:
+        try:
+            previous = self.overlay_state
+            updated = apply_action(previous, action)
+        except Exception as error:
+            self._overlay_warning(f"action rejected: {error}; using regular client")
+            return
+        self.overlay_state = updated
+        opened = not previous.is_open and updated.is_open
+        if opened and self.connected_identity is not None:
+            async with self._dispatch_lock:
+                identity = self.connected_identity
+                if self._dispatch_room_matches(identity) and self.dispatch_ledger.unread_keys:
+                    self.dispatch_ledger = mark_all_read(self.dispatch_ledger)
+                    try:
+                        save_ledger(self.dispatch_path(identity), self.dispatch_ledger)
+                    except Exception as error:
+                        self._overlay_warning(f"mark-read persistence failed: {error}; using regular client")
+        self.publish_overlay(self.connected_identity)
+
+    async def process_overlay_actions_once(self) -> None:
+        """Drain one nonblocking child-action batch; useful for deterministic tests."""
+        try:
+            actions = tuple(self.overlay.poll_actions())
+        except Exception as error:
+            self._overlay_warning(f"action poll failed: {error}; using regular client")
+            return
+        for action in actions:
+            await self._apply_overlay_action(action)
+
+    async def _overlay_action_loop(self) -> None:
+        while not self.exit_event.is_set():
+            await self.process_overlay_actions_once()
+            try:
+                await asyncio.wait_for(self.exit_event.wait(), timeout=0.1)
+            except asyncio.TimeoutError:
+                pass
+
+    def check_overlay_health(self) -> None:
+        if not self.overlay_preferences.enabled:
+            return
+        try:
+            self.overlay.health_check()
+            if bool(getattr(self.overlay, "disabled", False)):
+                self._overlay_warning("renderer stopped after restart attempt; using regular client")
+                return
+            self.publish_overlay(self.connected_identity)
+        except Exception as error:
+            self._overlay_warning(f"health check failed: {error}; using regular client")
+
+    async def overlay_control(self, action: str) -> None:
+        if action == "show":
+            await self._apply_overlay_action(OverlayAction("open"))
+            return
+        if action == "hide":
+            await self._apply_overlay_action(OverlayAction("close"))
+            return
+        if action != "restart":
+            raise ValueError("unknown overlay control")
+        if not self.overlay_preferences.enabled:
+            self._overlay_warning("disabled by preference; regular client active")
+            return
+        try:
+            restarted = bool(self.overlay.restart(self.overlay_config()))
+        except Exception as error:
+            restarted = False
+            self._overlay_warning(f"restart failed: {error}; using regular client")
+        if restarted:
+            self.last_overlay_error = None
+            self._ensure_overlay_action_task()
+            self.publish_overlay(self.connected_identity)
+        elif self.last_overlay_error is None:
+            self._overlay_warning("restart failed; using regular client")
 
     def _bridge_warning(self, message: str) -> None:
         if message != self.last_bridge_error:
@@ -537,6 +805,7 @@ async def game_watcher(ctx: WordFactoriContext) -> None:
                 await ctx.scan_once()
             except Exception as error:
                 ctx._bridge_warning(f"Word Factori completion scan failed; retrying: {error}")
+        ctx.check_overlay_health()
         await asyncio.sleep(2)
 
 
@@ -548,6 +817,7 @@ def launch_client(*passed_args: str) -> None:
         if gui_enabled:
             ctx.run_gui()
         ctx.run_cli()
+        ctx.start_overlay()
         watcher = asyncio.create_task(game_watcher(ctx), name="Word Factori watcher")
         await ctx.exit_event.wait()
         watcher.cancel()
