@@ -1,0 +1,12 @@
+{
+  "LeftPage": [
+    "# Word Factori Archipelago",
+    "Independent integration prototype",
+    "Uses Word Factori's supported JSON mod format"
+  ],
+  "RightPage": [
+    "# Safety",
+    "No proprietary binaries are redistributed or modified",
+    "Vanilla recipes are loaded by the game through include_vanilla"
+  ]
+}

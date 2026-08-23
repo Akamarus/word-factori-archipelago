@@ -1,0 +1,522 @@
+[
+  {
+    "text": "I",
+    "module_counts": {
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "C",
+    "module_counts": {
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "V",
+    "module_counts": {
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "L",
+    "module_counts": {
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "O",
+    "module_counts": {
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "A",
+    "module_counts": {
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "OX",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "IVY",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "CAT",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "QI",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "OWL",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "AX",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "BALD",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "PIXY",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "FACE",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "BOOK",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "CHEF",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "HACK",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "JEWEL",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "VOXEL",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "PHONE",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "RABBIT",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "DOCTOR",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "DRAGON",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "AXOLOTL",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "DINOSAUR",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "CAT",
+    "module_counts": {
+      "Bend": 1,
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "BOOK",
+    "module_counts": {
+      "Bend": 1,
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "PHONE",
+    "module_counts": {
+      "Bend": 1,
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "PITCHFORK",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "C",
+    "module_counts": {
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "V",
+    "module_counts": {
+      "Bend": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "M",
+    "module_counts": {
+      "Bend": 0,
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "W",
+    "module_counts": {
+      "Bend": 0,
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "U",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "J",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "X",
+    "module_counts": {
+      "Bend": 0,
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "E",
+    "module_counts": {
+      "Bend": 0,
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "H",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  },
+  {
+    "text": "R",
+    "module_counts": {
+      "IFactory": 0,
+      "Merger2": 0,
+      "Merger3": 0,
+      "Merger4": 0,
+      "Reflect_hor": 0,
+      "Reflect_vert": 0,
+      "Rotate_ccw": 0,
+      "Rotate_cw": 0
+    }
+  }
+]

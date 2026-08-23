@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+
+# Generated Archipelago rooms and test output
+tests/output*/
+tests/live-room*/
+docs/superpowers/
+*.archipelago
+*Spoiler.txt
+
+# Build artifacts are published as GitHub release assets
+word_factori.apworld
+word-factori-archipelago-*.zip
+
+# Local user/game data and proprietary game binaries
+save.json
+save-backup.json
+user_ref.json
+mods.json
+data.win
+recipes.data
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

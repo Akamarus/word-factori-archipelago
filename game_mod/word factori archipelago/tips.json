@@ -1,0 +1,21 @@
+[
+  [
+    "archipelago",
+    "Run the Word Factori Client from the Archipelago Launcher and connect to your slot.",
+    "Received items unlock machine families, word lengths, and level packs.",
+    "After receiving an unlock, return to the slot menu and reselect this mod so Word Factori reloads levels.json.",
+    "The client reads completed level indices from the active save and never writes the save."
+  ],
+  [
+    "safe bridge",
+    "Only this mod's levels.json is rewritten by the client.",
+    "The game executable, data.win, vanilla levels, recipes, and save data are never patched.",
+    "Use /wf_status in the client to inspect bridge state.",
+    "Use /wf_scan for an explicit one-time save scan if automatic mod-selection detection is unavailable."
+  ],
+  [
+    "manual checks",
+    "If a game update changes the save format, use /wf_complete followed by a level number, target word, or full location name.",
+    "Examples: /wf_complete 1, /wf_complete DINOSAUR, /wf_complete CAT — Compact Factory."
+  ]
+]

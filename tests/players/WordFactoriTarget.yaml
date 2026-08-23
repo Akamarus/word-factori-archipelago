@@ -1,0 +1,10 @@
+name: WordFactoriTargetTest
+description: Fixed final-factory integration fixture
+game: Word Factori
+requires:
+  version: 0.6.7
+Word Factori:
+  progression_balancing: 50
+  accessibility: items
+  goal: final_factory
+  campaign_count: 25

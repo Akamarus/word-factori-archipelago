@@ -1,0 +1,691 @@
+{
+  "campaign_id": "word-factori-hybrid",
+  "version": "1.1.0",
+  "levels": [
+    {
+      "stable_key": "complete-i",
+      "index": 0,
+      "name": "Complete I",
+      "target": "I",
+      "region": "Starter Workshop",
+      "world_tier": 0,
+      "kind": "word",
+      "requirement_options": [
+        []
+      ]
+    },
+    {
+      "stable_key": "complete-c",
+      "index": 1,
+      "name": "Complete C",
+      "target": "C",
+      "region": "Starter Workshop",
+      "world_tier": 0,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Bender Access"
+        ],
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-v",
+      "index": 2,
+      "name": "Complete V",
+      "target": "V",
+      "region": "Starter Workshop",
+      "world_tier": 0,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-l",
+      "index": 3,
+      "name": "Complete L",
+      "target": "L",
+      "region": "Starter Workshop",
+      "world_tier": 0,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-o",
+      "index": 4,
+      "name": "Complete O",
+      "target": "O",
+      "region": "Starter Workshop",
+      "world_tier": 0,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-a",
+      "index": 5,
+      "name": "Complete A",
+      "target": "A",
+      "region": "Starter Workshop",
+      "world_tier": 0,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-ox",
+      "index": 6,
+      "name": "Complete OX",
+      "target": "OX",
+      "region": "Short Word Bench",
+      "world_tier": 1,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-ivy",
+      "index": 7,
+      "name": "Complete IVY",
+      "target": "IVY",
+      "region": "Short Word Bench",
+      "world_tier": 1,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-cat",
+      "index": 8,
+      "name": "Complete CAT",
+      "target": "CAT",
+      "region": "Short Word Bench",
+      "world_tier": 1,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-qi",
+      "index": 9,
+      "name": "Complete QI",
+      "target": "QI",
+      "region": "Short Word Bench",
+      "world_tier": 1,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-owl",
+      "index": 10,
+      "name": "Complete OWL",
+      "target": "OWL",
+      "region": "Short Word Bench",
+      "world_tier": 1,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-ax",
+      "index": 11,
+      "name": "Complete AX",
+      "target": "AX",
+      "region": "Short Word Bench",
+      "world_tier": 1,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-bald",
+      "index": 12,
+      "name": "Complete BALD",
+      "target": "BALD",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-pixy",
+      "index": 13,
+      "name": "Complete PIXY",
+      "target": "PIXY",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-face",
+      "index": 14,
+      "name": "Complete FACE",
+      "target": "FACE",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-book",
+      "index": 15,
+      "name": "Complete BOOK",
+      "target": "BOOK",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-chef",
+      "index": 16,
+      "name": "Complete CHEF",
+      "target": "CHEF",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-hack",
+      "index": 17,
+      "name": "Complete HACK",
+      "target": "HACK",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-jewel",
+      "index": 18,
+      "name": "Complete JEWEL",
+      "target": "JEWEL",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-voxel",
+      "index": 19,
+      "name": "Complete VOXEL",
+      "target": "VOXEL",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-phone",
+      "index": 20,
+      "name": "Complete PHONE",
+      "target": "PHONE",
+      "region": "Advanced Factory",
+      "world_tier": 3,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-rabbit",
+      "index": 21,
+      "name": "Complete RABBIT",
+      "target": "RABBIT",
+      "region": "Advanced Factory",
+      "world_tier": 3,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-doctor",
+      "index": 22,
+      "name": "Complete DOCTOR",
+      "target": "DOCTOR",
+      "region": "Advanced Factory",
+      "world_tier": 3,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-dragon",
+      "index": 23,
+      "name": "Complete DRAGON",
+      "target": "DRAGON",
+      "region": "Advanced Factory",
+      "world_tier": 3,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-axolotl",
+      "index": 24,
+      "name": "Complete AXOLOTL",
+      "target": "AXOLOTL",
+      "region": "Advanced Factory",
+      "world_tier": 3,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "complete-dinosaur",
+      "index": 25,
+      "name": "Complete DINOSAUR",
+      "target": "DINOSAUR",
+      "region": "Advanced Factory",
+      "world_tier": 3,
+      "kind": "word",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "challenge-cat-compact",
+      "index": 26,
+      "name": "CAT — Compact Factory",
+      "target": "CAT",
+      "region": "Challenge Board",
+      "world_tier": 4,
+      "kind": "challenge",
+      "module_limits": {
+        "Bend": 1,
+        "Merger2": 4,
+        "Merger3": 0,
+        "Merger4": 0,
+        "Reflect_hor": 0,
+        "Reflect_vert": 2,
+        "Rotate_ccw": 0,
+        "Rotate_cw": 2
+      }
+    },
+    {
+      "stable_key": "challenge-book-low-cycles",
+      "index": 27,
+      "name": "BOOK — Low Cycles",
+      "target": "BOOK",
+      "region": "Challenge Board",
+      "world_tier": 4,
+      "kind": "challenge",
+      "module_limits": {
+        "Bend": 1,
+        "Merger2": 3,
+        "Merger3": 1,
+        "Merger4": 0,
+        "Reflect_hor": 1,
+        "Reflect_vert": 0,
+        "Rotate_ccw": 0,
+        "Rotate_cw": 1
+      }
+    },
+    {
+      "stable_key": "challenge-phone-no-waste",
+      "index": 28,
+      "name": "PHONE — No Waste",
+      "target": "PHONE",
+      "region": "Challenge Board",
+      "world_tier": 4,
+      "kind": "challenge",
+      "module_limits": {
+        "Bend": 1,
+        "Merger2": 3,
+        "Merger3": 2,
+        "Merger4": 1,
+        "Reflect_hor": 1,
+        "Reflect_vert": 1,
+        "Rotate_ccw": 0,
+        "Rotate_cw": 1
+      }
+    },
+    {
+      "stable_key": "pitchfork-final",
+      "index": 29,
+      "name": "PITCHFORK — Final Factory",
+      "target": "PITCHFORK",
+      "region": "Final Contract",
+      "world_tier": 5,
+      "kind": "final",
+      "requirement_options": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ]
+    },
+    {
+      "stable_key": "discover-c-bending",
+      "index": 30,
+      "name": "Discover C — Bending Lab",
+      "target": "C",
+      "region": "Starter Workshop",
+      "world_tier": 0,
+      "kind": "discovery",
+      "required_route": [
+        "Bender Access"
+      ]
+    },
+    {
+      "stable_key": "discover-v-dual-merge",
+      "index": 31,
+      "name": "Discover V — Dual Merge Lab",
+      "target": "V",
+      "region": "Starter Workshop",
+      "world_tier": 0,
+      "kind": "discovery",
+      "required_route": [
+        "Merger2 Access"
+      ]
+    },
+    {
+      "stable_key": "discover-m-triple-merge",
+      "index": 32,
+      "name": "Discover M — Triple Merge Lab",
+      "target": "M",
+      "region": "Short Word Bench",
+      "world_tier": 1,
+      "kind": "discovery",
+      "required_route": [
+        "Merger3 Access"
+      ]
+    },
+    {
+      "stable_key": "discover-w-quad-merge",
+      "index": 33,
+      "name": "Discover W — Quad Merge Lab",
+      "target": "W",
+      "region": "Short Word Bench",
+      "world_tier": 1,
+      "kind": "discovery",
+      "required_route": [
+        "Merger4 Access"
+      ]
+    },
+    {
+      "stable_key": "discover-u-rotation",
+      "index": 34,
+      "name": "Discover U — Rotation Lab",
+      "target": "U",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "discovery",
+      "required_route": [
+        "Bender Access",
+        "Rotation Access"
+      ]
+    },
+    {
+      "stable_key": "discover-j-joining",
+      "index": 35,
+      "name": "Discover J — Joining Lab",
+      "target": "J",
+      "region": "Main Factory",
+      "world_tier": 2,
+      "kind": "discovery",
+      "required_route": [
+        "Bender Access",
+        "Merger2 Access"
+      ]
+    },
+    {
+      "stable_key": "discover-x-reflection",
+      "index": 36,
+      "name": "Discover X — Reflection Lab",
+      "target": "X",
+      "region": "Advanced Factory",
+      "world_tier": 3,
+      "kind": "discovery",
+      "required_route": [
+        "Merger2 Access",
+        "Reflection Access"
+      ]
+    },
+    {
+      "stable_key": "discover-e-rotated-quad",
+      "index": 37,
+      "name": "Discover E — Rotated Quad Lab",
+      "target": "E",
+      "region": "Advanced Factory",
+      "world_tier": 3,
+      "kind": "discovery",
+      "required_route": [
+        "Merger4 Access",
+        "Rotation Access"
+      ]
+    },
+    {
+      "stable_key": "discover-h-complex-merge",
+      "index": 38,
+      "name": "Discover H — Complex Merge Lab",
+      "target": "H",
+      "region": "Challenge Board",
+      "world_tier": 4,
+      "kind": "discovery",
+      "required_route": [
+        "Bender Access",
+        "Merger2 Access",
+        "Merger3 Access"
+      ]
+    },
+    {
+      "stable_key": "discover-r-master-reflection",
+      "index": 39,
+      "name": "Discover R — Master Reflection Lab",
+      "target": "R",
+      "region": "Challenge Board",
+      "world_tier": 4,
+      "kind": "discovery",
+      "required_route": [
+        "Bender Access",
+        "Merger4 Access",
+        "Reflection Access"
+      ]
+    }
+  ]
+}
