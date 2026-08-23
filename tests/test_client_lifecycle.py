@@ -86,6 +86,22 @@ class _CommonContext:
         return None
 
 
+class _ControlledAsyncLock:
+    def __init__(self):
+        self.entered = asyncio.Event()
+        self.proceed = asyncio.Event()
+
+    async def __aenter__(self):
+        self.entered.set()
+        await self.proceed.wait()
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def locked(self):
+        return self.entered.is_set() and not self.proceed.is_set()
+
+
 class _CommandProcessor:
     def __init__(self, ctx):
         self.ctx = ctx
@@ -168,6 +184,13 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             }
         }), encoding="utf-8")
 
+    def capture_scheduled_task(self, callback):
+        before = asyncio.all_tasks()
+        callback()
+        created = asyncio.all_tasks() - before
+        self.assertEqual(1, len(created))
+        return created.pop()
+
     async def test_dispatch_received_items_are_idempotent_across_reconnect(self):
         first = make_network_item(item=7001, location=9001, player=2, flags=1)
         self.ctx.items_received = [first]
@@ -222,6 +245,68 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0)
 
         self.assertEqual([True], lock_states)
+
+    async def test_delayed_item_send_cannot_write_old_ledger_to_new_room_path(self):
+        lock = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = lock
+        task = self.capture_scheduled_task(lambda: self.ctx.on_print_json(item_send_packet(
+            source=1, receiving=2, location=LOCATIONS[0].code,
+        )))
+        await lock.entered.wait()
+
+        self.ctx.room_seed_name = "Seed-B"
+        self.ctx.connected_identity = self.ctx.current_identity()
+        new_room_path = self.ctx.dispatch_path()
+        lock.proceed.set()
+        await task
+
+        self.assertFalse(new_room_path.exists())
+        self.assertEqual((), self.ctx.pending_overlay_events)
+
+    async def test_delayed_received_items_cannot_reconcile_into_new_room_ledger(self):
+        self.ctx.items_received = [make_network_item(
+            item=7001, location=9001, player=2, flags=1,
+        )]
+        lock = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = lock
+        task = self.capture_scheduled_task(lambda: self.ctx.on_package(
+            "ReceivedItems", {"index": 0, "items": tuple(self.ctx.items_received)},
+        ))
+        await lock.entered.wait()
+
+        self.ctx.room_seed_name = "Seed-B"
+        self.ctx.connected_identity = self.ctx.current_identity()
+        self.ctx.dispatch_ledger = DispatchLedger.empty(self.ctx.connected_identity)
+        new_room_path = self.ctx.dispatch_path()
+        lock.proceed.set()
+        await task
+
+        self.assertEqual((), self.ctx.dispatch_ledger.events)
+        self.assertEqual((), self.ctx.pending_overlay_events)
+        self.assertFalse(new_room_path.exists())
+
+    async def test_delayed_location_info_cannot_backfill_new_room_ledger(self):
+        checked = LOCATIONS[0].code
+        self.ctx.checked_locations = {checked}
+        lock = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = lock
+        packet = {"locations": [make_network_item(
+            item=7001, location=checked, player=2, flags=1,
+        )]}
+        task = self.capture_scheduled_task(lambda: self.ctx.on_package("LocationInfo", packet))
+        await lock.entered.wait()
+
+        self.ctx.room_seed_name = "Seed-B"
+        self.ctx.connected_identity = self.ctx.current_identity()
+        self.ctx.dispatch_ledger = DispatchLedger.empty(self.ctx.connected_identity)
+        self.ctx.checked_locations = set()
+        new_room_path = self.ctx.dispatch_path()
+        lock.proceed.set()
+        await task
+
+        self.assertEqual((), self.ctx.dispatch_ledger.events)
+        self.assertEqual((), self.ctx.pending_overlay_events)
+        self.assertFalse(new_room_path.exists())
 
     async def test_item_send_self_item_waits_for_authoritative_receive(self):
         self.ctx.on_print_json(item_send_packet(
