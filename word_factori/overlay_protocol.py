@@ -5,14 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import math
-from typing import Mapping
+from typing import Mapping, TypeAlias
 
 from .overlay_model import CONNECTION_STATUSES, OverlayAction, OverlaySnapshot, validate_action
 
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
+LEGACY_PROTOCOL_VERSION = 1
 _PARENT_TYPES = frozenset(("snapshot", "settings", "shutdown"))
 _SNAPSHOT_FIELDS = frozenset(OverlaySnapshot.__dataclass_fields__)
+_V1_SNAPSHOT_FIELDS = _SNAPSHOT_FIELDS - frozenset(("active_view", "accepts_keyboard"))
 _SETTINGS_FIELDS = frozenset((
     "enabled", "interface_scale", "left_offset", "notification_duration", "reduced_motion", "max_visible",
 ))
@@ -26,6 +28,34 @@ _EVENT_FIELDS = frozenset((
 class ParentMessage:
     kind: str
     payload: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class ConnectIntent:
+    address: str
+    slot: str
+    password: str | None
+    generation: int
+
+
+@dataclass(frozen=True)
+class DisconnectIntent:
+    generation: int
+
+
+@dataclass(frozen=True)
+class SubmitTextIntent:
+    text: str
+    generation: int
+
+
+@dataclass(frozen=True)
+class PasswordIntent:
+    password: str
+    generation: int
+
+
+OverlayIntent: TypeAlias = OverlayAction | ConnectIntent | DisconnectIntent | SubmitTextIntent | PasswordIntent
 
 
 def _bad_constant(_: str) -> None:
@@ -115,6 +145,16 @@ def _require_text(value: object, field: str) -> None:
         raise ValueError(f"{field} must be text")
 
 
+def _require_bounded_text(
+    value: object, field: str, maximum: int, *, allow_blank: bool = False,
+) -> str:
+    if not isinstance(value, str) or (not allow_blank and not value.strip()):
+        raise ValueError(f"{field} must be text")
+    if len(value) > maximum:
+        raise ValueError(f"{field} exceeds its allowed length")
+    return value
+
+
 def _validate_event_row(value: object) -> None:
     row = _require_exact_keys(value, _EVENT_FIELDS, "event")
     for field in ("key", "item_name", "other_player", "other_game", "location_name"):
@@ -167,7 +207,9 @@ def _validate_snapshot_payload(payload: dict[str, object]) -> None:
     _validate_settings_payload({field: payload[field] for field in _SETTINGS_FIELDS})
 
 
-def _validate_parent(kind: object, payload: object) -> tuple[str, dict[str, object]]:
+def _validate_parent(
+    kind: object, payload: object, *, version: int = PROTOCOL_VERSION,
+) -> tuple[str, dict[str, object]]:
     if not isinstance(kind, str) or kind not in _PARENT_TYPES:
         raise ValueError("message type is invalid")
     if kind == "shutdown":
@@ -176,16 +218,36 @@ def _validate_parent(kind: object, payload: object) -> tuple[str, dict[str, obje
         checked = _require_exact_keys(payload, _SETTINGS_FIELDS, kind)
         _validate_settings_payload(checked)
         return kind, checked
-    checked = _require_exact_keys(payload, _SNAPSHOT_FIELDS, kind)
+    fields = _V1_SNAPSHOT_FIELDS if version == LEGACY_PROTOCOL_VERSION else _SNAPSHOT_FIELDS
+    checked = _require_exact_keys(payload, fields, kind)
     _validate_snapshot_payload(checked)
+    if version != LEGACY_PROTOCOL_VERSION:
+        if checked["active_view"] not in ("items", "chat", "connect", "password"):
+            raise ValueError("active_view is invalid")
+        _require_bool(checked["accepts_keyboard"], "accepts_keyboard")
     return kind, checked
+
+
+def _reject_sensitive_parent_fields(value: object) -> None:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if isinstance(key, str) and key.casefold() in {
+                "auth", "credentials", "password", "token",
+            }:
+                raise ValueError("passwords and credentials are forbidden in parent messages")
+            _reject_sensitive_parent_fields(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _reject_sensitive_parent_fields(item)
 
 
 def encode_parent_message(message: ParentMessage) -> str:
     if not isinstance(message, ParentMessage):
         raise ValueError("parent message is invalid")
-    payload = _json_value(dict(message.payload))
-    kind, checked_payload = _validate_parent(message.kind, payload)
+    raw_payload = dict(message.payload)
+    _reject_sensitive_parent_fields(raw_payload)
+    payload = _json_value(raw_payload)
+    kind, checked_payload = _validate_parent(message.kind, payload, version=PROTOCOL_VERSION)
     return json.dumps(
         {"version": PROTOCOL_VERSION, "type": kind, "payload": checked_payload},
         separators=(",", ":"), sort_keys=True, allow_nan=False,
@@ -200,9 +262,13 @@ def decode_parent_message(encoded: str) -> ParentMessage:
         raise ValueError("message type is invalid")
     if set(decoded) != {"version", "type", "payload"}:
         raise ValueError("protocol top-level fields are invalid")
-    if type(decoded["version"]) is not int or decoded["version"] != PROTOCOL_VERSION:
+    if type(decoded["version"]) is not int or decoded["version"] not in {
+        LEGACY_PROTOCOL_VERSION, PROTOCOL_VERSION,
+    }:
         raise ValueError("protocol version is not supported")
-    kind, payload = _validate_parent(decoded["type"], decoded["payload"])
+    kind, payload = _validate_parent(
+        decoded["type"], decoded["payload"], version=decoded["version"],
+    )
     return ParentMessage(kind, payload)
 
 
@@ -231,27 +297,76 @@ def _to_json_container(value: object) -> object:
     return value
 
 
-def decode_child_action(encoded: str) -> OverlayAction:
-    decoded = _decode_json(encoded)
-    if not isinstance(decoded, dict) or set(decoded) != {"version", "type", "payload"}:
-        raise ValueError("protocol top-level fields are invalid")
-    if type(decoded["version"]) is not int or decoded["version"] != PROTOCOL_VERSION:
-        raise ValueError("protocol version is not supported")
-    if decoded["type"] != "action":
-        raise ValueError("child message type is invalid")
-    payload = _require_exact_keys(
-        decoded["payload"], frozenset(("generation", "kind", "value")), "action",
-    )
+def _require_generation(payload: Mapping[str, object]) -> int:
     generation = payload["generation"]
+    if type(generation) is not int or generation < 0:
+        raise ValueError("child action generation is invalid")
+    return generation
+
+
+def _decode_action_payload(payload_value: object) -> OverlayAction:
+    payload = _require_exact_keys(
+        payload_value, frozenset(("generation", "kind", "value")), "action",
+    )
+    generation = _require_generation(payload)
     kind = payload["kind"]
     value = payload["value"]
     if not isinstance(kind, str):
         raise ValueError("child action is invalid")
     if value is not None and not isinstance(value, str):
         raise ValueError("child action value is invalid")
-    if type(generation) is not int or generation < 0:
-        raise ValueError("child action generation is invalid")
     try:
         return validate_action(OverlayAction(kind, value, generation))
     except ValueError as error:
         raise ValueError("child action is invalid") from error
+
+
+def decode_child_action(encoded: str) -> OverlayIntent:
+    decoded = _decode_json(encoded)
+    if not isinstance(decoded, dict) or set(decoded) != {"version", "type", "payload"}:
+        raise ValueError("protocol top-level fields are invalid")
+    version = decoded["version"]
+    if type(version) is not int or version not in {LEGACY_PROTOCOL_VERSION, PROTOCOL_VERSION}:
+        raise ValueError("protocol version is not supported")
+    kind = decoded["type"]
+    if kind == "action":
+        return _decode_action_payload(decoded["payload"])
+    if version == LEGACY_PROTOCOL_VERSION:
+        raise ValueError("child message type is invalid")
+    if kind == "connect":
+        payload = _require_exact_keys(
+            decoded["payload"],
+            frozenset(("generation", "address", "slot", "password")),
+            "connect",
+        )
+        generation = _require_generation(payload)
+        address = _require_bounded_text(payload["address"], "address", 512)
+        slot = _require_bounded_text(payload["slot"], "slot", 64)
+        password_value = payload["password"]
+        if password_value is not None:
+            password_value = _require_bounded_text(
+                password_value, "password", 256, allow_blank=True,
+            )
+        return ConnectIntent(address, slot, password_value, generation)
+    if kind == "disconnect":
+        payload = _require_exact_keys(
+            decoded["payload"], frozenset(("generation",)), "disconnect",
+        )
+        return DisconnectIntent(_require_generation(payload))
+    if kind == "submit-text":
+        payload = _require_exact_keys(
+            decoded["payload"], frozenset(("generation", "text")), "submit-text",
+        )
+        return SubmitTextIntent(
+            _require_bounded_text(payload["text"], "text", 4096),
+            _require_generation(payload),
+        )
+    if kind == "submit-password":
+        payload = _require_exact_keys(
+            decoded["payload"], frozenset(("generation", "password")), "submit-password",
+        )
+        return PasswordIntent(
+            _require_bounded_text(payload["password"], "password", 256, allow_blank=True),
+            _require_generation(payload),
+        )
+    raise ValueError("child message type is invalid")

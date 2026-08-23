@@ -9,6 +9,7 @@ from word_factori.overlay_model import (
     OverlayAction,
     OverlayFilter,
     OverlayState,
+    OverlayView,
     apply_action,
     apply_events,
     snapshot,
@@ -24,6 +25,31 @@ def make_event(index: int, direction: DispatchDirection = DispatchDirection.RECE
 
 
 class OverlayReducerTests(unittest.TestCase):
+    def test_keyboard_focus_exists_only_in_open_input_views(self):
+        state = OverlayState.closed()
+        self.assertFalse(snapshot(state).accepts_keyboard)
+
+        state = apply_action(state, OverlayAction("open-chat"))
+        self.assertTrue(state.is_open)
+        self.assertIs(OverlayView.CHAT, state.active_view)
+        self.assertTrue(snapshot(state).accepts_keyboard)
+
+        state = apply_action(state, OverlayAction("close"))
+        self.assertFalse(state.input_focused)
+        self.assertFalse(snapshot(state).accepts_keyboard)
+
+    def test_items_connect_and_password_views_have_explicit_focus_contract(self):
+        items = apply_action(OverlayState.closed(), OverlayAction("open-items"))
+        connect = apply_action(items, OverlayAction("open-connect"))
+        password = apply_action(connect, OverlayAction("request-password"))
+
+        self.assertIs(OverlayView.ITEMS, items.active_view)
+        self.assertFalse(snapshot(items).accepts_keyboard)
+        self.assertIs(OverlayView.CONNECT, connect.active_view)
+        self.assertTrue(snapshot(connect).accepts_keyboard)
+        self.assertIs(OverlayView.PASSWORD, password.active_view)
+        self.assertTrue(snapshot(password).accepts_keyboard)
+
     def test_notification_queue_caps_visible_and_preserves_order(self):
         state = OverlayState.closed(max_visible=3)
         state = apply_events(state, tuple(make_event(index) for index in range(5)))
@@ -133,6 +159,82 @@ class OverlayReducerTests(unittest.TestCase):
 
 
 class OverlayProtocolTests(unittest.TestCase):
+    def test_version_two_decodes_bounded_full_client_intents(self):
+        from word_factori.overlay_protocol import (
+            ConnectIntent,
+            DisconnectIntent,
+            PasswordIntent,
+            SubmitTextIntent,
+            decode_child_action,
+        )
+
+        connect = decode_child_action(json.dumps({
+            "version": 2,
+            "type": "connect",
+            "payload": {
+                "generation": 4,
+                "address": "archipelago.gg:38281",
+                "slot": "Factory",
+                "password": "secret",
+            },
+        }))
+        self.assertEqual(
+            ConnectIntent("archipelago.gg:38281", "Factory", "secret", 4), connect,
+        )
+        self.assertEqual(
+            DisconnectIntent(4),
+            decode_child_action('{"version":2,"type":"disconnect","payload":{"generation":4}}'),
+        )
+        self.assertEqual(
+            SubmitTextIntent("hello", 4),
+            decode_child_action('{"version":2,"type":"submit-text","payload":{"generation":4,"text":"hello"}}'),
+        )
+        self.assertEqual(
+            PasswordIntent("secret", 4),
+            decode_child_action('{"version":2,"type":"submit-password","payload":{"generation":4,"password":"secret"}}'),
+        )
+
+    def test_full_client_intents_are_bounded_and_passwords_never_enter_parent_messages(self):
+        from word_factori.overlay_protocol import (
+            ParentMessage,
+            decode_child_action,
+            encode_parent_message,
+        )
+
+        with self.assertRaisesRegex(ValueError, "address"):
+            decode_child_action(json.dumps({
+                "version": 2, "type": "connect", "payload": {
+                    "generation": 0, "address": "x" * 513, "slot": "Factory", "password": None,
+                },
+            }))
+        with self.assertRaisesRegex(ValueError, "text"):
+            decode_child_action(json.dumps({
+                "version": 2, "type": "submit-text", "payload": {
+                    "generation": 0, "text": "x" * 4097,
+                },
+            }))
+        with self.assertRaisesRegex(ValueError, "password") as caught:
+            encode_parent_message(ParentMessage("snapshot", {"password": "do-not-echo"}))
+        self.assertNotIn("do-not-echo", str(caught.exception))
+
+    def test_version_one_item_only_action_remains_compatible(self):
+        from word_factori.overlay_protocol import (
+            decode_child_action,
+            decode_parent_message,
+            snapshot_message,
+        )
+
+        encoded = '{"version":1,"type":"action","payload":{"generation":7,"kind":"open","value":null}}'
+        self.assertEqual(OverlayAction("open", generation=7), decode_child_action(encoded))
+
+        legacy_payload = dict(snapshot_message(snapshot(OverlayState.closed())).payload)
+        del legacy_payload["active_view"]
+        del legacy_payload["accepts_keyboard"]
+        legacy_snapshot = json.dumps({
+            "version": 1, "type": "snapshot", "payload": legacy_payload,
+        })
+        self.assertEqual("snapshot", decode_parent_message(legacy_snapshot).kind)
+
     def test_snapshot_and_child_actions_carry_strict_nonnegative_generation(self):
         from word_factori.overlay_protocol import (
             decode_child_action, decode_parent_message, encode_parent_message, snapshot_message,
@@ -213,11 +315,11 @@ class OverlayProtocolTests(unittest.TestCase):
             decode_child_action('{"version":1,"type":"action","payload":{"generation":0,"kind":"execute","value":null}}')
 
     def test_snapshot_payload_rejects_wrong_scalar_types(self):
-        from word_factori.overlay_protocol import decode_parent_message, snapshot_message
+        from word_factori.overlay_protocol import PROTOCOL_VERSION, decode_parent_message, snapshot_message
 
         payload = dict(snapshot_message(snapshot(OverlayState.closed())).payload)
         payload["unread_count"] = True
-        encoded = json.dumps({"version": 1, "type": "snapshot", "payload": payload})
+        encoded = json.dumps({"version": PROTOCOL_VERSION, "type": "snapshot", "payload": payload})
         with self.assertRaisesRegex(ValueError, "unread_count"):
             decode_parent_message(encoded)
 
@@ -240,12 +342,14 @@ class OverlayProtocolTests(unittest.TestCase):
             apply_action(OverlayState.closed(), OverlayAction("connection-status", []))
 
     def test_snapshot_protocol_rejects_unknown_connection_status(self):
-        from word_factori.overlay_protocol import decode_parent_message, snapshot_message
+        from word_factori.overlay_protocol import PROTOCOL_VERSION, decode_parent_message, snapshot_message
 
         payload = dict(snapshot_message(snapshot(OverlayState.closed())).payload)
         payload["connection_status"] = "offline"
         with self.assertRaisesRegex(ValueError, "connection_status"):
-            decode_parent_message(json.dumps({"version": 1, "type": "snapshot", "payload": payload}))
+            decode_parent_message(json.dumps({
+                "version": PROTOCOL_VERSION, "type": "snapshot", "payload": payload,
+            }))
 
 
 class OverlayPreferencesTests(unittest.TestCase):

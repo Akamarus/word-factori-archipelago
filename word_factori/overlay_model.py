@@ -13,7 +13,10 @@ from .dispatch_store import DispatchLedger
 CONNECTION_STATUSES = frozenset((
     "disconnected", "connecting", "connected", "reconnecting", "authenticating", "error",
 ))
-_NO_VALUE_ACTIONS = frozenset(("open", "close", "toggle", "focus-lost", "focus-returned"))
+_NO_VALUE_ACTIONS = frozenset((
+    "open", "open-items", "open-chat", "open-connect", "request-password",
+    "close", "toggle", "focus-lost", "focus-returned", "submit-started", "submit-failed",
+))
 _ACTION_KINDS = _NO_VALUE_ACTIONS | frozenset(("filter", "expire", "connection-status", "reload-required"))
 _MAX_ACTION_VALUE_LENGTH = 8192
 
@@ -22,6 +25,22 @@ class OverlayFilter(str, Enum):
     ALL = "all"
     RECEIVED = "received"
     SENT = "sent"
+
+
+class OverlayView(str, Enum):
+    ITEMS = "items"
+    CHAT = "chat"
+    CONNECT = "connect"
+    PASSWORD = "password"
+
+
+class ConnectionState(str, Enum):
+    DISCONNECTED = "disconnected"
+    CONNECTING = "connecting"
+    AUTHENTICATING = "authenticating"
+    CONNECTED = "connected"
+    RECONNECTING = "reconnecting"
+    ERROR = "error"
 
 
 @dataclass(frozen=True)
@@ -35,6 +54,8 @@ class OverlayAction:
 class OverlayState:
     is_open: bool = False
     active_filter: OverlayFilter = OverlayFilter.ALL
+    active_view: OverlayView = OverlayView.ITEMS
+    input_focused: bool = False
     visible_notifications: tuple[DispatchEvent, ...] = ()
     waiting_notifications: tuple[DispatchEvent, ...] = ()
     unread_count: int = 0
@@ -49,6 +70,10 @@ class OverlayState:
             raise ValueError("is_open must be boolean")
         if not isinstance(self.active_filter, OverlayFilter):
             raise ValueError("active_filter must be an OverlayFilter")
+        if not isinstance(self.active_view, OverlayView):
+            raise ValueError("active_view must be an OverlayView")
+        if not isinstance(self.input_focused, bool):
+            raise ValueError("input_focused must be boolean")
         for field, events in (
             ("visible_notifications", self.visible_notifications),
             ("waiting_notifications", self.waiting_notifications),
@@ -77,6 +102,11 @@ class OverlayState:
             raise ValueError("accepted_notification_keys must include queued notifications")
         if self.is_open and (notification_keys or self.unread_count):
             raise ValueError("open overlay state cannot have queued or unread presentation")
+        input_views = (OverlayView.CHAT, OverlayView.CONNECT, OverlayView.PASSWORD)
+        if self.input_focused and (
+            not self.is_open or not self.is_focused or self.active_view not in input_views
+        ):
+            raise ValueError("keyboard focus requires an open focused input view")
 
     @classmethod
     def closed(cls, *, max_visible: int = 3) -> "OverlayState":
@@ -149,6 +179,8 @@ class OverlaySnapshot:
     is_open: bool
     is_focused: bool
     active_filter: str
+    active_view: str
+    accepts_keyboard: bool
     connection_status: str
     reload_required: bool
     enabled: bool
@@ -245,10 +277,28 @@ def validate_action(action: OverlayAction) -> OverlayAction:
 
 def apply_action(state: OverlayState, action: OverlayAction) -> OverlayState:
     action = validate_action(action)
-    if action.kind == "open":
-        return replace(state, is_open=True, visible_notifications=(), waiting_notifications=(), unread_count=0)
+    if action.kind in ("open", "open-items", "open-chat", "open-connect", "request-password"):
+        view = {
+            "open": OverlayView.ITEMS,
+            "open-items": OverlayView.ITEMS,
+            "open-chat": OverlayView.CHAT,
+            "open-connect": OverlayView.CONNECT,
+            "request-password": OverlayView.PASSWORD,
+        }[action.kind]
+        accepts_keyboard = state.is_focused and view in (
+            OverlayView.CHAT, OverlayView.CONNECT, OverlayView.PASSWORD,
+        )
+        return replace(
+            state,
+            is_open=True,
+            active_view=view,
+            input_focused=accepts_keyboard,
+            visible_notifications=(),
+            waiting_notifications=(),
+            unread_count=0,
+        )
     if action.kind == "close":
-        return replace(state, is_open=False)
+        return replace(state, is_open=False, input_focused=False)
     if action.kind == "toggle":
         return apply_action(state, OverlayAction("close" if state.is_open else "open"))
     if action.kind == "filter":
@@ -262,13 +312,20 @@ def apply_action(state: OverlayState, action: OverlayAction) -> OverlayState:
         visible, waiting = _filled(visible, state.waiting_notifications, state.max_visible)
         return replace(state, visible_notifications=visible, waiting_notifications=waiting)
     if action.kind == "focus-lost":
-        return replace(state, is_focused=False)
+        return replace(state, is_focused=False, input_focused=False)
     if action.kind == "focus-returned":
         return replace(state, is_focused=True)
     if action.kind == "connection-status":
         return replace(state, connection_status=action.value)
     if action.kind == "reload-required":
         return replace(state, reload_required=action.value == "true")
+    if action.kind == "submit-started":
+        return replace(state, input_focused=False)
+    if action.kind == "submit-failed":
+        accepts_keyboard = state.is_open and state.is_focused and state.active_view in (
+            OverlayView.CHAT, OverlayView.CONNECT, OverlayView.PASSWORD,
+        )
+        return replace(state, input_focused=accepts_keyboard)
     raise AssertionError("validated action kind was not handled")
 
 
@@ -303,6 +360,8 @@ def snapshot(state: OverlayState, ledger: DispatchLedger | Iterable[DispatchEven
         is_open=state.is_open,
         is_focused=state.is_focused,
         active_filter=state.active_filter.value,
+        active_view=state.active_view.value,
+        accepts_keyboard=state.input_focused,
         connection_status=state.connection_status,
         reload_required=state.reload_required,
         enabled=preferences.enabled,
