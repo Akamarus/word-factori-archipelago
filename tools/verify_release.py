@@ -10,7 +10,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from tools.build_release import LEGACY_RELEASE_ARCHIVE, RELEASE_ARCHIVE, WORLD_ARCHIVE, include
+from tools.build_release import (
+    LEGACY_RELEASE_ARCHIVE,
+    PROHIBITED_RELEASE_BASENAMES,
+    RELEASE_ARCHIVE,
+    WORLD_ARCHIVE,
+    include,
+)
 from tools.derive_requirements import derive
 from word_factori.campaign import load_campaign
 from word_factori.data import CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, LOCATIONS
@@ -20,13 +26,31 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def find_prohibited_release_entries(names: list[str]) -> list[str]:
+    prohibited = []
+    for name in names:
+        parts = tuple(part.casefold() for part in Path(name).parts)
+        if ".superpowers" in parts or (parts and parts[-1] in PROHIBITED_RELEASE_BASENAMES):
+            prohibited.append(name)
+    return prohibited
+
+
 def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | None = None) -> None:
     with zipfile.ZipFile(archive_path) as archive:
         archived = {name: digest(archive.read(name)) for name in archive.namelist()}
     if roots is None:
         disk_paths = [path for path in (ROOT / "word_factori").rglob("*") if path.is_file() and include(path)]
     else:
-        disk_paths = [ROOT / name for name in ("README.md", "LICENSE", "install.ps1", "word_factori.apworld")]
+        disk_paths = [
+            ROOT / name
+            for name in (
+                "README.md",
+                "LICENSE",
+                "install.ps1",
+                "Install Word Factori Archipelago.cmd",
+                "word_factori.apworld",
+            )
+        ]
         for root in roots:
             disk_paths.extend(path for path in (ROOT / root).rglob("*") if path.is_file() and include(path))
     disk = {path.relative_to(ROOT).as_posix(): digest(path.read_bytes()) for path in disk_paths}
@@ -84,7 +108,7 @@ def main(*, verify_installed: bool = False) -> None:
 
     with zipfile.ZipFile(RELEASE_ARCHIVE) as archive:
         names = archive.namelist()
-        prohibited = [name for name in names if name.casefold().endswith(("data.win", "recipes.data", "save.json"))]
+        prohibited = find_prohibited_release_entries(names)
         if prohibited:
             raise AssertionError(f"proprietary/user data entered release: {prohibited}")
         if any(name.startswith("tests/output") or "__pycache__" in name for name in names):

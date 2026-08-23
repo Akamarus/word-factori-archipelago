@@ -29,12 +29,7 @@ The currently tested Word Factori depot is Steam build **12616577**.
 1. Download `word-factori-archipelago-hybrid-1.1.0.zip` from the [latest release](https://github.com/Akamarus/word-factori-archipelago/releases/latest).
 2. Extract the ZIP to a normal folder.
 3. Close Word Factori and Archipelago.
-4. Open PowerShell in the extracted folder and run:
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\install.ps1
-   ```
-
+4. Double-click **Install Word Factori Archipelago.cmd**.
 5. Restart Archipelago and Word Factori.
 6. In Word Factori, select the **word factori archipelago** mod and use an **empty save slot**.
 
@@ -42,6 +37,12 @@ For an update, run the installer with `-Force`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -Force
+```
+
+To remove only the files owned by this integration, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall
 ```
 
 The installer replaces only these integration-owned paths:
@@ -140,8 +141,18 @@ The campaign also has an ID, version, and content digest. If the room and instal
 | `/wf_scan` | Explicitly scan the active save once when automatic mod-selection detection is unavailable |
 | `/wf_complete 31` | Manually report location 31 by one-based number |
 | `/wf_complete "Discover C — Bending Lab"` | Manually report a uniquely named location |
+| `/wf_overlay status` | Show the item overlay's availability and state |
+| `/wf_overlay show` | Open the item ledger |
+| `/wf_overlay hide` | Close the item ledger |
+| `/wf_overlay restart` | Restart the optional renderer if it stopped |
 
 Manual reporting cannot bypass campaign-digest or save-slot safety checks.
+
+## In-game item display
+
+While Word Factori is focused, received Archipelago items appear as blue popups on the left side of the game. The small **AP MAIL** button shows unread deliveries; click it or press **F8** to open the item ledger. The ledger currently shows items only. Full chat, connection controls, and manual location reporting remain in the regular Word Factori Client until the full in-game client is complete.
+
+The overlay is cosmetic and failure-isolated: if it cannot start, the regular client continues working and retains the complete item history. Windowed and borderless modes are supported. Exclusive fullscreen may hide the overlay; use borderless mode or the regular client in that case.
 
 ## Troubleshooting
 
@@ -157,6 +168,10 @@ Run `/wf_status`. The target may require a machine or World Access item that has
 
 Use a new empty save slot for that Archipelago room. The safety system intentionally rejects an unbound slot that already contains completions.
 
+### The in-game item display is missing
+
+Use `/wf_overlay status` in the Word Factori Client. Then try `/wf_overlay restart`. Keep Word Factori in windowed or borderless mode; exclusive fullscreen is not supported. Item delivery and check reporting continue in the regular client even when the display is unavailable.
+
 ### The next-page arrow is gray
 
 That is Word Factori's native progression. Finish the current page's levels; the APWorld models the same sequence.
@@ -168,7 +183,8 @@ That is Word Factori's native progression. Finish the current page's levels; the
 - Discovery Labs are post-campaign because the game sequentially gates custom levels.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.
 - Sticker items are AP filler rather than in-game sticker grants.
-- There is no DeathLink, traps, randomized factory layouts, or in-game network UI.
+- There is no DeathLink, traps, or randomized factory layouts.
+- The in-game display is item-only in this release; a complete in-game client is required before the experimental label is removed.
 - A complete GUI-driven server/client playthrough remains a production acceptance task.
 
 ## Development and verification

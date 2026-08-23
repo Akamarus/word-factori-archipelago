@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$Force)
+param([switch]$Force, [switch]$Uninstall)
 
 $ErrorActionPreference = "Stop"
 $distributionRoot = $PSScriptRoot
@@ -9,6 +9,28 @@ $worldTargetDirectory = Join-Path $env:ProgramData "Archipelago\custom_worlds"
 $worldTarget = Join-Path $worldTargetDirectory "word_factori.apworld"
 $modTargetDirectory = Join-Path $env:LOCALAPPDATA "factori\mods"
 $modTarget = Join-Path $modTargetDirectory "word factori archipelago"
+
+function Assert-DirectChild([string]$Candidate, [string]$Parent) {
+    $candidateFull = [IO.Path]::GetFullPath($Candidate)
+    $parentFull = [IO.Path]::GetFullPath($Parent).TrimEnd('\', '/')
+    $candidateParent = [IO.Path]::GetDirectoryName($candidateFull).TrimEnd('\', '/')
+    if (-not $candidateParent.Equals($parentFull, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing unsafe staging path outside $parentFull"
+    }
+}
+
+Assert-DirectChild $worldTarget $worldTargetDirectory
+Assert-DirectChild $modTarget $modTargetDirectory
+if ($Uninstall) {
+    if (Test-Path -LiteralPath $worldTarget) {
+        Remove-Item -LiteralPath $worldTarget -Force
+    }
+    if (Test-Path -LiteralPath $modTarget) {
+        Remove-Item -LiteralPath $modTarget -Recurse -Force
+    }
+    Write-Host "Removed only the Word Factori Archipelago integration."
+    exit 0
+}
 
 if (-not (Test-Path -LiteralPath $worldSource -PathType Leaf)) {
     throw "Missing package file: $worldSource"
@@ -22,15 +44,6 @@ if (-not $Force -and ((Test-Path -LiteralPath $worldTarget) -or (Test-Path -Lite
 
 New-Item -ItemType Directory -Force -Path $worldTargetDirectory | Out-Null
 New-Item -ItemType Directory -Force -Path $modTargetDirectory | Out-Null
-
-function Assert-DirectChild([string]$Candidate, [string]$Parent) {
-    $candidateFull = [IO.Path]::GetFullPath($Candidate)
-    $parentFull = [IO.Path]::GetFullPath($Parent).TrimEnd('\', '/')
-    $candidateParent = [IO.Path]::GetDirectoryName($candidateFull).TrimEnd('\', '/')
-    if (-not $candidateParent.Equals($parentFull, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing unsafe staging path outside $parentFull"
-    }
-}
 
 $transaction = [guid]::NewGuid().ToString('N')
 $worldStage = Join-Path $worldTargetDirectory ".word_factori.$transaction.tmp"
