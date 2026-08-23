@@ -17,11 +17,11 @@ import queue
 import threading
 from typing import Callable, Mapping, Protocol
 
-from word_factori.client_core import game_font_path
-from word_factori.overlay_model import OverlayAction, validate_action
-from word_factori.overlay_protocol import PROTOCOL_VERSION, ParentMessage, decode_parent_message
-from word_factori.overlay_supervisor import OverlayConfig
-from word_factori.window_tracker import Win32WindowTracker
+from .client_core import game_font_path
+from .overlay_model import OverlayAction, validate_action
+from .overlay_protocol import PROTOCOL_VERSION, ParentMessage, decode_parent_message
+from .overlay_supervisor import OverlayConfig
+from .window_tracker import Win32WindowTracker
 
 
 HTCLIENT = 1
@@ -479,7 +479,9 @@ class OverlayWindowHook:
         self._ledger_open = False
         self._left_was_down = False
         self._escape_was_down = False
+        self._f8_was_down = False
         self._f8_registered = False
+        self._f8_poll_fallback = False
         self._escape_registered = False
         self._escape_poll_fallback = False
         self._visible = False
@@ -523,8 +525,12 @@ class OverlayWindowHook:
             self._api.register_hotkey(self._hwnd, _HOTKEY_ID, MOD_NOREPEAT, VK_F8)
             self._f8_registered = True
         except Exception:
-            # Region-based containment remains essential; an occupied F8 is cosmetic.
             self._f8_registered = False
+            self._f8_poll_fallback = True
+            try:
+                self._f8_was_down = self._api.key_press_state(VK_F8).down
+            except Exception:
+                self._f8_was_down = False
 
     def refresh_region(self, *, force: bool = False) -> None:
         if not self._installed:
@@ -570,6 +576,11 @@ class OverlayWindowHook:
 
     def poll_pointer(self) -> None:
         try:
+            if self._f8_poll_fallback:
+                f8 = self._api.key_press_state(VK_F8)
+                if self._new_press(f8, self._f8_was_down) and self._game_active:
+                    self._action("toggle")
+                self._f8_was_down = f8.down
             left = self._api.key_press_state(VK_LBUTTON)
             if self._new_press(left, self._left_was_down) and self._game_active and self._ledger_open:
                 geometry = self._geometry()
@@ -583,6 +594,7 @@ class OverlayWindowHook:
                     self._action("close")
                 self._escape_was_down = escape.down
         except Exception:
+            self._f8_was_down = False
             self._left_was_down = False
             self._escape_was_down = False
 
@@ -641,6 +653,8 @@ class OverlayWindowHook:
                 success = False
             else:
                 self._f8_registered = False
+        self._f8_poll_fallback = False
+        self._f8_was_down = False
         if self._escape_registered:
             try:
                 self._api.unregister_hotkey(self._hwnd, _ESCAPE_HOTKEY_ID)

@@ -38,6 +38,12 @@ def _require_nonnegative_int(value: int, field: str) -> int:
     return value
 
 
+def _require_int(value: int, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field} must be an integer")
+    return value
+
+
 def _validate_received(identity: str, receive_index: int, item_id: int, item_name: str,
                        source_slot: int, source_name: str, source_game: str,
                        location_id: int, location_name: str,
@@ -49,7 +55,7 @@ def _validate_received(identity: str, receive_index: int, item_id: int, item_nam
     _require_nonnegative_int(source_slot, "source slot")
     _require_text(source_name, "source_name")
     _require_text(source_game, "source_game")
-    _require_nonnegative_int(location_id, "location_id")
+    _require_int(location_id, "location_id")
     _require_text(location_name, "location_name")
     _require_text(observed_at, "observed_at", optional=True)
 

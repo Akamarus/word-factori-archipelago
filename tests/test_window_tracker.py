@@ -260,6 +260,23 @@ class RendererBoundaryTests(unittest.TestCase):
         hook.poll_pointer()
         self.assertEqual(["close"], actions)
 
+    def test_f8_registration_failure_uses_pressed_since_poll_fallback(self):
+        api = FakeHookAPI()
+        api.fail_f8_registration = True
+        actions = []
+        hook = OverlayWindowHook(
+            hwnd=77, geometry=lambda: OverlayGeometry(mailbox=Rect(1, 2, 3, 4)),
+            action=lambda kind: actions.append(kind), api=api,
+        )
+        hook.install()
+        hook.set_interaction_state(game_active=True, ledger_open=False)
+        api.key_states[0x77] = [KeyPressState(True, False)]
+
+        hook.poll_pointer()
+        hook.poll_pointer()
+
+        self.assertEqual(["toggle"], actions)
+
     def test_outside_click_closes_once_without_changing_clickthrough_geometry(self):
         api = FakeHookAPI()
         actions = []
@@ -661,6 +678,7 @@ class FakeHookAPI:
         self.fail_show = False
         self.fail_hide = False
         self.restore_failures = 0
+        self.fail_f8_registration = False
         self.fail_escape_registration = False
 
     def get_extended_style(self, hwnd):
@@ -682,6 +700,8 @@ class FakeHookAPI:
 
     def register_hotkey(self, hwnd, hotkey_id, modifiers, key):
         self.hotkey_calls.append((hotkey_id, modifiers, key))
+        if hotkey_id == self.f8_id and self.fail_f8_registration:
+            raise OSError("f8 occupied")
         if hotkey_id == self.escape_id and self.fail_escape_registration:
             raise OSError("escape occupied")
         self.hotkeys.add(hotkey_id)

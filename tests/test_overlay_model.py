@@ -181,6 +181,23 @@ class OverlayProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "message type"):
             decode_parent_message('{"type":"execute"}')
 
+    def test_snapshot_protocol_accepts_synthetic_received_location_sentinel(self):
+        from word_factori.overlay_protocol import decode_parent_message, encode_parent_message, snapshot_message
+        event = DispatchEvent(
+            key="room:receive:0", direction=DispatchDirection.RECEIVED,
+            item_id=1, item_name="Rotation Access", other_slot=0,
+            other_player="Cheat Console", other_game="Archipelago",
+            location_id=-2, location_name="Cheat Console", receive_index=0,
+            observed_at="2026-08-23T13:43:30Z",
+        )
+        state = apply_events(OverlayState.closed(), (event,))
+
+        try:
+            message = decode_parent_message(encode_parent_message(snapshot_message(snapshot(state))))
+        except ValueError as error:
+            self.fail(f"synthetic received locations must reach the renderer: {error}")
+        self.assertEqual(-2, message.payload["visible_notifications"][0]["location_id"])
+
     def test_protocol_rejects_extra_fields_bad_scalars_and_long_strings(self):
         from word_factori.overlay_protocol import decode_child_action, decode_parent_message
 

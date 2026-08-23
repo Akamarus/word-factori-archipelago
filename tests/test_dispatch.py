@@ -61,9 +61,21 @@ class DispatchEventTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "item_id"):
             sent_event("room", 3, -1, "Item", 2, "Alex", "Game", "Location", False, None)
         with self.assertRaisesRegex(ValueError, "location_id"):
-            received_event("room", 0, 1, "Item", 2, "Alex", "Game", -3, "Location", None)
+            sent_event("room", -3, 1, "Item", 2, "Alex", "Game", "Location", False, None)
         with self.assertRaisesRegex(ValueError, "slot"):
             sent_event("room", 3, 1, "Item", -2, "Alex", "Game", "Location", False, None)
+
+    def test_received_event_accepts_archipelago_synthetic_location_sentinel(self):
+        try:
+            event = received_event(
+                "room", 0, 1, "Rotation Access", 0, "Cheat Console", "Archipelago",
+                -2, "Cheat Console", "2026-08-23T13:43:30Z",
+            )
+        except ValueError as error:
+            self.fail(f"synthetic Archipelago locations must be accepted: {error}")
+
+        self.assertEqual(-2, event.location_id)
+        self.assertEqual("Cheat Console", event.location_name)
 
 
 class DispatchLedgerTests(unittest.TestCase):
@@ -176,6 +188,24 @@ class DispatchLedgerTests(unittest.TestCase):
             path.write_text("[]", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "ledger"):
                 load_ledger(path, "room")
+
+    def test_synthetic_received_location_survives_ledger_round_trip(self):
+        from word_factori.dispatch_store import DispatchLedger, load_ledger, save_ledger
+        event = received_event(
+            "room", 0, 1, "Rotation Access", 0, "Cheat Console", "Archipelago",
+            -2, "Cheat Console", "2026-08-23T13:43:30Z",
+        )
+        state = DispatchLedger("room", (event,), frozenset((event.key,)), True, 0)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.json"
+
+            save_ledger(path, state)
+
+            try:
+                restored = load_ledger(path, "room")
+            except ValueError as error:
+                self.fail(f"synthetic received locations must persist: {error}")
+            self.assertEqual(state, restored)
 
     def test_ledger_rejects_unknown_version_and_wrong_room_identity(self):
         from word_factori.dispatch_store import DispatchLedger, load_ledger, save_ledger

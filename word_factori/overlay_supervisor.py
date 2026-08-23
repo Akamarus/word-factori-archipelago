@@ -9,8 +9,8 @@ import multiprocessing
 import threading
 from typing import Callable, Mapping
 
-from word_factori.overlay_model import OverlayAction, OverlaySnapshot
-from word_factori.overlay_protocol import (
+from .overlay_model import OverlayAction, OverlaySnapshot
+from .overlay_protocol import (
     decode_child_action,
     encode_parent_message,
     shutdown_message,
@@ -106,7 +106,7 @@ def _validated_config_primitives(config: object) -> dict[str, object] | None:
 def _default_renderer_target(connection: object, config: Mapping[str, object]) -> None:
     """Resolve the GUI entry point only inside the spawned child."""
     try:
-        from word_factori.overlay_renderer import overlay_process_main
+        from .overlay_renderer import overlay_process_main
 
         overlay_process_main(connection, config)
     finally:

@@ -6,8 +6,8 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Iterable, Iterator, Mapping
 
-from word_factori.dispatch import DispatchDirection, DispatchEvent
-from word_factori.dispatch_store import DispatchLedger
+from .dispatch import DispatchDirection, DispatchEvent
+from .dispatch_store import DispatchLedger
 
 
 CONNECTION_STATUSES = frozenset((
@@ -279,7 +279,7 @@ def snapshot(state: OverlayState, ledger: DispatchLedger | Iterable[DispatchEven
         raise ValueError("overlay state is invalid")
     if type(generation) is not int or generation < 0:
         raise ValueError("overlay generation must be a non-negative integer")
-    from word_factori.overlay_preferences import OverlayPreferences
+    from .overlay_preferences import OverlayPreferences
 
     if ledger is None:
         events: Iterable[DispatchEvent] = ()

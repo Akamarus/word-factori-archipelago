@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 from typing import Any, Iterable
 
-from word_factori.dispatch import DispatchDirection, DispatchEvent
+from .dispatch import DispatchDirection, DispatchEvent
 
 
 LEDGER_LIMIT = 200
@@ -142,6 +142,12 @@ def _nonnegative_int(value: Any, field: str) -> int:
     return value
 
 
+def _integer(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"ledger event {field} must be an integer")
+    return value
+
+
 def _event_from_payload(payload: Any) -> DispatchEvent:
     if not isinstance(payload, dict):
         raise ValueError("ledger event must be an object")
@@ -166,7 +172,7 @@ def _event_from_payload(payload: Any) -> DispatchEvent:
             _nonnegative_int(payload["other_slot"], "other_slot"),
             _required_text(payload["other_player"], "other_player"),
             _required_text(payload["other_game"], "other_game"),
-            _nonnegative_int(payload["location_id"], "location_id"),
+            _integer(payload["location_id"], "location_id"),
             _required_text(payload["location_name"], "location_name"),
             receive_index, observed_at, historical,
         )
@@ -178,14 +184,14 @@ def _validate_persisted_event(identity: str, event: DispatchEvent) -> None:
     _validate_event_identity(identity, event)
     sent_key = f"{identity}:send:{event.location_id}:{event.item_id}:{event.other_slot}"
     if event.direction is DispatchDirection.SENT:
-        if event.receive_index is not None or event.key != sent_key:
+        if event.location_id < 0 or event.receive_index is not None or event.key != sent_key:
             raise ValueError("ledger sent event is inconsistent")
     elif event.direction is DispatchDirection.RECEIVED:
         if event.receive_index is None or event.key != f"{identity}:receive:{event.receive_index}":
             raise ValueError("ledger received event is inconsistent")
     elif event.direction is DispatchDirection.SELF:
         if event.receive_index is None:
-            if event.key != sent_key:
+            if event.location_id < 0 or event.key != sent_key:
                 raise ValueError("ledger self event is inconsistent")
         elif event.key != f"{identity}:receive:{event.receive_index}":
             raise ValueError("ledger self event is inconsistent")

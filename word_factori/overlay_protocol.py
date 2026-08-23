@@ -7,7 +7,7 @@ import json
 import math
 from typing import Mapping
 
-from word_factori.overlay_model import CONNECTION_STATUSES, OverlayAction, OverlaySnapshot, validate_action
+from .overlay_model import CONNECTION_STATUSES, OverlayAction, OverlaySnapshot, validate_action
 
 
 PROTOCOL_VERSION = 1
@@ -121,10 +121,16 @@ def _validate_event_row(value: object) -> None:
         _require_text(row[field], field)
     if row["direction"] not in ("received", "sent", "self"):
         raise ValueError("event direction is invalid")
-    for field in ("item_id", "other_slot", "location_id"):
+    for field in ("item_id", "other_slot"):
         _require_int(row[field], field, minimum=0)
+    _require_int(row["location_id"], "location_id")
     if row["receive_index"] is not None:
         _require_int(row["receive_index"], "receive_index", minimum=0)
+    if row["location_id"] < 0 and (
+        row["direction"] == "sent"
+        or (row["direction"] == "self" and row["receive_index"] is None)
+    ):
+        raise ValueError("sent location_id must be a non-negative integer")
     if row["observed_at"] is not None:
         _require_text(row["observed_at"], "observed_at")
     _require_bool(row["historical"], "historical")
