@@ -7,15 +7,11 @@ import json
 import math
 from typing import Mapping
 
-from word_factori.overlay_model import OverlayAction, OverlaySnapshot
+from word_factori.overlay_model import OverlayAction, OverlaySnapshot, validate_action
 
 
 PROTOCOL_VERSION = 1
 _PARENT_TYPES = frozenset(("snapshot", "settings", "shutdown"))
-_ACTION_KINDS = frozenset((
-    "open", "close", "toggle", "filter", "expire", "focus-lost", "focus-returned",
-    "connection-status", "reload-required",
-))
 _SNAPSHOT_FIELDS = frozenset(OverlaySnapshot.__dataclass_fields__)
 _SETTINGS_FIELDS = frozenset((
     "enabled", "interface_scale", "left_offset", "notification_duration", "reduced_motion", "max_visible",
@@ -237,8 +233,11 @@ def decode_child_action(encoded: str) -> OverlayAction:
     payload = _require_exact_keys(decoded["payload"], frozenset(("kind", "value")), "action")
     kind = payload["kind"]
     value = payload["value"]
-    if not isinstance(kind, str) or kind not in _ACTION_KINDS:
+    if not isinstance(kind, str):
         raise ValueError("child action is invalid")
     if value is not None and not isinstance(value, str):
         raise ValueError("child action value is invalid")
-    return OverlayAction(kind, value)
+    try:
+        return validate_action(OverlayAction(kind, value))
+    except ValueError as error:
+        raise ValueError("child action is invalid") from error

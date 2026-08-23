@@ -2,6 +2,7 @@ import json
 import unittest
 from pathlib import Path
 import tempfile
+from unittest import mock
 
 from word_factori.dispatch import DispatchDirection, DispatchEvent
 from word_factori.overlay_model import (
@@ -74,6 +75,46 @@ class OverlayReducerTests(unittest.TestCase):
             apply_action(OverlayState.closed(), OverlayAction("execute"))
         with self.assertRaisesRegex(ValueError, "filter"):
             apply_action(OverlayState.closed(), OverlayAction("filter", "other"))
+        with self.assertRaisesRegex(ValueError, "value"):
+            apply_action(OverlayState.closed(), OverlayAction("open", "extra"))
+
+    def test_open_snapshot_keeps_reducer_read_state_when_ledger_is_unread(self):
+        from word_factori.dispatch_store import DispatchLedger
+
+        event = make_event(1)
+        state = apply_action(apply_events(OverlayState.closed(), (event,)), OverlayAction("open"))
+        ledger = DispatchLedger("room", (event,), frozenset((event.key,)))
+        self.assertEqual(snapshot(state, ledger).unread_count, 0)
+
+    def test_notifications_are_deduplicated_within_batch_and_after_expire_or_open(self):
+        event = make_event(1)
+        state = apply_events(OverlayState.closed(), (event, event))
+        self.assertEqual([row.key for row in snapshot(state).visible_notifications], ["1"])
+        expired = apply_action(state, OverlayAction("expire", "1"))
+        reopened = apply_action(apply_action(expired, OverlayAction("open")), OverlayAction("close"))
+        replay = apply_events(reopened, (event,))
+        self.assertEqual(snapshot(replay).visible_notifications, ())
+        self.assertEqual(replay.accepted_notification_keys, frozenset(("1",)))
+
+    def test_direct_state_construction_rejects_mutable_or_inconsistent_values(self):
+        with self.assertRaisesRegex(ValueError, "visible_notifications"):
+            OverlayState(visible_notifications=[make_event(1)])
+        with self.assertRaisesRegex(ValueError, "max_visible"):
+            OverlayState(max_visible=0)
+        with self.assertRaisesRegex(ValueError, "unread_count"):
+            OverlayState(unread_count=True)
+        with self.assertRaisesRegex(ValueError, "connection_status"):
+            OverlayState(connection_status=[])
+
+    def test_snapshot_requires_validated_matching_preferences(self):
+        from word_factori.overlay_preferences import OverlayPreferences
+
+        state = OverlayState.closed(max_visible=2)
+        with self.assertRaisesRegex(ValueError, "preferences"):
+            snapshot(state, preferences=object())
+        with self.assertRaisesRegex(ValueError, "max_visible"):
+            snapshot(state, preferences=OverlayPreferences(max_visible=3))
+        self.assertEqual(snapshot(state, preferences=OverlayPreferences(max_visible=2)).max_visible, 2)
 
 
 class OverlayProtocolTests(unittest.TestCase):
@@ -108,6 +149,20 @@ class OverlayProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unread_count"):
             decode_parent_message(encoded)
 
+    def test_child_actions_reject_values_the_reducer_would_reject(self):
+        from word_factori.overlay_protocol import decode_child_action
+
+        cases = (
+            '{"version":1,"type":"action","payload":{"kind":"open","value":"extra"}}',
+            '{"version":1,"type":"action","payload":{"kind":"filter","value":"other"}}',
+            '{"version":1,"type":"action","payload":{"kind":"expire","value":" "}}',
+            '{"version":1,"type":"action","payload":{"kind":"reload-required","value":"yes"}}',
+            '{"version":1,"type":"action","payload":{"kind":"connection-status","value":"offline"}}',
+        )
+        for encoded in cases:
+            with self.subTest(encoded=encoded), self.assertRaisesRegex(ValueError, "action"):
+                decode_child_action(encoded)
+
 
 class OverlayPreferencesTests(unittest.TestCase):
     def test_preferences_round_trip_and_clamp_documented_ranges(self):
@@ -140,6 +195,16 @@ class OverlayPreferencesTests(unittest.TestCase):
             self.assertEqual(load_preferences(path), OverlayPreferences())
             path.write_text('{"version":1,"preferences":{"enabled":"yes"}}', encoding="utf-8")
             self.assertEqual(load_preferences(path), OverlayPreferences())
+
+    def test_preference_atomic_write_cleans_temporary_file_when_replacement_fails(self):
+        from word_factori.overlay_preferences import OverlayPreferences, save_preferences
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "overlay.json"
+            with mock.patch("word_factori.overlay_preferences.os.replace", side_effect=OSError("blocked")):
+                with self.assertRaisesRegex(OSError, "blocked"):
+                    save_preferences(path, OverlayPreferences())
+            self.assertEqual(tuple(path.parent.glob(f".{path.name}.*.tmp")), ())
 
 
 if __name__ == "__main__":

@@ -10,6 +10,14 @@ from word_factori.dispatch import DispatchDirection, DispatchEvent
 from word_factori.dispatch_store import DispatchLedger
 
 
+_CONNECTION_STATUSES = frozenset((
+    "disconnected", "connecting", "connected", "reconnecting", "authenticating", "error",
+))
+_NO_VALUE_ACTIONS = frozenset(("open", "close", "toggle", "focus-lost", "focus-returned"))
+_ACTION_KINDS = _NO_VALUE_ACTIONS | frozenset(("filter", "expire", "connection-status", "reload-required"))
+_MAX_ACTION_VALUE_LENGTH = 8192
+
+
 class OverlayFilter(str, Enum):
     ALL = "all"
     RECEIVED = "received"
@@ -33,11 +41,42 @@ class OverlayState:
     connection_status: str = "disconnected"
     reload_required: bool = False
     is_focused: bool = True
+    accepted_notification_keys: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.is_open, bool):
+            raise ValueError("is_open must be boolean")
+        if not isinstance(self.active_filter, OverlayFilter):
+            raise ValueError("active_filter must be an OverlayFilter")
+        for field, events in (
+            ("visible_notifications", self.visible_notifications),
+            ("waiting_notifications", self.waiting_notifications),
+        ):
+            if not isinstance(events, tuple) or not all(isinstance(event, DispatchEvent) for event in events):
+                raise ValueError(f"{field} must be a tuple of DispatchEvent values")
+        if isinstance(self.max_visible, bool) or not isinstance(self.max_visible, int) or not 1 <= self.max_visible <= 10:
+            raise ValueError("max_visible must be an integer from 1 to 10")
+        if len(self.visible_notifications) > self.max_visible:
+            raise ValueError("visible_notifications exceeds max_visible")
+        if isinstance(self.unread_count, bool) or not isinstance(self.unread_count, int) or self.unread_count < 0:
+            raise ValueError("unread_count must be a non-negative integer")
+        if not isinstance(self.connection_status, str) or self.connection_status not in _CONNECTION_STATUSES:
+            raise ValueError("connection_status is invalid")
+        if not isinstance(self.reload_required, bool) or not isinstance(self.is_focused, bool):
+            raise ValueError("overlay state flags must be boolean")
+        if not isinstance(self.accepted_notification_keys, frozenset):
+            raise ValueError("accepted_notification_keys must be a frozenset")
+        if not all(isinstance(key, str) and key.strip() and len(key) <= _MAX_ACTION_VALUE_LENGTH
+                   for key in self.accepted_notification_keys):
+            raise ValueError("accepted_notification_keys must contain bounded non-blank text")
+        notification_keys = tuple(event.key for event in self.visible_notifications + self.waiting_notifications)
+        if len(notification_keys) != len(set(notification_keys)):
+            raise ValueError("notification queues contain duplicate keys")
+        if not set(notification_keys) <= self.accepted_notification_keys:
+            raise ValueError("accepted_notification_keys must include queued notifications")
 
     @classmethod
     def closed(cls, *, max_visible: int = 3) -> "OverlayState":
-        if isinstance(max_visible, bool) or not isinstance(max_visible, int) or not 1 <= max_visible <= 10:
-            raise ValueError("max_visible must be an integer from 1 to 10")
         return cls(max_visible=max_visible)
 
 
@@ -160,16 +199,42 @@ def apply_events(state: OverlayState, events: Iterable[DispatchEvent]) -> Overla
     incoming = tuple(events)
     if not all(isinstance(event, DispatchEvent) for event in incoming):
         raise ValueError("overlay events must be DispatchEvent values")
-    known = {event.key for event in state.visible_notifications + state.waiting_notifications}
-    additions = tuple(event for event in incoming if event.key not in known)
-    visible, waiting = _filled(state.visible_notifications, state.waiting_notifications + additions, state.max_visible)
+    accepted = state.accepted_notification_keys
+    additions: list[DispatchEvent] = []
+    for event in incoming:
+        if event.key not in accepted:
+            additions.append(event)
+            accepted = accepted | frozenset((event.key,))
+    visible, waiting = _filled(state.visible_notifications, state.waiting_notifications + tuple(additions), state.max_visible)
     return replace(state, visible_notifications=visible, waiting_notifications=waiting,
-                   unread_count=state.unread_count + len(additions))
+                   unread_count=state.unread_count + len(additions), accepted_notification_keys=accepted)
+
+
+def validate_action(action: OverlayAction) -> OverlayAction:
+    """Reject action values that cannot be safely applied by the reducer."""
+    if not isinstance(action, OverlayAction) or not isinstance(action.kind, str) or action.kind not in _ACTION_KINDS:
+        raise ValueError("overlay action is unknown")
+    if action.kind in _NO_VALUE_ACTIONS:
+        if action.value is not None:
+            raise ValueError("overlay action does not accept a value")
+    elif action.kind == "filter":
+        if action.value not in tuple(item.value for item in OverlayFilter):
+            raise ValueError("overlay filter is invalid")
+    elif action.kind == "expire":
+        if action.value is not None and (
+            not isinstance(action.value, str) or not action.value.strip() or len(action.value) > _MAX_ACTION_VALUE_LENGTH
+        ):
+            raise ValueError("overlay expire key is invalid")
+    elif action.kind == "connection-status":
+        if action.value not in _CONNECTION_STATUSES:
+            raise ValueError("connection status is invalid")
+    elif action.value not in ("true", "false"):
+        raise ValueError("reload-required must be true or false")
+    return action
 
 
 def apply_action(state: OverlayState, action: OverlayAction) -> OverlayState:
-    if not isinstance(action, OverlayAction):
-        raise ValueError("overlay action must be an OverlayAction")
+    action = validate_action(action)
     if action.kind == "open":
         return replace(state, is_open=True, visible_notifications=(), waiting_notifications=(), unread_count=0)
     if action.kind == "close":
@@ -177,11 +242,7 @@ def apply_action(state: OverlayState, action: OverlayAction) -> OverlayState:
     if action.kind == "toggle":
         return apply_action(state, OverlayAction("close" if state.is_open else "open"))
     if action.kind == "filter":
-        try:
-            active_filter = OverlayFilter(action.value)
-        except (TypeError, ValueError) as error:
-            raise ValueError("overlay filter is invalid") from error
-        return replace(state, active_filter=active_filter)
+        return replace(state, active_filter=OverlayFilter(action.value))
     if action.kind == "expire":
         visible = state.visible_notifications
         if action.value is None:
@@ -195,14 +256,10 @@ def apply_action(state: OverlayState, action: OverlayAction) -> OverlayState:
     if action.kind == "focus-returned":
         return replace(state, is_focused=True)
     if action.kind == "connection-status":
-        if not isinstance(action.value, str) or not action.value:
-            raise ValueError("connection status must be non-blank text")
         return replace(state, connection_status=action.value)
     if action.kind == "reload-required":
-        if action.value not in ("true", "false"):
-            raise ValueError("reload-required must be true or false")
         return replace(state, reload_required=action.value == "true")
-    raise ValueError("overlay action is unknown")
+    raise AssertionError("validated action kind was not handled")
 
 
 def snapshot(state: OverlayState, ledger: DispatchLedger | Iterable[DispatchEvent] | None = None,
@@ -210,40 +267,35 @@ def snapshot(state: OverlayState, ledger: DispatchLedger | Iterable[DispatchEven
     """Return a renderer-ready snapshot containing only JSON-compatible values."""
     if not isinstance(state, OverlayState):
         raise ValueError("overlay state is invalid")
+    from word_factori.overlay_preferences import OverlayPreferences
+
     if ledger is None:
         events: Iterable[DispatchEvent] = ()
-        unread_count = state.unread_count
     elif isinstance(ledger, DispatchLedger):
         events = ledger.events
-        unread_count = len(ledger.unread_keys)
     else:
         events = ledger
-        unread_count = state.unread_count
     if preferences is None:
-        preference_values = (True, 1.0, 0, 6.0, False, 3)
-    else:
-        try:
-            preference_values = (
-                preferences.enabled, preferences.interface_scale, preferences.left_offset,
-                preferences.notification_duration, preferences.reduced_motion, preferences.max_visible,
-            )
-        except AttributeError as error:
-            raise ValueError("overlay preferences are invalid") from error
+        preferences = OverlayPreferences(max_visible=state.max_visible)
+    if not isinstance(preferences, OverlayPreferences):
+        raise ValueError("overlay preferences are invalid")
+    if preferences.max_visible != state.max_visible:
+        raise ValueError("overlay state and preferences max_visible disagree")
     visible = () if not state.is_focused else tuple(_event_row(event) for event in state.visible_notifications)
     return OverlaySnapshot(
         ledger_rows=tuple(_event_row(event) for event in _filtered(events, state.active_filter)),
         visible_notifications=visible,
         waiting_notifications=tuple(_event_row(event) for event in state.waiting_notifications),
-        unread_count=unread_count,
+        unread_count=state.unread_count,
         is_open=state.is_open,
         is_focused=state.is_focused,
         active_filter=state.active_filter.value,
         connection_status=state.connection_status,
         reload_required=state.reload_required,
-        enabled=preference_values[0],
-        interface_scale=preference_values[1],
-        left_offset=preference_values[2],
-        notification_duration=preference_values[3],
-        reduced_motion=preference_values[4],
-        max_visible=preference_values[5],
+        enabled=preferences.enabled,
+        interface_scale=preferences.interface_scale,
+        left_offset=preferences.left_offset,
+        notification_duration=preferences.notification_duration,
+        reduced_motion=preferences.reduced_motion,
+        max_visible=preferences.max_visible,
     )
