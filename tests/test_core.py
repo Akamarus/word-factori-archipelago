@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from word_factori.bridge import BridgeState, ReceivedItem, bind_game_slot, load_state, reconcile, save_state
-from word_factori.client_core import campaign_compatible, goal_reached, inventory_view, mod_is_selected, parse_connection_url, resolve_game_slot_binding, state_identity
+from word_factori.client_core import campaign_compatible, game_font_path, goal_reached, inventory_view, mod_is_selected, parse_connection_url, resolve_game_slot_binding, state_identity
 from word_factori.data import CAMPAIGN_DIGEST, ITEM_POOL, LOCATIONS, MACHINE_ITEMS
 from word_factori.mod import render_levels, write_campaign_identity
 from word_factori.requirements import WORD_REQUIREMENT_OPTIONS, access_rule_for
@@ -154,6 +154,22 @@ class BridgeTests(unittest.TestCase):
 
 
 class ClientCoreTests(unittest.TestCase):
+    def test_game_font_is_resolved_only_when_neighboring_file_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "word factori.exe"
+            executable.touch()
+            font = executable.with_name("FredokaOne.ttf")
+            self.assertIsNone(game_font_path(executable))
+            font.touch()
+            self.assertEqual(font, game_font_path(executable))
+
+    def test_game_font_rejects_directory_named_like_font(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "word factori.exe"
+            executable.touch()
+            executable.with_name("FredokaOne.ttf").mkdir()
+            self.assertIsNone(game_font_path(executable))
+
     def test_empty_unbound_game_slot_is_safe_to_bind(self):
         active = ActiveSlot("0", "game-slot-A", frozenset())
         self.assertEqual("game-slot-A", resolve_game_slot_binding(None, active))

@@ -4,10 +4,19 @@ from dataclasses import dataclass
 import ntpath
 from typing import Iterable, Mapping
 import urllib.parse
+from pathlib import Path
 
 from .bridge import ReceivedItem
 from .data import LOCATIONS, MACHINE_ITEMS
 from .save import ActiveSlot
+
+
+def game_font_path(executable: Path) -> Path | None:
+    """Return the installed Fredoka font beside the game, without copying it."""
+    if not isinstance(executable, Path):
+        raise ValueError("executable must be a Path")
+    candidate = executable.with_name("FredokaOne.ttf")
+    return candidate if candidate.is_file() else None
 
 
 @dataclass(frozen=True)
