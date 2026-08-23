@@ -176,6 +176,59 @@ class OverlaySupervisorTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             OverlayConfig(password="secret")
 
+    def test_start_rejects_config_subclass_that_overrides_primitive_conversion(self):
+        class CredentialConfig(OverlayConfig):
+            def as_primitives(self):
+                return {"enabled": True, "password": "secret", "server": "example.invalid"}
+
+        context = FakeProcessContext()
+        supervisor = self.make_supervisor(context)
+        self.assertFalse(supervisor.start(CredentialConfig()))
+        self.assertEqual(context.starts, 0)
+
+    def test_config_normalizes_scalar_subclasses_and_rejects_mutated_frozen_instance(self):
+        class FloatValue(float):
+            pass
+
+        class IntValue(int):
+            pass
+
+        class TextValue(str):
+            pass
+
+        context = FakeProcessContext()
+        supervisor = self.make_supervisor(context)
+        config = make_config(
+            interface_scale=FloatValue(1.25),
+            left_offset=IntValue(8),
+            notification_duration=FloatValue(7.0),
+            max_visible=IntValue(4),
+            font_path=TextValue("C:/Game/FredokaOne.ttf"),
+        )
+        self.assertTrue(supervisor.start(config))
+        child_config = context.processes[0].args[1]
+        self.assertEqual(set(child_config), {
+            "enabled", "interface_scale", "left_offset", "notification_duration",
+            "reduced_motion", "max_visible", "font_path",
+        })
+        for key, expected_type in (
+            ("enabled", bool),
+            ("interface_scale", float),
+            ("left_offset", int),
+            ("notification_duration", float),
+            ("reduced_motion", bool),
+            ("max_visible", int),
+            ("font_path", str),
+        ):
+            self.assertIs(type(child_config[key]), expected_type)
+
+        second_context = FakeProcessContext()
+        second = self.make_supervisor(second_context)
+        corrupted = make_config()
+        object.__setattr__(corrupted, "max_visible", True)
+        self.assertFalse(second.start(corrupted))
+        self.assertEqual(second_context.starts, 0)
+
     def test_constructor_rejects_nonimportable_target(self):
         with self.assertRaisesRegex(ValueError, "top-level"):
             OverlaySupervisor(process_context=FakeProcessContext(), target=lambda *_: None)
@@ -248,6 +301,41 @@ class OverlaySupervisorTests(unittest.TestCase):
         statuses = [decode_parent_message(value).payload["connection_status"] for value in connection.sent]
         self.assertEqual(statuses, ["disconnected", "error"])
 
+    def test_publish_uses_stable_mailbox_when_stop_interleaves_with_encoding(self):
+        context = FakeProcessContext()
+        supervisor = self.make_supervisor(context)
+        supervisor.start(make_config())
+        encoding_started = threading.Event()
+        allow_encoding = threading.Event()
+        real_encode = __import__(
+            "word_factori.overlay_supervisor", fromlist=["encode_parent_message"],
+        ).encode_parent_message
+        result = []
+        errors = []
+
+        def controlled_encode(message):
+            if message.kind == "snapshot":
+                encoding_started.set()
+                allow_encoding.wait()
+            return real_encode(message)
+
+        def publish_snapshot():
+            try:
+                result.append(supervisor.publish(snapshot(OverlayState.closed())))
+            except Exception as error:
+                errors.append(error)
+
+        with mock.patch("word_factori.overlay_supervisor.encode_parent_message", side_effect=controlled_encode):
+            publisher = threading.Thread(target=publish_snapshot, daemon=True)
+            publisher.start()
+            self.assertTrue(encoding_started.wait(1.0))
+            supervisor.stop(timeout=0.01)
+            allow_encoding.set()
+            publisher.join(1.0)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(result, [False])
+
     def test_poll_actions_drains_valid_messages_and_ignores_malformed_message(self):
         context = FakeProcessContext()
         supervisor = self.make_supervisor(context)
@@ -310,6 +398,44 @@ class OverlaySupervisorTests(unittest.TestCase):
         self.assertEqual(context.starts, 2)
         self.assertEqual(context.processes[1].args[1]["interface_scale"], 1.5)
 
+    def test_concurrent_stop_wins_over_delayed_health_restart(self):
+        stop_mid_cleanup = threading.Event()
+        allow_stop_cleanup = threading.Event()
+
+        class DelayedStopProcess(FakeProcess):
+            def join(self, timeout=None):
+                if threading.current_thread().name == "delayed-stop" and not stop_mid_cleanup.is_set():
+                    stop_mid_cleanup.set()
+                    allow_stop_cleanup.wait()
+                super().join(timeout)
+
+        class DelayedStopContext(FakeProcessContext):
+            def Process(self, *, target, args):
+                process = DelayedStopProcess(self, target, args, alive=True)
+                self.processes.append(process)
+                return process
+
+        context = DelayedStopContext(process_alive=True)
+        supervisor = self.make_supervisor(context)
+        supervisor.start(make_config())
+        stopped = threading.Event()
+
+        def stop_overlay():
+            supervisor.stop(timeout=0.01)
+            stopped.set()
+
+        stopper = threading.Thread(target=stop_overlay, name="delayed-stop", daemon=True)
+        stopper.start()
+        self.assertTrue(stop_mid_cleanup.wait(1.0))
+        health = threading.Thread(target=supervisor.health_check, name="concurrent-health", daemon=True)
+        health.start()
+        allow_stop_cleanup.set()
+        health.join(1.0)
+        stopper.join(1.0)
+        self.assertTrue(stopped.is_set())
+        self.assertEqual(context.starts, 1)
+        self.assertFalse(supervisor.publish(snapshot(OverlayState.closed())))
+
     def test_launch_failure_after_process_start_terminates_owned_child(self):
         context = FakeProcessContext(
             process_alive=True,
@@ -370,6 +496,80 @@ class OverlaySupervisorTests(unittest.TestCase):
         supervisor.start(make_config())
         supervisor.stop(timeout=0.25)
         self.assertEqual(context.processes[0].terminate_calls, 1)
+
+    def test_stop_performs_final_bounded_writer_join_after_process_termination(self):
+        order = []
+
+        class OrderedConnection(FakeConnection):
+            def close(self):
+                order.append("connection-close")
+                super().close()
+
+        class OrderedProcess(FakeProcess):
+            def join(self, timeout=None):
+                order.append(("process-join", timeout))
+                super().join(timeout)
+
+            def terminate(self):
+                order.append("process-terminate")
+                super().terminate()
+
+        class OrderedContext(FakeProcessContext):
+            def Process(self, *, target, args):
+                process = OrderedProcess(self, target, args, alive=True)
+                self.processes.append(process)
+                return process
+
+        class OrderedWriter:
+            def __init__(self, **kwargs):
+                self.daemon = kwargs["daemon"]
+                self.join_calls = 0
+
+            def start(self):
+                pass
+
+            def join(self, timeout=None):
+                self.join_calls += 1
+                order.append(("writer-join", timeout))
+
+            def is_alive(self):
+                return True
+
+        context = OrderedContext(parent_connection_factory=OrderedConnection)
+        with mock.patch("word_factori.overlay_supervisor.threading.Thread", OrderedWriter):
+            supervisor = self.make_supervisor(context)
+            supervisor.start(make_config())
+            supervisor.stop(timeout=0.25)
+
+        self.assertEqual(order, [
+            ("writer-join", 0.25),
+            "connection-close",
+            ("writer-join", 0.25),
+            ("process-join", 0.25),
+            "process-terminate",
+            ("process-join", 0.25),
+            ("writer-join", 0.25),
+        ])
+
+    def test_stop_contains_writer_liveness_probe_failure(self):
+        class UnprobeableWriter:
+            def __init__(self, **kwargs):
+                self.daemon = kwargs["daemon"]
+
+            def start(self):
+                pass
+
+            def join(self, timeout=None):
+                pass
+
+            def is_alive(self):
+                raise OSError("cannot inspect writer")
+
+        context = FakeProcessContext(process_alive=False)
+        with mock.patch("word_factori.overlay_supervisor.threading.Thread", UnprobeableWriter):
+            supervisor = self.make_supervisor(context)
+            supervisor.start(make_config())
+            supervisor.stop(timeout=0.01)
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ def _bounded_integer(value: object, field: str, minimum: int, maximum: int) -> i
         raise ValueError(f"{field} must be an integer")
     if not minimum <= value <= maximum:
         raise ValueError(f"{field} is outside its allowed range")
-    return value
+    return int(value)
 
 
 @dataclass(frozen=True)
@@ -52,9 +52,9 @@ class OverlayConfig:
     font_path: str | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.enabled, bool):
+        if type(self.enabled) is not bool:
             raise ValueError("enabled must be boolean")
-        if not isinstance(self.reduced_motion, bool):
+        if type(self.reduced_motion) is not bool:
             raise ValueError("reduced_motion must be boolean")
         object.__setattr__(self, "interface_scale", _bounded_number(
             self.interface_scale, "interface_scale", 0.75, 2.0,
@@ -72,17 +72,35 @@ class OverlayConfig:
             not isinstance(self.font_path, str) or not self.font_path.strip() or len(self.font_path) > 32767
         ):
             raise ValueError("font_path must be bounded non-blank text or null")
+        if self.font_path is not None:
+            object.__setattr__(self, "font_path", str(self.font_path))
 
-    def as_primitives(self) -> dict[str, object]:
-        return {
-            "enabled": self.enabled,
-            "interface_scale": self.interface_scale,
-            "left_offset": self.left_offset,
-            "notification_duration": self.notification_duration,
-            "reduced_motion": self.reduced_motion,
-            "max_visible": self.max_visible,
-            "font_path": self.font_path,
-        }
+
+def _validated_config_primitives(config: object) -> dict[str, object] | None:
+    """Revalidate exact config fields without invoking instance-controlled code."""
+    if type(config) is not OverlayConfig:
+        return None
+    try:
+        canonical = OverlayConfig(
+            enabled=config.enabled,
+            interface_scale=config.interface_scale,
+            left_offset=config.left_offset,
+            notification_duration=config.notification_duration,
+            reduced_motion=config.reduced_motion,
+            max_visible=config.max_visible,
+            font_path=config.font_path,
+        )
+    except (TypeError, ValueError):
+        return None
+    return {
+        "enabled": bool(canonical.enabled),
+        "interface_scale": float(canonical.interface_scale),
+        "left_offset": int(canonical.left_offset),
+        "notification_duration": float(canonical.notification_duration),
+        "reduced_motion": bool(canonical.reduced_motion),
+        "max_visible": int(canonical.max_visible),
+        "font_path": None if canonical.font_path is None else str(canonical.font_path),
+    }
 
 
 def _default_renderer_target(connection: object, config: Mapping[str, object]) -> None:
@@ -179,6 +197,7 @@ class OverlaySupervisor:
     def __init__(self, *, process_context: object | None = None, target: RendererTarget | None = None) -> None:
         self._context = process_context or multiprocessing.get_context("spawn")
         self._target = _top_level_target(target or _default_renderer_target)
+        self._state_lock = threading.RLock()
         self._connection: object | None = None
         self._process: object | None = None
         self._mailbox: _LatestMailbox | None = None
@@ -194,24 +213,25 @@ class OverlaySupervisor:
 
     def start(self, config: OverlayConfig) -> bool:
         """Start the renderer, or report cosmetic unavailability without raising."""
-        if self.disabled:
+        copied = _validated_config_primitives(config)
+        if copied is None:
             return False
-        if not isinstance(config, OverlayConfig):
-            return False
-        copied = config.as_primitives()
-        if self._process is not None:
-            try:
-                alive = bool(self._process.is_alive())  # type: ignore[attr-defined]
-            except Exception:
-                alive = False
-            writer_failed = self._writer_failed is not None and self._writer_failed.is_set()
-            if alive and not writer_failed:
-                return copied == self._config
+        with self._state_lock:
+            if self.disabled:
+                return False
+            if self._process is not None:
+                try:
+                    alive = bool(self._process.is_alive())  # type: ignore[attr-defined]
+                except Exception:
+                    alive = False
+                writer_failed = self._writer_failed is not None and self._writer_failed.is_set()
+                if alive and not writer_failed:
+                    return copied == self._config
+                self._config = copied
+                self.health_check()
+                return self._process is not None and not self.disabled
             self._config = copied
-            self.health_check()
-            return self._process is not None and not self.disabled
-        self._config = copied
-        return self._launch()
+            return self._launch()
 
     def _launch(self) -> bool:
         parent = None
@@ -278,52 +298,57 @@ class OverlaySupervisor:
 
     def publish(self, value: OverlaySnapshot) -> bool:
         """Publish one encoded snapshot; renderer failures remain cosmetic."""
-        if self.disabled or self._mailbox is None:
-            return False
         try:
             encoded = encode_parent_message(snapshot_message(value))
         except (TypeError, ValueError):
             return False
-        if self._writer_failed is not None and self._writer_failed.is_set():
-            return False
-        return self._mailbox.publish(encoded)
+        with self._state_lock:
+            mailbox = self._mailbox
+            if self.disabled or mailbox is None:
+                return False
+            if self._writer_failed is not None and self._writer_failed.is_set():
+                return False
+            return mailbox.publish(encoded)
 
     def poll_actions(self) -> tuple[OverlayAction, ...]:
         """Drain currently available child actions without ever blocking."""
-        if self.disabled or self._connection is None:
-            return ()
-        actions: list[OverlayAction] = []
-        for _ in range(_MAX_ACTIONS_PER_POLL):
-            try:
-                if not self._connection.poll(0.0):  # type: ignore[attr-defined]
+        with self._state_lock:
+            connection = self._connection
+            if self.disabled or connection is None:
+                return ()
+            actions: list[OverlayAction] = []
+            for _ in range(_MAX_ACTIONS_PER_POLL):
+                try:
+                    if not connection.poll(0.0):  # type: ignore[attr-defined]
+                        break
+                    encoded = connection.recv()  # type: ignore[attr-defined]
+                except Exception:
                     break
-                encoded = self._connection.recv()  # type: ignore[attr-defined]
-            except Exception:
-                break
-            try:
-                actions.append(decode_child_action(encoded))
-            except (TypeError, ValueError):
-                continue
-        return tuple(actions)
+                try:
+                    actions.append(decode_child_action(encoded))
+                except (TypeError, ValueError):
+                    continue
+            return tuple(actions)
 
     def health_check(self) -> None:
         """Restart one crashed renderer, then disable it for this session."""
-        if self.disabled or self._process is None:
-            return
-        try:
-            alive = bool(self._process.is_alive())  # type: ignore[attr-defined]
-        except Exception:
-            alive = False
-        writer_failed = self._writer_failed is not None and self._writer_failed.is_set()
-        if alive and not writer_failed:
-            return
-        self._release_current(timeout=0.1, request_shutdown=False)
-        if self._restarts >= 1:
-            self.disabled = True
-            return
-        self._restarts += 1
-        if not self._launch():
-            self.disabled = True
+        with self._state_lock:
+            if self.disabled or self._process is None:
+                return
+            try:
+                alive = bool(self._process.is_alive())  # type: ignore[attr-defined]
+            except Exception:
+                alive = False
+            writer_failed = self._writer_failed is not None and self._writer_failed.is_set()
+            if alive and not writer_failed:
+                return
+            self._release_current(timeout=0.1, request_shutdown=False)
+            if self._restarts >= 1:
+                self.disabled = True
+                return
+            self._restarts += 1
+            if not self._launch():
+                self.disabled = True
 
     def _release_current(self, *, timeout: float, request_shutdown: bool) -> None:
         connection, process = self._connection, self._process
@@ -346,11 +371,16 @@ class OverlaySupervisor:
                 connection.close()
             except Exception:
                 pass
-        if writer is not None and writer.is_alive():
+        if writer is not None:
             try:
-                writer.join(timeout=timeout)
+                alive_writer = bool(writer.is_alive())
             except Exception:
-                pass
+                alive_writer = False
+            if alive_writer:
+                try:
+                    writer.join(timeout=timeout)
+                except Exception:
+                    pass
         if process is not None:
             try:
                 process.join(timeout=timeout)
@@ -364,12 +394,22 @@ class OverlaySupervisor:
                 try:
                     process.terminate()
                 except Exception:
-                    return
-                try:
-                    process.join(timeout=timeout)
-                except Exception:
                     pass
+                else:
+                    try:
+                        process.join(timeout=timeout)
+                    except Exception:
+                        pass
+        if writer is not None:
+            try:
+                if writer.is_alive():
+                    # Closing the real pipe and terminating its peer should release send();
+                    # a hostile fake can survive only as the deliberately daemonized fallback.
+                    writer.join(timeout=timeout)
+            except Exception:
+                pass
 
     def stop(self, timeout: float = 2.0) -> None:
         """Request shutdown, then bound cleanup; safe to call repeatedly."""
-        self._release_current(timeout=timeout, request_shutdown=True)
+        with self._state_lock:
+            self._release_current(timeout=timeout, request_shutdown=True)
