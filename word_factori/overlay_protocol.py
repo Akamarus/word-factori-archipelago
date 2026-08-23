@@ -7,7 +7,7 @@ import json
 import math
 from typing import Mapping
 
-from word_factori.overlay_model import OverlayAction, OverlaySnapshot, validate_action
+from word_factori.overlay_model import CONNECTION_STATUSES, OverlayAction, OverlaySnapshot, validate_action
 
 
 PROTOCOL_VERSION = 1
@@ -155,6 +155,8 @@ def _validate_snapshot_payload(payload: dict[str, object]) -> None:
     if payload["active_filter"] not in ("all", "received", "sent"):
         raise ValueError("active_filter is invalid")
     _require_text(payload["connection_status"], "connection_status")
+    if payload["connection_status"] not in CONNECTION_STATUSES:
+        raise ValueError("connection_status is invalid")
     _validate_settings_payload({field: payload[field] for field in _SETTINGS_FIELDS})
 
 

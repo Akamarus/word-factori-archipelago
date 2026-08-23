@@ -116,6 +116,21 @@ class OverlayReducerTests(unittest.TestCase):
             snapshot(state, preferences=OverlayPreferences(max_visible=3))
         self.assertEqual(snapshot(state, preferences=OverlayPreferences(max_visible=2)).max_visible, 2)
 
+    def test_events_arriving_while_open_are_accepted_but_remain_read_and_unqueued(self):
+        state = apply_action(OverlayState.closed(), OverlayAction("open"))
+        state = apply_events(state, (make_event(1),))
+        self.assertEqual(state.accepted_notification_keys, frozenset(("1",)))
+        self.assertEqual(state.unread_count, 0)
+        self.assertEqual(state.visible_notifications, ())
+        self.assertEqual(state.waiting_notifications, ())
+
+    def test_open_state_rejects_queued_or_unread_presentation(self):
+        event = make_event(1)
+        with self.assertRaisesRegex(ValueError, "open"):
+            OverlayState(is_open=True, visible_notifications=(event,), accepted_notification_keys=frozenset((event.key,)))
+        with self.assertRaisesRegex(ValueError, "open"):
+            OverlayState(is_open=True, unread_count=1)
+
 
 class OverlayProtocolTests(unittest.TestCase):
     def test_snapshot_message_round_trip_and_unknown_type_rejection(self):
@@ -162,6 +177,18 @@ class OverlayProtocolTests(unittest.TestCase):
         for encoded in cases:
             with self.subTest(encoded=encoded), self.assertRaisesRegex(ValueError, "action"):
                 decode_child_action(encoded)
+
+    def test_action_validation_rejects_unhashable_connection_status_with_value_error(self):
+        with self.assertRaisesRegex(ValueError, "connection"):
+            apply_action(OverlayState.closed(), OverlayAction("connection-status", []))
+
+    def test_snapshot_protocol_rejects_unknown_connection_status(self):
+        from word_factori.overlay_protocol import decode_parent_message, snapshot_message
+
+        payload = dict(snapshot_message(snapshot(OverlayState.closed())).payload)
+        payload["connection_status"] = "offline"
+        with self.assertRaisesRegex(ValueError, "connection_status"):
+            decode_parent_message(json.dumps({"version": 1, "type": "snapshot", "payload": payload}))
 
 
 class OverlayPreferencesTests(unittest.TestCase):

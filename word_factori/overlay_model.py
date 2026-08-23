@@ -10,7 +10,7 @@ from word_factori.dispatch import DispatchDirection, DispatchEvent
 from word_factori.dispatch_store import DispatchLedger
 
 
-_CONNECTION_STATUSES = frozenset((
+CONNECTION_STATUSES = frozenset((
     "disconnected", "connecting", "connected", "reconnecting", "authenticating", "error",
 ))
 _NO_VALUE_ACTIONS = frozenset(("open", "close", "toggle", "focus-lost", "focus-returned"))
@@ -60,7 +60,7 @@ class OverlayState:
             raise ValueError("visible_notifications exceeds max_visible")
         if isinstance(self.unread_count, bool) or not isinstance(self.unread_count, int) or self.unread_count < 0:
             raise ValueError("unread_count must be a non-negative integer")
-        if not isinstance(self.connection_status, str) or self.connection_status not in _CONNECTION_STATUSES:
+        if not isinstance(self.connection_status, str) or self.connection_status not in CONNECTION_STATUSES:
             raise ValueError("connection_status is invalid")
         if not isinstance(self.reload_required, bool) or not isinstance(self.is_focused, bool):
             raise ValueError("overlay state flags must be boolean")
@@ -74,6 +74,8 @@ class OverlayState:
             raise ValueError("notification queues contain duplicate keys")
         if not set(notification_keys) <= self.accepted_notification_keys:
             raise ValueError("accepted_notification_keys must include queued notifications")
+        if self.is_open and (notification_keys or self.unread_count):
+            raise ValueError("open overlay state cannot have queued or unread presentation")
 
     @classmethod
     def closed(cls, *, max_visible: int = 3) -> "OverlayState":
@@ -205,6 +207,8 @@ def apply_events(state: OverlayState, events: Iterable[DispatchEvent]) -> Overla
         if event.key not in accepted:
             additions.append(event)
             accepted = accepted | frozenset((event.key,))
+    if state.is_open:
+        return replace(state, accepted_notification_keys=accepted)
     visible, waiting = _filled(state.visible_notifications, state.waiting_notifications + tuple(additions), state.max_visible)
     return replace(state, visible_notifications=visible, waiting_notifications=waiting,
                    unread_count=state.unread_count + len(additions), accepted_notification_keys=accepted)
@@ -226,7 +230,7 @@ def validate_action(action: OverlayAction) -> OverlayAction:
         ):
             raise ValueError("overlay expire key is invalid")
     elif action.kind == "connection-status":
-        if action.value not in _CONNECTION_STATUSES:
+        if not isinstance(action.value, str) or action.value not in CONNECTION_STATUSES:
             raise ValueError("connection status is invalid")
     elif action.value not in ("true", "false"):
         raise ValueError("reload-required must be true or false")
