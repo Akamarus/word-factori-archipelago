@@ -19,7 +19,17 @@ from typing import Callable, Mapping, Protocol
 
 from .client_core import game_font_path
 from .overlay_model import OverlayAction, validate_action
-from .overlay_protocol import PROTOCOL_VERSION, ParentMessage, decode_parent_message
+from .overlay_protocol import (
+    ConnectIntent,
+    DisconnectIntent,
+    OverlayIntent,
+    PROTOCOL_VERSION,
+    ParentMessage,
+    PasswordIntent,
+    SubmitTextIntent,
+    decode_parent_message,
+    encode_child_intent,
+)
 from .overlay_supervisor import OverlayConfig
 from .window_tracker import Win32WindowTracker
 
@@ -262,6 +272,22 @@ class RowPresentation:
     metadata: str
 
 
+@dataclass(frozen=True)
+class MessagePresentation:
+    icon: str
+    label: str
+    text: str
+    metadata: str
+
+
+@dataclass(frozen=True)
+class NoticePresentation:
+    icon: str
+    text: str
+    action: str | None
+    color: tuple[float, float, float, float]
+
+
 def _display_text(row: Mapping[str, object], field: str, fallback: str) -> str:
     value = row.get(field)
     return value if isinstance(value, str) and value else fallback
@@ -289,6 +315,42 @@ def present_dispatch_row(row: Mapping[str, object]) -> RowPresentation:
     else:
         time_text = _display_text(row, "observed_at", "time unavailable")
     return RowPresentation(icon, primary, secondary, f"{location} • {time_text}")
+
+
+def present_client_message(row: Mapping[str, object]) -> MessagePresentation:
+    if not isinstance(row, Mapping):
+        raise ValueError("client message row must be a mapping")
+    kind = row.get("kind")
+    styles = {
+        "chat": ("●", "Chat"),
+        "hint": ("?", "Hint"),
+        "command": (">", "Command"),
+        "error": ("!", "Error"),
+    }
+    if kind not in styles:
+        raise ValueError("client message kind is invalid")
+    text = _display_text(row, "text", "Message unavailable")
+    observed_at = _display_text(row, "observed_at", "time unavailable")
+    icon, label = styles[str(kind)]
+    return MessagePresentation(icon, label, text, observed_at)
+
+
+def present_client_notice(row: Mapping[str, object]) -> NoticePresentation:
+    if not isinstance(row, Mapping):
+        raise ValueError("client notice row must be a mapping")
+    severity = row.get("severity")
+    styles = {
+        "info": ("i", (0.12, 0.55, 0.80, 1)),
+        "warning": ("!", (0.92, 0.56, 0.12, 1)),
+        "error": ("!", (0.74, 0.05, 0.13, 1)),
+    }
+    if severity not in styles:
+        raise ValueError("client notice severity is invalid")
+    action = row.get("action")
+    if action is not None and (not isinstance(action, str) or not action):
+        raise ValueError("client notice action is invalid")
+    icon, color = styles[str(severity)]
+    return NoticePresentation(icon, _display_text(row, "text", "Notice unavailable"), action, color)
 
 
 def row_height_for_texture(texture_height: object) -> int:
@@ -354,9 +416,14 @@ class ChildActionWriter:
     def enqueue(
         self, kind: str, value: str | None = None, *, generation: int | None,
     ) -> bool:
+        if type(generation) is not int or generation < 0:
+            raise ValueError("renderer action generation is invalid")
+        return self.enqueue_intent(OverlayAction(kind, value, generation))
+
+    def enqueue_intent(self, intent: OverlayIntent) -> bool:
         if self._stopping.is_set() or self._failed.is_set():
             return False
-        encoded = OverlayGeometry.encode_action(kind, value, generation=generation)
+        encoded = encode_child_intent(intent)
         try:
             self._queue.put_nowait(encoded)
         except queue.Full:
@@ -455,6 +522,7 @@ class OverlayHookAPI(Protocol):
     def clear_window_region(self, hwnd: int) -> None: ...
     def show_no_activate(self, hwnd: int) -> None: ...
     def hide_window(self, hwnd: int) -> None: ...
+    def activate_window(self, hwnd: int) -> None: ...
     def call_original(self, original: object | None, hwnd: int, message: int, wparam: int, lparam: int) -> int: ...
 
 
@@ -474,6 +542,7 @@ class OverlayWindowHook:
         self._action = action
         self._api = api
         self._original_style: int | None = None
+        self._passive_style: int | None = None
         self._original_procedure: object | None = None
         self._game_active = False
         self._ledger_open = False
@@ -488,6 +557,7 @@ class OverlayWindowHook:
         self._installed = False
         self._region_signature: tuple[Rect, ...] | None = None
         self._shutdown_pending = False
+        self._accepts_keyboard = False
 
     @property
     def shutdown_pending(self) -> bool:
@@ -514,6 +584,7 @@ class OverlayWindowHook:
                 pass
             raise
         self._original_style = original_style
+        self._passive_style = style
         self._original_procedure = original_procedure
         self._installed = True
         try:
@@ -542,9 +613,28 @@ class OverlayWindowHook:
         self._api.set_window_region(self._hwnd, regions)
         self._region_signature = regions
 
-    def set_interaction_state(self, *, game_active: bool, ledger_open: bool) -> None:
+    def set_interaction_state(
+        self,
+        *,
+        game_active: bool,
+        ledger_open: bool,
+        accepts_keyboard: bool = False,
+        game_hwnd: int | None = None,
+    ) -> None:
         self._game_active = bool(game_active)
         self._ledger_open = bool(ledger_open)
+        wants_keyboard = self._game_active and self._ledger_open and bool(accepts_keyboard)
+        if wants_keyboard != self._accepts_keyboard:
+            if self._passive_style is None:
+                raise RuntimeError("overlay hook is not installed")
+            if wants_keyboard:
+                self._api.set_extended_style(self._hwnd, self._passive_style & ~_WS_EX_NOACTIVATE)
+                self._api.activate_window(self._hwnd)
+            else:
+                self._api.set_extended_style(self._hwnd, self._passive_style)
+                if self._game_active and type(game_hwnd) is int and game_hwnd > 0:
+                    self._api.activate_window(game_hwnd)
+            self._accepts_keyboard = wants_keyboard
         wants_escape = self._game_active and self._ledger_open
         if wants_escape and not self._escape_registered and not self._escape_poll_fallback:
             try:
@@ -646,6 +736,7 @@ class OverlayWindowHook:
             success = False
             hidden = False
         self._visible = False
+        self._accepts_keyboard = False
         if self._f8_registered:
             try:
                 self._api.unregister_hotkey(self._hwnd, _HOTKEY_ID)
@@ -694,6 +785,7 @@ class OverlayWindowHook:
                     success = False
                 else:
                     self._original_style = None
+                    self._passive_style = None
         self._shutdown_pending = not success
         return success
 
@@ -825,6 +917,8 @@ class CtypesOverlayHookAPI:
         self._user32.UnregisterHotKey.restype = wintypes.BOOL
         self._user32.IsWindowVisible.argtypes = (wintypes.HWND,)
         self._user32.IsWindowVisible.restype = wintypes.BOOL
+        self._user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
+        self._user32.SetForegroundWindow.restype = wintypes.BOOL
         self._user32.GetCursorPos.argtypes = (ctypes.POINTER(wintypes.POINT),)
         self._user32.GetCursorPos.restype = wintypes.BOOL
         self._user32.GetAsyncKeyState.argtypes = (ctypes.c_int,)
@@ -951,6 +1045,11 @@ class CtypesOverlayHookAPI:
     def hide_window(self, hwnd: int) -> None:
         self._set_native_visibility(hwnd, False)
 
+    def activate_window(self, hwnd: int) -> None:
+        # Windows may reject foreground activation under its focus-stealing rules.
+        # The style transition remains valid, so activation is intentionally best effort.
+        self._user32.SetForegroundWindow(hwnd)
+
     def call_original(self, original: object | None, hwnd: int, message: int, wparam: int, lparam: int) -> int:
         if original is None:
             return int(self._user32.DefWindowProcW(hwnd, message, wparam, lparam))
@@ -1026,6 +1125,7 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
     from kivy.uix.floatlayout import FloatLayout
     from kivy.uix.label import Label
     from kivy.uix.scrollview import ScrollView
+    from kivy.uix.textinput import TextInput
 
     font_name = "Roboto"
     font_value = validated["font_path"]
@@ -1121,6 +1221,197 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
             self.add_widget(Label(text=status, font_name=font_name, font_size=dp(12),
                                   size_hint_y=None, height=dp(28), color=(0.65, 0.76, 0.88, 1)))
 
+    def styled_button(text: str, *, color: tuple[float, float, float, float] = (0.12, 0.55, 0.80, 1), **kwargs: object) -> Button:
+        return Button(
+            text=text, font_name=font_name, background_normal="", background_color=color,
+            color=(1, 1, 1, 1), **kwargs,
+        )
+
+    class ClientTabs(BoxLayout):
+        def __init__(self, app: "DispatchOverlayApp", payload: Mapping[str, object], **kwargs: object) -> None:
+            super().__init__(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8), **kwargs)
+            active = str(payload.get("active_view", "items"))
+            for label, view, action in (("Items", "items", "open-items"), ("Chat", "chat", "open-chat")):
+                color = (0.33, 0.34, 0.72, 1) if active == view else (0.16, 0.20, 0.26, 1)
+                button = styled_button(label, color=color)
+                button.bind(on_release=lambda _instance, selected=action: app.send_action(selected))
+                self.add_widget(button)
+            status = str(payload.get("connection_status", "disconnected"))
+            status_text = status.replace("-", " ").title()
+            status_color = (0.16, 0.62, 0.38, 1) if status == "connected" else (0.74, 0.05, 0.13, 1)
+            button = styled_button(status_text, color=status_color, size_hint_x=1.25)
+            if status == "connected":
+                button.bind(on_release=lambda _instance: app.disconnect())
+            else:
+                button.bind(on_release=lambda _instance: app.send_action("open-connect"))
+            self.add_widget(button)
+
+    class ClientNoticeCard(BoxLayout):
+        def __init__(self, row: Mapping[str, object], **kwargs: object) -> None:
+            super().__init__(orientation="horizontal", size_hint_y=None, height=dp(60), padding=dp(10), spacing=dp(8), **kwargs)
+            presentation = present_client_notice(row)
+            paint(self, presentation.color, dp(12))
+            self.add_widget(Label(text=presentation.icon, font_name=font_name, font_size=dp(20), size_hint_x=None, width=dp(28)))
+            detail = presentation.text
+            if presentation.action:
+                detail += f"\n{presentation.action}"
+            self.add_widget(fitted_label(text=detail, font_name=font_name, font_size=dp(13), color=(1, 1, 1, 1), halign="left", valign="middle"))
+
+    class ChatMessageRow(BoxLayout):
+        def __init__(self, row: Mapping[str, object], **kwargs: object) -> None:
+            super().__init__(orientation="horizontal", size_hint_y=None, height=dp(62), padding=(dp(8), dp(5)), spacing=dp(8), **kwargs)
+            presentation = present_client_message(row)
+            self.add_widget(Label(text=presentation.icon, font_name=font_name, font_size=dp(18), size_hint_x=None, width=dp(28), color=(0.39, 0.74, 1, 1)))
+            details = fitted_label(
+                text=f"{presentation.label} • {presentation.metadata}\n{presentation.text}",
+                font_name=font_name, font_size=dp(13), color=(0.96, 0.98, 1, 1),
+                halign="left", valign="middle",
+            )
+            self.add_widget(details)
+
+    class SubmitInput(TextInput):
+        """Enter submits; Shift+Enter inserts a newline for chat."""
+
+        def __init__(self, submit: Callable[[str], None], *, allow_newline: bool, **kwargs: object) -> None:
+            super().__init__(multiline=allow_newline, font_name=font_name, font_size=dp(14), **kwargs)
+            self._submit = submit
+            self._allow_newline = allow_newline
+
+        def keyboard_on_key_down(self, window: object, keycode: tuple[int, str], text: str, modifiers: list[str]) -> bool:
+            if keycode[1] in ("enter", "numpadenter"):
+                if self._allow_newline and "shift" in modifiers:
+                    self.insert_text("\n")
+                else:
+                    self._submit(self.text)
+                return True
+            return super().keyboard_on_key_down(window, keycode, text, modifiers)
+
+    class ChatPanel(BoxLayout):
+        def __init__(self, app: "DispatchOverlayApp", payload: Mapping[str, object], **kwargs: object) -> None:
+            super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
+            scroll = ScrollView(do_scroll_x=False)
+            rows = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(4))
+            rows.bind(minimum_height=rows.setter("height"))
+            for notice in payload.get("notice_rows", []):
+                if isinstance(notice, Mapping):
+                    rows.add_widget(ClientNoticeCard(notice))
+            for row in payload.get("transcript_rows", []):
+                if isinstance(row, Mapping):
+                    rows.add_widget(ChatMessageRow(row))
+            if not rows.children:
+                rows.add_widget(Label(text="Chat, hints, and commands will appear here.", font_name=font_name, font_size=dp(14), size_hint_y=None, height=dp(70), color=(0.65, 0.76, 0.88, 1)))
+            scroll.add_widget(rows)
+            self.add_widget(scroll)
+            composer = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(8))
+            entry = SubmitInput(app.submit_text, allow_newline=True, hint_text="Message, !hint, or /wf_status", padding=(dp(10), dp(10)), background_color=(0.12, 0.15, 0.20, 1), foreground_color=(1, 1, 1, 1), cursor_color=(1, 1, 1, 1))
+            entry.text = app.chat_draft
+            entry.bind(text=lambda _instance, value: setattr(app, "chat_draft", value))
+            app.register_input(entry)
+            composer.add_widget(entry)
+            send = styled_button("Send", size_hint_x=None, width=dp(100))
+            send.bind(on_release=lambda _instance: app.submit_text(entry.text))
+            composer.add_widget(send)
+            self.add_widget(composer)
+            if bool(payload.get("accepts_keyboard", False)):
+                entry.focus = True
+
+    class ItemsPanel(BoxLayout):
+        def __init__(self, app: "DispatchOverlayApp", payload: Mapping[str, object], **kwargs: object) -> None:
+            super().__init__(orientation="vertical", spacing=dp(6), **kwargs)
+            filters = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+            active = str(payload.get("active_filter", "all"))
+            for label, value in (("All", "all"), ("Received", "received"), ("Sent", "sent")):
+                color = (0.33, 0.34, 0.72, 1) if active == value else (0.16, 0.20, 0.26, 1)
+                button = styled_button(label, color=color)
+                button.bind(on_release=lambda _instance, selected=value: app.send_action("filter", selected))
+                filters.add_widget(button)
+            self.add_widget(filters)
+            scroll = ScrollView(do_scroll_x=False)
+            rows = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(4))
+            rows.bind(minimum_height=rows.setter("height"))
+            for row in payload.get("ledger_rows", []):
+                if isinstance(row, Mapping):
+                    rows.add_widget(DispatchRow(row))
+            if not rows.children:
+                rows.add_widget(Label(text="No item dispatches yet.", font_name=font_name, size_hint_y=None, height=dp(70), color=(0.65, 0.76, 0.88, 1)))
+            scroll.add_widget(rows)
+            self.add_widget(scroll)
+
+    def form_input(*, hint: str, password: bool = False) -> TextInput:
+        return TextInput(
+            multiline=False, password=password, hint_text=hint, font_name=font_name,
+            font_size=dp(15), padding=(dp(12), dp(12)), background_color=(0.12, 0.15, 0.20, 1),
+            foreground_color=(1, 1, 1, 1), cursor_color=(1, 1, 1, 1),
+        )
+
+    class ConnectionSheet(BoxLayout):
+        def __init__(self, app: "DispatchOverlayApp", payload: Mapping[str, object], **kwargs: object) -> None:
+            super().__init__(orientation="vertical", padding=(dp(44), dp(20)), spacing=dp(12), **kwargs)
+            self.add_widget(Label(text="Connect to Archipelago", font_name=font_name, font_size=dp(23), size_hint_y=None, height=dp(48), color=(1, 1, 1, 1)))
+            address = form_input(hint="Server address (host:port)")
+            slot = form_input(hint="Player slot name")
+            password = form_input(hint="Room password (optional)", password=True)
+            address.text = app.address_draft
+            slot.text = app.slot_draft
+            address.bind(text=lambda _instance, value: setattr(app, "address_draft", value))
+            slot.bind(text=lambda _instance, value: setattr(app, "slot_draft", value))
+            for field in (address, slot, password):
+                field.size_hint_y = None
+                field.height = dp(50)
+                app.register_input(field, sensitive=field is password)
+                self.add_widget(field)
+            status = str(payload.get("connection_status", "disconnected"))
+            connect = styled_button("Connecting…" if status in ("connecting", "authenticating") else "Connect", size_hint_y=None, height=dp(52))
+            connect.disabled = status in ("connecting", "authenticating", "reconnecting")
+            connect.bind(on_release=lambda _instance: app.connect_from_form(address.text, slot.text, password))
+            self.add_widget(connect)
+            back = styled_button("Back to Items", color=(0.16, 0.20, 0.26, 1), size_hint_y=None, height=dp(44))
+            back.bind(on_release=lambda _instance: app.send_action("open-items"))
+            self.add_widget(back)
+            if bool(payload.get("accepts_keyboard", False)):
+                (address if not address.text else slot).focus = True
+
+    class PasswordSheet(BoxLayout):
+        def __init__(self, app: "DispatchOverlayApp", **kwargs: object) -> None:
+            super().__init__(orientation="vertical", padding=(dp(56), dp(60)), spacing=dp(14), **kwargs)
+            self.add_widget(Label(text="Room password required", font_name=font_name, font_size=dp(23), size_hint_y=None, height=dp(54)))
+            password = form_input(hint="Password", password=True)
+            password.size_hint_y = None
+            password.height = dp(52)
+            app.register_input(password, sensitive=True)
+            self.add_widget(password)
+            submit = styled_button("Continue", size_hint_y=None, height=dp(52))
+            submit.bind(on_release=lambda _instance: app.submit_password(password))
+            self.add_widget(submit)
+            password.bind(on_text_validate=lambda _instance: app.submit_password(password))
+            password.focus = True
+
+    class FullClientPanel(BoxLayout):
+        def __init__(self, app: "DispatchOverlayApp", payload: Mapping[str, object], **kwargs: object) -> None:
+            super().__init__(orientation="vertical", padding=dp(14), spacing=dp(8), **kwargs)
+            paint(self, (0.06, 0.08, 0.11, 0.98), dp(20))
+            header = BoxLayout(size_hint_y=None, height=dp(58), padding=(dp(12), 0), spacing=dp(8))
+            paint(header, (0.33, 0.34, 0.72, 1), dp(14))
+            header.add_widget(Label(text="Archipelago", font_name=font_name, font_size=dp(22), color=(1, 1, 1, 1), halign="left"))
+            close = styled_button("×", color=(0.74, 0.05, 0.13, 1), size_hint_x=None, width=dp(52))
+            close.bind(on_release=lambda _instance: app.close_panel())
+            header.add_widget(close)
+            self.add_widget(header)
+            self.add_widget(ClientTabs(app, payload))
+            view = str(payload.get("active_view", "items"))
+            if view == "chat":
+                self.add_widget(ChatPanel(app, payload))
+            elif view == "connect":
+                self.add_widget(ConnectionSheet(app, payload))
+            elif view == "password":
+                self.add_widget(PasswordSheet(app))
+            else:
+                self.add_widget(ItemsPanel(app, payload))
+            status = str(payload.get("connection_status", "disconnected")).replace("-", " ").title()
+            if payload.get("reload_required"):
+                status += " • Reload your Word Factori slot to use new machinery"
+            self.add_widget(Label(text=status, font_name=font_name, font_size=dp(12), size_hint_y=None, height=dp(26), color=(0.65, 0.76, 0.88, 1)))
+
     class DispatchOverlayApp(App):
         def __init__(self) -> None:
             super().__init__()
@@ -1134,13 +1425,18 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 handle_provider=lambda: _kivy_window_handle(Window),
                 api_factory=CtypesOverlayHookAPI,
                 geometry=lambda: self.geometry,
-                action=lambda kind: self.send_action(kind),
+                action=self.handle_native_action,
             )
             self.last_focus: bool | None = None
             self.expiry_timers = ExpiryTimerRegistry(self.enqueue_expiry)
             self.stopping = False
             self.display_scale = 1.0
             self.game_shown = False
+            self.address_draft = "archipelago.gg:38281"
+            self.slot_draft = ""
+            self.chat_draft = ""
+            self.inputs: list[TextInput] = []
+            self.sensitive_inputs: list[TextInput] = []
 
         def build(self) -> FloatLayout:
             Window.clearcolor = (0, 0, 0, 0)
@@ -1166,6 +1462,74 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
             if not accepted:
                 self.stopping = True
                 self.stop()
+
+        def handle_native_action(self, kind: str) -> None:
+            if kind == "close" or (kind == "toggle" and bool(self.snapshot.get("is_open", False))):
+                self.clear_inputs(include_drafts=True)
+            self.send_action(kind)
+
+        def send_intent(self, intent: OverlayIntent) -> bool:
+            try:
+                accepted = self.action_writer.enqueue_intent(intent)
+            except ValueError:
+                return False
+            except Exception:
+                accepted = False
+            if not accepted:
+                self.stopping = True
+                self.stop()
+            return accepted
+
+        def register_input(self, field: TextInput, *, sensitive: bool = False) -> None:
+            self.inputs.append(field)
+            if sensitive:
+                self.sensitive_inputs.append(field)
+
+        def clear_inputs(self, *, include_drafts: bool) -> None:
+            for field in self.inputs:
+                field.focus = False
+            for field in self.sensitive_inputs:
+                field.text = ""
+            if include_drafts:
+                self.chat_draft = ""
+                for field in self.inputs:
+                    if field not in self.sensitive_inputs:
+                        field.text = ""
+
+        def close_panel(self) -> None:
+            self.clear_inputs(include_drafts=True)
+            self.send_action("close")
+
+        def submit_text(self, value: str) -> None:
+            text_value = value.strip()
+            if not text_value or self.snapshot_generation is None:
+                return
+            if self.send_intent(SubmitTextIntent(text_value, self.snapshot_generation)):
+                self.chat_draft = ""
+                for field in self.inputs:
+                    if field not in self.sensitive_inputs and isinstance(field, SubmitInput):
+                        field.text = ""
+
+        def connect_from_form(self, address: str, slot: str, password_field: TextInput) -> None:
+            if self.snapshot_generation is None:
+                return
+            if not address.strip() or not slot.strip():
+                return
+            password_value = password_field.text
+            password_field.text = ""
+            intent = ConnectIntent(address.strip(), slot.strip(), password_value or None, self.snapshot_generation)
+            self.send_intent(intent)
+
+        def submit_password(self, password_field: TextInput) -> None:
+            if self.snapshot_generation is None:
+                return
+            password_value = password_field.text
+            password_field.text = ""
+            self.send_intent(PasswordIntent(password_value, self.snapshot_generation))
+
+        def disconnect(self) -> None:
+            if self.snapshot_generation is not None:
+                self.send_intent(DisconnectIntent(self.snapshot_generation))
 
         def enqueue_expiry(self, key: str, generation: int) -> None:
             try:
@@ -1207,6 +1571,9 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
         def rebuild(self) -> None:
             if self.root_layout is None:
                 return
+            self.clear_inputs(include_drafts=False)
+            self.inputs = []
+            self.sensitive_inputs = []
             self.root_layout.clear_widgets()
             width, height = (max(1, int(Window.width)), max(1, int(Window.height)))
             ui_scale = float(self.snapshot.get("interface_scale", validated["interface_scale"])) * self.display_scale
@@ -1233,7 +1600,7 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
             mailbox.bind(on_release=lambda _: self.send_action("close" if ledger_open else "open"))
             self.root_layout.add_widget(mailbox)
             if ledger_open and self.geometry.ledger is not None:
-                ledger = DispatchLedger(self, self.snapshot)
+                ledger = FullClientPanel(self, self.snapshot)
                 self.place(ledger, self.geometry.ledger)
                 self.root_layout.add_widget(ledger)
             else:
@@ -1285,7 +1652,11 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                     else:
                         font_name = "WordFactoriFredoka"
                         self.rebuild()
-            game_active = state is not None and state.visible and state.focused
+            accepts_keyboard = bool(self.snapshot.get("accepts_keyboard", False))
+            overlay_focused = bool(getattr(Window, "focus", False))
+            game_active = state is not None and state.visible and (
+                state.focused or (accepts_keyboard and overlay_focused)
+            )
             shown = game_active and native_status == "ready"
             was_shown = self.game_shown
             self.game_shown = shown
@@ -1307,9 +1678,9 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                     self.stopping = True
                     self.stop()
                 return
-            if self.last_focus is None or state.focused != self.last_focus:
-                self.send_action("focus-returned" if state.focused else "focus-lost")
-                self.last_focus = state.focused
+            if self.last_focus is None or game_active != self.last_focus:
+                self.send_action("focus-returned" if game_active else "focus-lost")
+                self.last_focus = game_active
             left, top, width, height = state.bounds
             if not math.isclose(self.display_scale, state.scale):
                 self.display_scale = state.scale
@@ -1323,13 +1694,19 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 self.rebuild()
             if self.native.hook is not None:
                 ledger_open = bool(self.snapshot.get("is_open", False))
-                self.native.hook.set_interaction_state(game_active=game_active, ledger_open=ledger_open)
+                self.native.hook.set_interaction_state(
+                    game_active=game_active,
+                    ledger_open=ledger_open,
+                    accepts_keyboard=accepts_keyboard,
+                    game_hwnd=state.hwnd,
+                )
                 self.native.hook.poll_pointer()
             if not self.native.set_visible(shown):
                 self.stopping = True
                 self.stop()
 
         def on_stop(self) -> None:
+            self.clear_inputs(include_drafts=True)
             self.cancel_expiry_events()
             self.native.shutdown()
             self.action_writer.stop(0.2)

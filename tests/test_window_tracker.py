@@ -5,7 +5,13 @@ import time
 import unittest
 from pathlib import Path
 
-from word_factori.overlay_protocol import decode_child_action, encode_parent_message, settings_message
+from word_factori.overlay_protocol import (
+    ConnectIntent,
+    SubmitTextIntent,
+    decode_child_action,
+    encode_parent_message,
+    settings_message,
+)
 from word_factori.overlay_renderer import (
     HTCLIENT,
     HTTRANSPARENT,
@@ -24,6 +30,8 @@ from word_factori.overlay_renderer import (
     WM_NCHITTEST,
     drain_parent_messages,
     present_dispatch_row,
+    present_client_message,
+    present_client_notice,
     runtime_font_path,
     row_height_for_texture,
     window_relative_regions,
@@ -154,6 +162,86 @@ class WindowTrackerTests(unittest.TestCase):
 
 
 class RendererBoundaryTests(unittest.TestCase):
+    def test_client_message_and_notice_presentations_are_bounded_and_truthful(self):
+        message = present_client_message({
+            "kind": "hint", "text": "Try Ω factory", "observed_at": "now",
+            "sender_slot": 4,
+        })
+        notice = present_client_notice({
+            "severity": "error", "text": "Wrong slot", "action": "Reconnect",
+        })
+
+        self.assertEqual("?", message.icon)
+        self.assertEqual("Try Ω factory", message.text)
+        self.assertEqual("now", message.metadata)
+        self.assertEqual("!", notice.icon)
+        self.assertEqual("Wrong slot", notice.text)
+        self.assertEqual("Reconnect", notice.action)
+
+    def test_child_writer_encodes_full_client_intents(self):
+        class Connection:
+            def __init__(self):
+                self.values = []
+                self.ready = threading.Event()
+
+            def send(self, value):
+                self.values.append(decode_child_action(value))
+                if len(self.values) == 2:
+                    self.ready.set()
+
+        connection = Connection()
+        writer = ChildActionWriter(connection, capacity=4)
+        self.assertTrue(writer.enqueue_intent(ConnectIntent(
+            "localhost:38281", "Factory", "secret", 3,
+        )))
+        self.assertTrue(writer.enqueue_intent(SubmitTextIntent("hello", 3)))
+        self.assertTrue(connection.ready.wait(1.0))
+        writer.stop(0.2)
+
+        self.assertEqual("localhost:38281", connection.values[0].address)
+        self.assertEqual("hello", connection.values[1].text)
+
+    def test_keyboard_mode_temporarily_removes_noactivate_and_restores_game_focus(self):
+        api = FakeHookAPI()
+        hook = OverlayWindowHook(
+            hwnd=77,
+            geometry=lambda: OverlayGeometry(mailbox=Rect(10, 10, 40, 40)),
+            action=lambda kind: None,
+            api=api,
+        )
+        hook.install()
+        passive_style = api.style
+
+        hook.set_interaction_state(
+            game_active=True, ledger_open=True, accepts_keyboard=True, game_hwnd=88,
+        )
+        self.assertFalse(api.style & 0x08000000)
+        self.assertEqual(77, api.activated[-1])
+
+        hook.set_interaction_state(
+            game_active=True, ledger_open=True, accepts_keyboard=False, game_hwnd=88,
+        )
+        self.assertEqual(passive_style, api.style)
+        self.assertEqual(88, api.activated[-1])
+
+    def test_keyboard_mode_does_not_steal_focus_back_after_alt_tab(self):
+        api = FakeHookAPI()
+        hook = OverlayWindowHook(
+            hwnd=77,
+            geometry=lambda: OverlayGeometry(mailbox=Rect(10, 10, 40, 40)),
+            action=lambda kind: None,
+            api=api,
+        )
+        hook.install()
+        hook.set_interaction_state(
+            game_active=True, ledger_open=True, accepts_keyboard=True, game_hwnd=88,
+        )
+        hook.set_interaction_state(
+            game_active=False, ledger_open=True, accepts_keyboard=False, game_hwnd=88,
+        )
+
+        self.assertEqual([77], api.activated)
+
     def test_renderer_action_encoding_requires_current_snapshot_generation(self):
         with self.assertRaises(ValueError):
             OverlayGeometry.encode_action("open", generation=None)
@@ -680,6 +768,7 @@ class FakeHookAPI:
         self.restore_failures = 0
         self.fail_f8_registration = False
         self.fail_escape_registration = False
+        self.activated = []
 
     def get_extended_style(self, hwnd):
         return self.style
@@ -736,6 +825,9 @@ class FakeHookAPI:
         if self.fail_hide:
             raise OSError("hide failed")
         self.hidden.append(hwnd)
+
+    def activate_window(self, hwnd):
+        self.activated.append(hwnd)
 
     def call_original(self, original, hwnd, message, wparam, lparam):
         return 987

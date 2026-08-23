@@ -353,6 +353,43 @@ def _decode_action_payload(payload_value: object) -> OverlayAction:
         raise ValueError("child action is invalid") from error
 
 
+def encode_child_intent(intent: OverlayIntent) -> str:
+    """Encode one validated child intent without retaining credential data."""
+    if isinstance(intent, OverlayAction):
+        action = validate_action(intent)
+        kind = "action"
+        payload: dict[str, object] = {
+            "generation": action.generation,
+            "kind": action.kind,
+            "value": action.value,
+        }
+    elif isinstance(intent, ConnectIntent):
+        kind = "connect"
+        payload = {
+            "generation": intent.generation,
+            "address": intent.address,
+            "slot": intent.slot,
+            "password": intent.password,
+        }
+    elif isinstance(intent, DisconnectIntent):
+        kind = "disconnect"
+        payload = {"generation": intent.generation}
+    elif isinstance(intent, SubmitTextIntent):
+        kind = "submit-text"
+        payload = {"generation": intent.generation, "text": intent.text}
+    elif isinstance(intent, PasswordIntent):
+        kind = "submit-password"
+        payload = {"generation": intent.generation, "password": intent.password}
+    else:
+        raise ValueError("child intent is invalid")
+    encoded = json.dumps(
+        {"version": PROTOCOL_VERSION, "type": kind, "payload": payload},
+        separators=(",", ":"), sort_keys=True, allow_nan=False,
+    )
+    decode_child_action(encoded)
+    return encoded
+
+
 def decode_child_action(encoded: str) -> OverlayIntent:
     decoded = _decode_json(encoded)
     if not isinstance(decoded, dict) or set(decoded) != {"version", "type", "payload"}:
