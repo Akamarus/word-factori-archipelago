@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import json
 import os
 import re
@@ -37,7 +38,12 @@ from .client_core import (
     resolve_game_slot_binding,
     state_identity,
 )
-from .data import GAME, LOCATIONS
+from .data import GAME, ITEM_NAME_TO_ID, LOCATIONS
+from .dispatch import DispatchDirection, DispatchEvent, received_event, sent_event
+from .dispatch_store import (
+    DispatchLedger, ledger_path, load_ledger, reconcile_received, record_event,
+    save_ledger,
+)
 from .mod import render_levels, write_levels
 from .save import ActiveSlot, find_save, read_active_slot
 
@@ -95,6 +101,9 @@ class WordFactoriContext(CommonContext):
         self.room_seed_name: str | None = None
         self.connected_identity: str | None = None
         self.goal_identity: str | None = None
+        self.dispatch_ledger = DispatchLedger.empty("disconnected")
+        self.pending_overlay_events: tuple[DispatchEvent, ...] = ()
+        self._dispatch_lock = asyncio.Lock()
 
     async def server_auth(self, password_requested: bool = False) -> None:
         if password_requested and not self.password:
@@ -120,12 +129,14 @@ class WordFactoriContext(CommonContext):
             self.bridge_state = acknowledge_checks(self.bridge_state, self.checked_locations)
             save_state(self.state_path(), self.bridge_state)
             self.last_render_signature = None
-            asyncio.create_task(self.reconcile_received())
+            asyncio.create_task(self._connected_reconcile(self.connected_identity))
             asyncio.create_task(self._resend_pending_checks())
             if self.goal_identity == self.connected_identity:
                 asyncio.create_task(self._send_goal())
         elif cmd == "ReceivedItems":
-            asyncio.create_task(self.reconcile_received())
+            asyncio.create_task(self._received_items_reconcile())
+        elif cmd == "LocationInfo" and self.connected_identity is not None:
+            asyncio.create_task(self._backfill_location_info_safely(args.get("locations") or ()))
         elif cmd == "RoomUpdate":
             if self.connected_identity is not None and self.compatible_campaign():
                 self.bridge_state = acknowledge_checks(self.bridge_state, self.checked_locations)
@@ -135,8 +146,179 @@ class WordFactoriContext(CommonContext):
         identity = self.connected_identity or self.current_identity()
         return self.state_root / f"{_safe_filename(identity)}.json"
 
+    def dispatch_path(self) -> Path:
+        identity = self.connected_identity or self.current_identity()
+        return ledger_path(self.state_root, _safe_filename(identity))
+
     def current_identity(self) -> str:
         return state_identity(self.room_seed_name, self.team, self.slot, self.auth)
+
+    def _lookup_item_name(self, item_id: int) -> str:
+        try:
+            name = self.item_names.lookup_in_game(item_id)
+        except (LookupError, TypeError, ValueError):
+            name = None
+        return name if isinstance(name, str) and name.strip() else f"Item {item_id}"
+
+    def _lookup_location_name(self, location_id: int, slot: int) -> str:
+        try:
+            name = self.location_names.lookup_in_slot(location_id, slot)
+        except (LookupError, TypeError, ValueError):
+            name = None
+        return name if isinstance(name, str) and name.strip() else f"Location {location_id}"
+
+    def _slot_details(self, slot: int) -> tuple[str, str]:
+        info = self.slot_info.get(slot)
+        name = getattr(info, "name", None)
+        game = getattr(info, "game", None)
+        if not isinstance(name, str) or not name.strip():
+            name = f"Player {slot}"
+        if not isinstance(game, str) or not game.strip():
+            game = "Unknown Game"
+        return name, game
+
+    def dispatch_received_event(self, index: int, item) -> DispatchEvent | None:
+        item_name = self._lookup_item_name(item.item)
+        if item.item == ITEM_NAME_TO_ID["Bender Access"] or item_name == "Bender Access":
+            return None
+        player_name, player_game = self._slot_details(item.player)
+        return received_event(
+            self.connected_identity or self.current_identity(), index,
+            item.item, item_name, item.player, player_name, player_game,
+            item.location, self._lookup_location_name(item.location, item.player),
+            None, self_item=self.slot_concerns_self(item.player),
+        )
+
+    async def reconcile_dispatches(self) -> None:
+        async with self._dispatch_lock:
+            events = tuple(
+                event for index, item in enumerate(self.items_received)
+                if (event := self.dispatch_received_event(index, item)) is not None
+            )
+            update = reconcile_received(self.dispatch_ledger, events)
+            self.dispatch_ledger = update.state
+            self.pending_overlay_events += update.notify
+            save_ledger(self.dispatch_path(), self.dispatch_ledger)
+
+    async def _connected_reconcile(self, identity: str) -> None:
+        await self.reconcile_received()
+        try:
+            async with self._dispatch_lock:
+                if self.connected_identity != identity:
+                    return
+                self.pending_overlay_events = ()
+                try:
+                    self.dispatch_ledger = load_ledger(self.dispatch_path(), identity)
+                except (OSError, ValueError, TypeError) as error:
+                    logger.warning("Ignoring invalid dispatch ledger; room history will rebuild it: %s", error)
+                    self.dispatch_ledger = DispatchLedger.empty(identity)
+                events = tuple(
+                    event for index, item in enumerate(self.items_received)
+                    if (event := self.dispatch_received_event(index, item)) is not None
+                )
+                update = reconcile_received(self.dispatch_ledger, events)
+                self.dispatch_ledger = update.state
+                self.pending_overlay_events += update.notify
+                save_ledger(self.dispatch_path(), self.dispatch_ledger)
+        except Exception:
+            logger.exception("Dispatch history reconciliation failed; Word Factori unlocks remain active.")
+        try:
+            await self.request_checked_location_info()
+        except Exception:
+            logger.exception("Checked-location dispatch history could not be requested.")
+
+    async def _received_items_reconcile(self) -> None:
+        await self.reconcile_received()
+        try:
+            await self.reconcile_dispatches()
+        except Exception:
+            logger.exception("Dispatch history reconciliation failed; Word Factori unlocks remain active.")
+
+    async def request_checked_location_info(self) -> None:
+        local_ids = {location.code for location in LOCATIONS}
+        locations = sorted(self.checked_locations & local_ids)
+        if locations:
+            await self.send_msgs([{
+                "cmd": "LocationScouts", "locations": locations,
+                "create_as_hint": 0,
+            }])
+
+    def dispatch_sent_event(self, item, *, historical: bool) -> DispatchEvent:
+        recipient_name, recipient_game = self._slot_details(item.player)
+        event = sent_event(
+            self.connected_identity or self.current_identity(), item.location,
+            item.item, self._lookup_item_name(item.item), item.player,
+            recipient_name, recipient_game,
+            self._lookup_location_name(item.location, self.slot),
+            self.slot_concerns_self(item.player), None,
+        )
+        return replace(event, historical=historical)
+
+    async def _backfill_location_info_safely(self, items) -> None:
+        try:
+            local_ids = {location.code for location in LOCATIONS}
+            checked = self.checked_locations & local_ids
+            async with self._dispatch_lock:
+                changed = False
+                for item in items:
+                    if getattr(item, "location", None) not in checked:
+                        continue
+                    event = self.dispatch_sent_event(item, historical=True)
+                    if event.direction is DispatchDirection.SELF and any(
+                        existing.receive_index is not None
+                        and existing.item_id == event.item_id
+                        and existing.location_id == event.location_id
+                        for existing in self.dispatch_ledger.events
+                    ):
+                        continue
+                    update = record_event(self.dispatch_ledger, event, notify=False)
+                    changed = changed or update.state is not self.dispatch_ledger
+                    self.dispatch_ledger = update.state
+                if changed:
+                    save_ledger(self.dispatch_path(), self.dispatch_ledger)
+        except Exception:
+            logger.exception("Checked-location dispatch history could not be recorded.")
+
+    async def _record_dispatch_event_safely(self, event: DispatchEvent, *, notify: bool) -> None:
+        try:
+            async with self._dispatch_lock:
+                update = record_event(self.dispatch_ledger, event, notify=notify)
+                self.dispatch_ledger = update.state
+                self.pending_overlay_events += update.notify
+                save_ledger(self.dispatch_path(), self.dispatch_ledger)
+        except Exception:
+            logger.exception("Dispatch packet could not be recorded; standard client output remains active.")
+
+    def record_item_send(self, args: dict) -> None:
+        item = args["item"]
+        receiving = args["receiving"]
+        if self.slot_concerns_self(receiving):
+            return
+        item_name = self._lookup_item_name(item.item)
+        if item.item == ITEM_NAME_TO_ID["Bender Access"] or item_name == "Bender Access":
+            return
+        recipient_name, recipient_game = self._slot_details(receiving)
+        event = sent_event(
+            self.connected_identity or self.current_identity(), item.location,
+            item.item, item_name, receiving, recipient_name, recipient_game,
+            self._lookup_location_name(item.location, item.player), False, None,
+        )
+        asyncio.create_task(self._record_dispatch_event_safely(event, notify=True))
+
+    def on_print_json(self, args: dict) -> None:
+        super().on_print_json(args)
+        if args.get("type") != "ItemSend" or self.connected_identity is None:
+            return
+        item = args.get("item")
+        receiving = args.get("receiving")
+        if item is None or not isinstance(receiving, int):
+            return
+        try:
+            if not self.slot_concerns_self(item.player) and not self.slot_concerns_self(receiving):
+                return
+            self.record_item_send(args)
+        except Exception:
+            logger.exception("Dispatch packet could not be recorded; standard client output remains active.")
 
     def network_items(self) -> list[ReceivedItem]:
         received = [ReceivedItem(-1, "Bender Access")]

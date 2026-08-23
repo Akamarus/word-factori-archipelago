@@ -12,8 +12,26 @@ from unittest.mock import patch
 
 
 class _NameLookup:
+    def __init__(self, names=None):
+        self.names = dict(names or {})
+
     def lookup_in_game(self, item_id):
-        return str(item_id)
+        return self.names.get(item_id, str(item_id))
+
+    def lookup_in_slot(self, location_id, slot):
+        return self.names.get((location_id, slot), str(location_id))
+
+
+def make_network_item(*, item, location, player, flags=0):
+    return types.SimpleNamespace(item=item, location=location, player=player, flags=flags)
+
+
+def item_send_packet(*, source, receiving, location, item=7001, flags=0):
+    return {
+        "type": "ItemSend",
+        "item": make_network_item(item=item, location=location, player=source, flags=flags),
+        "receiving": receiving,
+    }
 
 
 class _CommonContext:
@@ -25,12 +43,19 @@ class _CommonContext:
         self.slot = None
         self.server = object()
         self.items_received = []
-        self.item_names = _NameLookup()
+        self.item_names = _NameLookup({7001: "Contraption"})
+        self.location_names = _NameLookup({(9001, 2): "Remote Factory"})
+        self.slot_info = {
+            1: types.SimpleNamespace(name="Factory Player", game="Word Factori"),
+            2: types.SimpleNamespace(name="Remote Player", game="Other Game"),
+            3: types.SimpleNamespace(name="Third Player", game="Other Game"),
+        }
         self.checked_locations = set()
         self.missing_locations = set()
         self.locations_checked = set()
         self.finished_game = False
         self.sent_messages = []
+        self.print_json_calls = []
         self.exit_event = asyncio.Event()
 
     async def get_username(self):
@@ -47,6 +72,12 @@ class _CommonContext:
         if new:
             await self.send_msgs([{"cmd": "LocationChecks", "locations": tuple(new)}])
         return new
+
+    def slot_concerns_self(self, slot):
+        return slot == self.slot
+
+    def on_print_json(self, args):
+        self.print_json_calls.append(args)
 
     async def shutdown(self):
         return None
@@ -82,7 +113,11 @@ sys.modules.setdefault("NetUtils", net_utils)
 
 from word_factori.client import WordFactoriContext
 from word_factori.bridge import BridgeState
-from word_factori.data import CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, LOCATIONS
+from word_factori.data import (
+    CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, ITEM_NAME_TO_ID, LOCATIONS,
+)
+from word_factori.dispatch import DispatchDirection
+from word_factori.dispatch_store import DispatchLedger
 
 
 class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
@@ -105,6 +140,7 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             "manifest_digest": CAMPAIGN_DIGEST,
         }
         self.ctx.connected_identity = self.ctx.current_identity()
+        self.ctx.dispatch_ledger = DispatchLedger.empty(self.ctx.connected_identity)
         self.ctx.mod_folder.mkdir(parents=True)
         self.ctx.campaign_path.write_text(json.dumps({
             "campaign_id": CAMPAIGN_ID,
@@ -131,6 +167,194 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 }
             }
         }), encoding="utf-8")
+
+    async def test_dispatch_received_items_are_idempotent_across_reconnect(self):
+        first = make_network_item(item=7001, location=9001, player=2, flags=1)
+        self.ctx.items_received = [first]
+        self.ctx.connected_identity = None
+
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        self.assertEqual(1, len(self.ctx.dispatch_ledger.events))
+        self.assertEqual((), self.ctx.pending_overlay_events)
+
+        self.ctx.on_package("ReceivedItems", {"index": 0, "items": [first]})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        self.assertEqual(1, len(self.ctx.dispatch_ledger.events))
+        self.assertEqual((), self.ctx.pending_overlay_events)
+
+        second = make_network_item(item=7001, location=9001, player=2, flags=1)
+        self.ctx.items_received.append(second)
+        self.ctx.on_package("ReceivedItems", {"index": 1, "items": [second]})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        self.assertEqual(2, len(self.ctx.dispatch_ledger.events))
+        self.assertEqual(1, len(self.ctx.pending_overlay_events))
+
+    async def test_item_send_records_only_local_source_or_recipient(self):
+        local_send = item_send_packet(source=1, receiving=2, location=LOCATIONS[0].code)
+        unrelated = item_send_packet(source=3, receiving=2, location=123)
+
+        self.ctx.on_print_json(local_send)
+        self.ctx.on_print_json(unrelated)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        self.assertEqual(2, len(self.ctx.print_json_calls))
+        self.assertEqual(
+            [DispatchDirection.SENT],
+            [event.direction for event in self.ctx.dispatch_ledger.events],
+        )
+
+    async def test_item_send_serializes_ledger_write_with_dispatch_lock(self):
+        lock_states = []
+
+        def observe_lock(path, ledger):
+            lock_states.append(self.ctx._dispatch_lock.locked())
+
+        with patch("word_factori.client.save_ledger", side_effect=observe_lock):
+            self.ctx.on_print_json(item_send_packet(
+                source=1, receiving=2, location=LOCATIONS[0].code,
+            ))
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        self.assertEqual([True], lock_states)
+
+    async def test_item_send_self_item_waits_for_authoritative_receive(self):
+        self.ctx.on_print_json(item_send_packet(
+            source=1, receiving=1, location=LOCATIONS[0].code,
+        ))
+        self.assertEqual((), self.ctx.dispatch_ledger.events)
+
+        self.ctx.items_received = [make_network_item(
+            item=7001, location=LOCATIONS[0].code, player=1, flags=1,
+        )]
+        await self.ctx.reconcile_dispatches()
+
+        self.assertEqual(1, len(self.ctx.dispatch_ledger.events))
+        self.assertEqual(DispatchDirection.SELF, self.ctx.dispatch_ledger.events[0].direction)
+
+    def test_received_item_missing_metadata_uses_numeric_fallbacks(self):
+        def missing(*args):
+            raise KeyError(args)
+
+        self.ctx.slot_info.pop(8, None)
+        self.ctx.item_names.lookup_in_game = missing
+        self.ctx.location_names.lookup_in_slot = missing
+
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=8001, location=9002, player=8),
+        )
+
+        self.assertEqual("Item 8001", event.item_name)
+        self.assertEqual("Player 8", event.other_player)
+        self.assertEqual("Unknown Game", event.other_game)
+        self.assertEqual("Location 9002", event.location_name)
+
+    async def test_connected_scouts_only_checked_word_factori_locations(self):
+        checked = {LOCATIONS[0].code, LOCATIONS[3].code}
+        self.ctx.checked_locations = checked | {999999999}
+        self.ctx.missing_locations = {LOCATIONS[1].code}
+
+        await self.ctx.request_checked_location_info()
+
+        message = next(msg for msg in self.ctx.sent_messages if msg["cmd"] == "LocationScouts")
+        self.assertEqual(checked, set(message["locations"]))
+        self.assertEqual(0, message["create_as_hint"])
+
+    async def test_location_info_backfills_checked_sends_silently(self):
+        checked = LOCATIONS[0].code
+        unchecked = LOCATIONS[1].code
+        self.ctx.checked_locations = {checked}
+        packet = {"locations": [
+            make_network_item(item=7001, location=checked, player=2, flags=1),
+            make_network_item(item=7001, location=unchecked, player=2, flags=1),
+            make_network_item(item=7001, location=999999999, player=2, flags=1),
+        ]}
+
+        self.ctx.on_package("LocationInfo", packet)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        self.assertEqual(1, len(self.ctx.dispatch_ledger.events))
+        event = self.ctx.dispatch_ledger.events[0]
+        self.assertEqual(DispatchDirection.SENT, event.direction)
+        self.assertEqual(checked, event.location_id)
+        self.assertTrue(event.historical)
+        self.assertEqual((), self.ctx.pending_overlay_events)
+
+        self.ctx.on_package("LocationInfo", packet)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        self.assertEqual(1, len(self.ctx.dispatch_ledger.events))
+
+    async def test_connected_recovers_from_corrupt_room_ledger(self):
+        path = self.ctx.dispatch_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{not-json", encoding="utf-8")
+        self.ctx.connected_identity = None
+
+        with self.assertLogs("WordFactoriTestClient", level="WARNING") as messages:
+            self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        self.assertEqual(self.ctx.current_identity(), self.ctx.dispatch_ledger.identity)
+        self.assertTrue(any("invalid dispatch ledger" in message for message in messages.output))
+
+    async def test_connected_clears_transient_notifications_before_room_baseline(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        self.ctx.pending_overlay_events = (event,)
+        self.ctx.room_seed_name = "Seed-B"
+        self.ctx.connected_identity = None
+
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        self.assertEqual((), self.ctx.pending_overlay_events)
+        self.assertEqual(self.ctx.current_identity(), self.ctx.dispatch_ledger.identity)
+
+    async def test_connected_requests_checked_location_history(self):
+        checked = LOCATIONS[2].code
+        self.ctx.checked_locations = {checked}
+        self.ctx.connected_identity = None
+
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        scouts = [message for message in self.ctx.sent_messages if message["cmd"] == "LocationScouts"]
+        self.assertEqual([[checked]], [message["locations"] for message in scouts])
+
+    async def test_bender_access_pseudo_item_is_not_dispatched(self):
+        self.ctx.items_received = [make_network_item(
+            item=ITEM_NAME_TO_ID["Bender Access"], location=LOCATIONS[0].code,
+            player=1,
+        )]
+
+        await self.ctx.reconcile_dispatches()
+
+        self.assertEqual((), self.ctx.dispatch_ledger.events)
+
+    async def test_dispatch_write_failure_does_not_block_unlock_rendering(self):
+        self.ctx.items_received = [make_network_item(
+            item=7001, location=9001, player=2, flags=1,
+        )]
+
+        with patch("word_factori.client.save_ledger", side_effect=OSError("disk full")):
+            with self.assertLogs("WordFactoriTestClient", level="ERROR"):
+                self.ctx.on_package("ReceivedItems", {"index": 0, "items": self.ctx.items_received})
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+
+        self.assertEqual("Contraption", self.ctx.bridge_state.applied[0])
+        self.assertTrue(self.ctx.levels_path.is_file())
 
     async def test_manual_check_is_retained_until_server_acknowledges_it(self):
         location_id = LOCATIONS[0].code
