@@ -191,13 +191,23 @@ def _writer_main(connection: object, mailbox: _LatestMailbox, failed: threading.
             return
 
 
+@dataclass(frozen=True)
+class _ActiveResources:
+    connection: object
+    process: object
+    mailbox: _LatestMailbox
+    writer: threading.Thread
+    writer_failed: threading.Event
+
+
 class OverlaySupervisor:
     """Own one optional renderer child without exposing failures to game logic."""
 
     def __init__(self, *, process_context: object | None = None, target: RendererTarget | None = None) -> None:
         self._context = process_context or multiprocessing.get_context("spawn")
         self._target = _top_level_target(target or _default_renderer_target)
-        self._state_lock = threading.RLock()
+        self._lifecycle_lock = threading.RLock()
+        self._active_lock = threading.Lock()
         self._connection: object | None = None
         self._process: object | None = None
         self._mailbox: _LatestMailbox | None = None
@@ -216,24 +226,31 @@ class OverlaySupervisor:
         copied = _validated_config_primitives(config)
         if copied is None:
             return False
-        with self._state_lock:
-            if self.disabled:
-                return False
-            if self._process is not None:
+        with self._lifecycle_lock:
+            with self._active_lock:
+                if self.disabled:
+                    return False
+                active = self._active_resources_locked()
+                current_config = self._config
+            if active is not None:
                 try:
-                    alive = bool(self._process.is_alive())  # type: ignore[attr-defined]
+                    alive = bool(active.process.is_alive())  # type: ignore[attr-defined]
                 except Exception:
                     alive = False
-                writer_failed = self._writer_failed is not None and self._writer_failed.is_set()
-                if alive and not writer_failed:
-                    return copied == self._config
+                if alive and not active.writer_failed.is_set():
+                    return copied == current_config
+                with self._active_lock:
+                    self._config = copied
+                return self._restart_active(copied)
+            with self._active_lock:
                 self._config = copied
-                self.health_check()
-                return self._process is not None and not self.disabled
-            self._config = copied
-            return self._launch()
+            created = self._create_resources(copied)
+            if created is None:
+                return False
+            self._attach_active(created)
+            return True
 
-    def _launch(self) -> bool:
+    def _create_resources(self, config: dict[str, object]) -> _ActiveResources | None:
         parent = None
         child = None
         process = None
@@ -246,7 +263,7 @@ class OverlaySupervisor:
             parent, child = self._context.Pipe(duplex=True)  # type: ignore[attr-defined]
             process = self._context.Process(  # type: ignore[attr-defined]
                 target=self._target,
-                args=(child, dict(self._config or {})),
+                args=(child, dict(config)),
             )
             process.daemon = True
             process.start()
@@ -261,12 +278,7 @@ class OverlaySupervisor:
                 daemon=True,
             )
             writer.start()
-            self._connection = parent
-            self._process = process
-            self._mailbox = mailbox
-            self._writer = writer
-            self._writer_failed = writer_failed
-            return True
+            return _ActiveResources(parent, process, mailbox, writer, writer_failed)
         except Exception:
             if mailbox is not None:
                 mailbox.close()
@@ -294,7 +306,56 @@ class OverlaySupervisor:
                     process.join(timeout=0.1)
                 except Exception:
                     pass
+            return None
+
+    def _active_resources_locked(self) -> _ActiveResources | None:
+        if self._process is None:
+            return None
+        if (
+            self._connection is None
+            or self._mailbox is None
+            or self._writer is None
+            or self._writer_failed is None
+        ):
+            return None
+        return _ActiveResources(
+            self._connection, self._process, self._mailbox, self._writer, self._writer_failed,
+        )
+
+    def _attach_active(self, resources: _ActiveResources) -> None:
+        with self._active_lock:
+            self._connection = resources.connection
+            self._process = resources.process
+            self._mailbox = resources.mailbox
+            self._writer = resources.writer
+            self._writer_failed = resources.writer_failed
+
+    def _detach_active(self) -> _ActiveResources | None:
+        with self._active_lock:
+            resources = self._active_resources_locked()
+            self._connection = None
+            self._process = None
+            self._mailbox = None
+            self._writer = None
+            self._writer_failed = None
+            return resources
+
+    def _restart_active(self, config: dict[str, object]) -> bool:
+        resources = self._detach_active()
+        if resources is not None:
+            self._cleanup_resources(resources, timeout=0.1, request_shutdown=False)
+        with self._active_lock:
+            if self._restarts >= 1:
+                self.disabled = True
+                return False
+            self._restarts += 1
+        created = self._create_resources(config)
+        if created is None:
+            with self._active_lock:
+                self.disabled = True
             return False
+        self._attach_active(created)
+        return True
 
     def publish(self, value: OverlaySnapshot) -> bool:
         """Publish one encoded snapshot; renderer failures remain cosmetic."""
@@ -302,62 +363,59 @@ class OverlaySupervisor:
             encoded = encode_parent_message(snapshot_message(value))
         except (TypeError, ValueError):
             return False
-        with self._state_lock:
+        with self._active_lock:
             mailbox = self._mailbox
+            writer_failed = self._writer_failed
             if self.disabled or mailbox is None:
                 return False
-            if self._writer_failed is not None and self._writer_failed.is_set():
-                return False
+        if writer_failed is not None and writer_failed.is_set():
+            return False
+        try:
             return mailbox.publish(encoded)
+        except Exception:
+            return False
 
     def poll_actions(self) -> tuple[OverlayAction, ...]:
         """Drain currently available child actions without ever blocking."""
-        with self._state_lock:
+        with self._active_lock:
             connection = self._connection
             if self.disabled or connection is None:
                 return ()
-            actions: list[OverlayAction] = []
-            for _ in range(_MAX_ACTIONS_PER_POLL):
-                try:
-                    if not connection.poll(0.0):  # type: ignore[attr-defined]
-                        break
-                    encoded = connection.recv()  # type: ignore[attr-defined]
-                except Exception:
+        actions: list[OverlayAction] = []
+        for _ in range(_MAX_ACTIONS_PER_POLL):
+            try:
+                if not connection.poll(0.0):  # type: ignore[attr-defined]
                     break
-                try:
-                    actions.append(decode_child_action(encoded))
-                except (TypeError, ValueError):
-                    continue
-            return tuple(actions)
+                encoded = connection.recv()  # type: ignore[attr-defined]
+            except Exception:
+                break
+            try:
+                actions.append(decode_child_action(encoded))
+            except (TypeError, ValueError):
+                continue
+        return tuple(actions)
 
     def health_check(self) -> None:
         """Restart one crashed renderer, then disable it for this session."""
-        with self._state_lock:
-            if self.disabled or self._process is None:
+        with self._lifecycle_lock:
+            with self._active_lock:
+                if self.disabled:
+                    return
+                active = self._active_resources_locked()
+                config = dict(self._config or {})
+            if active is None:
                 return
             try:
-                alive = bool(self._process.is_alive())  # type: ignore[attr-defined]
+                alive = bool(active.process.is_alive())  # type: ignore[attr-defined]
             except Exception:
                 alive = False
-            writer_failed = self._writer_failed is not None and self._writer_failed.is_set()
-            if alive and not writer_failed:
+            if alive and not active.writer_failed.is_set():
                 return
-            self._release_current(timeout=0.1, request_shutdown=False)
-            if self._restarts >= 1:
-                self.disabled = True
-                return
-            self._restarts += 1
-            if not self._launch():
-                self.disabled = True
+            self._restart_active(config)
 
-    def _release_current(self, *, timeout: float, request_shutdown: bool) -> None:
-        connection, process = self._connection, self._process
-        mailbox, writer = self._mailbox, self._writer
-        self._connection = None
-        self._process = None
-        self._mailbox = None
-        self._writer = None
-        self._writer_failed = None
+    def _cleanup_resources(self, resources: _ActiveResources, *, timeout: float, request_shutdown: bool) -> None:
+        connection, process = resources.connection, resources.process
+        mailbox, writer = resources.mailbox, resources.writer
         if mailbox is not None:
             final = encode_parent_message(shutdown_message()) if request_shutdown else None
             mailbox.close(final)
@@ -411,5 +469,7 @@ class OverlaySupervisor:
 
     def stop(self, timeout: float = 2.0) -> None:
         """Request shutdown, then bound cleanup; safe to call repeatedly."""
-        with self._state_lock:
-            self._release_current(timeout=timeout, request_shutdown=True)
+        with self._lifecycle_lock:
+            resources = self._detach_active()
+            if resources is not None:
+                self._cleanup_resources(resources, timeout=timeout, request_shutdown=True)

@@ -336,6 +336,97 @@ class OverlaySupervisorTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(result, [False])
 
+    def test_publish_returns_while_stop_is_blocked_in_process_cleanup(self):
+        cleanup_started = threading.Event()
+        allow_cleanup = threading.Event()
+
+        class BlockingCleanupProcess(FakeProcess):
+            def join(self, timeout=None):
+                if threading.current_thread().name == "blocking-stop" and not cleanup_started.is_set():
+                    cleanup_started.set()
+                    allow_cleanup.wait()
+                super().join(timeout)
+
+        class BlockingCleanupContext(FakeProcessContext):
+            def Process(self, *, target, args):
+                process = BlockingCleanupProcess(self, target, args, alive=True)
+                self.processes.append(process)
+                return process
+
+        context = BlockingCleanupContext()
+        supervisor = self.make_supervisor(context)
+        supervisor.start(make_config())
+        stopper = threading.Thread(
+            target=lambda: supervisor.stop(timeout=0.01), name="blocking-stop", daemon=True,
+        )
+        stopper.start()
+        self.assertTrue(cleanup_started.wait(1.0))
+        publish_result = []
+        publish_done = threading.Event()
+
+        def publish_during_cleanup():
+            publish_result.append(supervisor.publish(snapshot(OverlayState.closed())))
+            publish_done.set()
+
+        publisher = threading.Thread(target=publish_during_cleanup, daemon=True)
+        publisher.start()
+        try:
+            self.assertTrue(publish_done.wait(1.0), "publish waited for renderer stop cleanup")
+            self.assertEqual(publish_result, [False])
+        finally:
+            allow_cleanup.set()
+            publisher.join(1.0)
+            stopper.join(1.0)
+
+    def test_publish_returns_during_health_cleanup_then_later_stop_removes_restart(self):
+        cleanup_started = threading.Event()
+        allow_cleanup = threading.Event()
+
+        class BlockingHealthProcess(FakeProcess):
+            def join(self, timeout=None):
+                if threading.current_thread().name == "blocking-health" and not cleanup_started.is_set():
+                    cleanup_started.set()
+                    allow_cleanup.wait()
+                super().join(timeout)
+
+        class BlockingHealthContext(FakeProcessContext):
+            def Process(self, *, target, args):
+                process = BlockingHealthProcess(self, target, args, alive=False)
+                self.processes.append(process)
+                return process
+
+        context = BlockingHealthContext(process_alive=False)
+        supervisor = self.make_supervisor(context)
+        supervisor.start(make_config())
+        health = threading.Thread(target=supervisor.health_check, name="blocking-health", daemon=True)
+        health.start()
+        self.assertTrue(cleanup_started.wait(1.0))
+        publish_result = []
+        publish_done = threading.Event()
+        publisher = threading.Thread(
+            target=lambda: (publish_result.append(supervisor.publish(snapshot(OverlayState.closed()))),
+                            publish_done.set()),
+            daemon=True,
+        )
+        publisher.start()
+        stop_done = threading.Event()
+        stopper = threading.Thread(
+            target=lambda: (supervisor.stop(timeout=0.01), stop_done.set()), daemon=True,
+        )
+        stopper.start()
+        try:
+            self.assertTrue(publish_done.wait(1.0), "publish waited for renderer health cleanup")
+            self.assertEqual(publish_result, [False])
+        finally:
+            allow_cleanup.set()
+            publisher.join(1.0)
+            health.join(1.0)
+            stopper.join(1.0)
+
+        self.assertTrue(stop_done.is_set())
+        self.assertEqual(context.starts, 2)
+        self.assertFalse(supervisor.publish(snapshot(OverlayState.closed())))
+
     def test_poll_actions_drains_valid_messages_and_ignores_malformed_message(self):
         context = FakeProcessContext()
         supervisor = self.make_supervisor(context)
