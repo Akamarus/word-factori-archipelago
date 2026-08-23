@@ -11,6 +11,7 @@ from word_factori.overlay_renderer import (
     HTTRANSPARENT,
     ChildActionWriter,
     CtypesOverlayHookAPI,
+    ExpiryTimerRegistry,
     KeyPressState,
     MOD_NOREPEAT,
     NativeHookBootstrap,
@@ -158,6 +159,32 @@ class RendererBoundaryTests(unittest.TestCase):
             OverlayGeometry.encode_action("open", generation=None)
         decoded = decode_child_action(OverlayGeometry.encode_action("open", generation=9))
         self.assertEqual(("open", 9), (decoded.kind, decoded.generation))
+
+    def test_expiry_timer_cannot_masquerade_as_new_snapshot_generation(self):
+        class Timer:
+            def __init__(self):
+                self.cancelled = False
+
+            def cancel(self):
+                self.cancelled = True
+
+        emitted = []
+        registry = ExpiryTimerRegistry(
+            lambda key, generation: emitted.append((key, generation)),
+        )
+        old_timer = Timer()
+        registry.set_generation(7)
+        self.assertTrue(registry.track("old", old_timer, generation=7))
+
+        registry.set_generation(8)
+        self.assertTrue(old_timer.cancelled)
+        self.assertFalse(registry.expire("old", generation=7))
+        self.assertEqual([], emitted)
+
+        current_timer = Timer()
+        self.assertTrue(registry.track("current", current_timer, generation=8))
+        self.assertTrue(registry.expire("current", generation=8))
+        self.assertEqual([("current", 8)], emitted)
 
     def test_production_visibility_adapter_uses_verified_no_activate_show_and_hide(self):
         user32 = FakeVisibilityUser32()

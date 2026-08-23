@@ -802,6 +802,7 @@ class WordFactoriContext(CommonContext):
     def publish_overlay(
         self, expected_identity: str | None = None,
         expected_connection_generation: int | None = None,
+        expected_presentation_generation: int | None = None,
     ) -> bool:
         """Publish cosmetic presentation without exposing renderer failure to bridge work."""
         if not self.overlay_preferences.enabled:
@@ -809,6 +810,11 @@ class WordFactoriContext(CommonContext):
         if (
             expected_connection_generation is not None
             and self._connection_generation != expected_connection_generation
+        ):
+            return False
+        if (
+            expected_presentation_generation is not None
+            and self._presentation_generation != expected_presentation_generation
         ):
             return False
         if expected_identity is not None and (
@@ -843,11 +849,16 @@ class WordFactoriContext(CommonContext):
     async def _apply_overlay_action(
         self, action: OverlayAction, *, expected_identity: str | None = None,
         expected_connection_generation: int | None = None,
+        expected_presentation_generation: int | None = None,
     ) -> bool:
         if expected_connection_generation is not None and (
             not self._connection_epoch_matches(
                 expected_identity, expected_connection_generation,
             )
+        ):
+            return False
+        if expected_presentation_generation is not None and (
+            self._presentation_generation != expected_presentation_generation
         ):
             return False
         if action.kind == "open" and self.connected_identity is not None:
@@ -859,6 +870,10 @@ class WordFactoriContext(CommonContext):
                     connection_generation = expected_connection_generation
                 if not self._dispatch_room_matches(identity, connection_generation):
                     return False
+                if expected_presentation_generation is not None and (
+                    self._presentation_generation != expected_presentation_generation
+                ):
+                    return False
                 try:
                     previous = self.overlay_state
                     updated = apply_action(previous, action)
@@ -868,6 +883,10 @@ class WordFactoriContext(CommonContext):
                 candidate_ledger = self.dispatch_ledger
                 if not previous.is_open and updated.is_open and candidate_ledger.unread_keys:
                     candidate_ledger = mark_all_read(candidate_ledger)
+                    if expected_presentation_generation is not None and (
+                        self._presentation_generation != expected_presentation_generation
+                    ):
+                        return False
                     try:
                         save_ledger(self.dispatch_path(identity), candidate_ledger)
                     except Exception as error:
@@ -878,10 +897,16 @@ class WordFactoriContext(CommonContext):
                         return False
                     if not self._connection_epoch_matches(identity, connection_generation):
                         return False
+                    if expected_presentation_generation is not None and (
+                        self._presentation_generation != expected_presentation_generation
+                    ):
+                        return False
                     self.dispatch_ledger = candidate_ledger
                     self.last_overlay_persistence_error = None
                 self.overlay_state = updated
-                self.publish_overlay(identity, connection_generation)
+                self.publish_overlay(
+                    identity, connection_generation, expected_presentation_generation,
+                )
                 return True
         try:
             updated = apply_action(self.overlay_state, action)
@@ -900,6 +925,7 @@ class WordFactoriContext(CommonContext):
         await self._apply_overlay_action(
             action, expected_identity=identity,
             expected_connection_generation=connection_generation,
+            expected_presentation_generation=action.generation,
         )
 
     async def _apply_local_overlay_action(self, action: OverlayAction) -> bool:
@@ -909,6 +935,7 @@ class WordFactoriContext(CommonContext):
         return await self._apply_overlay_action(
             action, expected_identity=identity,
             expected_connection_generation=self._connection_generation,
+            expected_presentation_generation=self._presentation_generation,
         )
 
     async def process_overlay_actions_once(self) -> None:

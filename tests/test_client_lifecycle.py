@@ -1029,6 +1029,83 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(self.ctx._presentation_generation, buffered_generation)
         self.assertFalse(self.ctx.overlay_state.is_open)
 
+    async def test_explicit_restart_invalidates_child_open_already_waiting_on_lock(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        stored = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.dispatch_ledger = stored
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1, accepted_notification_keys=frozenset((event.key,)),
+        )
+        save_ledger(self.ctx.dispatch_path(), stored)
+        controlled = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = controlled
+        self.overlay.actions = [OverlayAction(
+            "open", generation=self.ctx._presentation_generation,
+        )]
+        processing = asyncio.create_task(self.ctx.process_overlay_actions_once())
+        entered = asyncio.create_task(controlled.entered.wait())
+        done, _ = await asyncio.wait((processing, entered), return_when=asyncio.FIRST_COMPLETED)
+        if processing in done:
+            await processing
+        self.assertTrue(entered.done())
+
+        await self.ctx.overlay_control("restart")
+        publications_after_restart = len(self.overlay.published)
+        with patch("word_factori.client.save_ledger", wraps=save_ledger) as persisted:
+            controlled.proceed.set()
+            await processing
+
+        self.assertEqual(0, persisted.call_count)
+        self.assertEqual(publications_after_restart, len(self.overlay.published))
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+        self.assertEqual(frozenset((event.key,)), load_ledger(
+            self.ctx.dispatch_path(), self.ctx.connected_identity,
+        ).unread_keys)
+
+    async def test_health_restart_invalidates_child_open_already_waiting_on_lock(self):
+        event = self.ctx.dispatch_received_event(
+            0, make_network_item(item=7001, location=9001, player=2),
+        )
+        stored = DispatchLedger(
+            self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
+        )
+        self.ctx.dispatch_ledger = stored
+        self.ctx.overlay_state = OverlayState(
+            unread_count=1, accepted_notification_keys=frozenset((event.key,)),
+        )
+        save_ledger(self.ctx.dispatch_path(), stored)
+        controlled = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = controlled
+        self.overlay.actions = [OverlayAction(
+            "open", generation=self.ctx._presentation_generation,
+        )]
+        processing = asyncio.create_task(self.ctx.process_overlay_actions_once())
+        entered = asyncio.create_task(controlled.entered.wait())
+        done, _ = await asyncio.wait((processing, entered), return_when=asyncio.FIRST_COMPLETED)
+        if processing in done:
+            await processing
+        self.assertTrue(entered.done())
+
+        self.overlay.session_generation += 1
+        self.ctx.check_overlay_health()
+        publications_after_restart = len(self.overlay.published)
+        with patch("word_factori.client.save_ledger", wraps=save_ledger) as persisted:
+            controlled.proceed.set()
+            await processing
+
+        self.assertEqual(0, persisted.call_count)
+        self.assertEqual(publications_after_restart, len(self.overlay.published))
+        self.assertFalse(self.ctx.overlay_state.is_open)
+        self.assertEqual(frozenset((event.key,)), self.ctx.dispatch_ledger.unread_keys)
+        self.assertEqual(frozenset((event.key,)), load_ledger(
+            self.ctx.dispatch_path(), self.ctx.connected_identity,
+        ).unread_keys)
+
     async def test_disconnect_preserves_room_history_and_publishes_status(self):
         event = self.ctx.dispatch_received_event(
             0, make_network_item(item=7001, location=9001, player=2),

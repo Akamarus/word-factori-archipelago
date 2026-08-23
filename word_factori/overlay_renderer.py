@@ -388,6 +388,49 @@ class ChildActionWriter:
             pass
 
 
+class ExpiryTimerRegistry:
+    """Own generation-bound toast timers without importing the GUI runtime."""
+
+    def __init__(self, emit: Callable[[str, int], object]) -> None:
+        self._emit = emit
+        self._generation: int | None = None
+        self._events: dict[str, object] = {}
+
+    def set_generation(self, generation: int) -> None:
+        if type(generation) is not int or generation < 0:
+            raise ValueError("expiry generation is invalid")
+        if generation != self._generation:
+            self.cancel_all()
+            self._generation = generation
+
+    def contains(self, key: str) -> bool:
+        return key in self._events
+
+    def track(self, key: str, event: object, *, generation: int) -> bool:
+        if (
+            not isinstance(key, str) or not key
+            or generation != self._generation
+        ):
+            return False
+        self._events[key] = event
+        return True
+
+    def expire(self, key: str, *, generation: int) -> bool:
+        if generation != self._generation or key not in self._events:
+            return False
+        self._events.pop(key, None)
+        self._emit(key, generation)
+        return True
+
+    def cancel_all(self) -> None:
+        for event in tuple(self._events.values()):
+            try:
+                event.cancel()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        self._events.clear()
+
+
 @dataclass(frozen=True)
 class KeyPressState:
     pressed_since_last_poll: bool
@@ -1080,7 +1123,7 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 action=lambda kind: self.send_action(kind),
             )
             self.last_focus: bool | None = None
-            self.expiry_events: dict[str, object] = {}
+            self.expiry_timers = ExpiryTimerRegistry(self.enqueue_expiry)
             self.stopping = False
             self.display_scale = 1.0
             self.game_shown = False
@@ -1110,6 +1153,17 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 self.stopping = True
                 self.stop()
 
+        def enqueue_expiry(self, key: str, generation: int) -> None:
+            try:
+                accepted = self.action_writer.enqueue(
+                    "expire", key, generation=generation,
+                )
+            except Exception:
+                accepted = False
+            if not accepted:
+                self.stopping = True
+                self.stop()
+
         def poll_parent(self, _: float) -> None:
             if self.action_writer.failed:
                 self.stopping = True
@@ -1131,7 +1185,9 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                             validated[key] = value
                     continue
                 self.snapshot = dict(message.payload)
-                self.snapshot_generation = int(message.payload["generation"])
+                generation = int(message.payload["generation"])
+                self.expiry_timers.set_generation(generation)
+                self.snapshot_generation = generation
                 self.rebuild()
 
         def rebuild(self) -> None:
@@ -1172,23 +1228,25 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                     self.place(toast, rectangle)
                     self.root_layout.add_widget(toast)
                     key = row.get("key")
-                    if self.game_shown and isinstance(key, str) and key not in self.expiry_events:
+                    if (
+                        self.game_shown and isinstance(key, str)
+                        and not self.expiry_timers.contains(key)
+                        and self.snapshot_generation is not None
+                    ):
                         delay = float(self.snapshot.get("notification_duration", validated["notification_duration"]))
-                        self.expiry_events[key] = Clock.schedule_once(
-                            lambda _, event_key=key: self.expire(event_key), delay,
+                        generation = self.snapshot_generation
+                        event = Clock.schedule_once(
+                            lambda _, event_key=key, timer_generation=generation: (
+                                self.expiry_timers.expire(
+                                    event_key, generation=timer_generation,
+                                )
+                            ),
+                            delay,
                         )
-
-        def expire(self, key: str) -> None:
-            self.expiry_events.pop(key, None)
-            self.send_action("expire", key)
+                        self.expiry_timers.track(key, event, generation=generation)
 
         def cancel_expiry_events(self) -> None:
-            for event in tuple(self.expiry_events.values()):
-                try:
-                    event.cancel()
-                except Exception:
-                    pass
-            self.expiry_events.clear()
+            self.expiry_timers.cancel_all()
 
         def place(self, widget: object, rectangle: Rect) -> None:
             widget.size_hint = (None, None)  # type: ignore[attr-defined]
