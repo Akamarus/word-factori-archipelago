@@ -48,13 +48,14 @@ from .client_messages import (
     make_client_message,
     normalize_print_json,
 )
-from .data import GAME, ITEM_NAME_TO_ID, LOCATIONS
+from .campaign import CampaignManifest, campaign_digest, campaign_for_level_set
+from .data import DEFAULT_LEVEL_SET, GAME, ITEM_NAME_TO_ID, LOCATIONS, LocationData, locations_for_level_set
 from .dispatch import DispatchDirection, DispatchEvent, received_event, sent_event
 from .dispatch_store import (
     DispatchLedger, ledger_path, load_ledger, mark_all_read, reconcile_received, record_event,
     save_ledger,
 )
-from .mod import render_levels, write_levels
+from .mod import render_levels, write_campaign_identity, write_levels
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
 from .overlay_preferences import load_preferences
 from .overlay_protocol import (
@@ -243,6 +244,7 @@ class WordFactoriContext(CommonContext):
         elif cmd == "Connected":
             connection_generation = self._advance_connection_generation()
             self.slot_data = dict(args.get("slot_data") or {})
+            self.prepare_selected_campaign()
             self.connected_identity = self.current_identity()
             try:
                 baseline_ledger = load_ledger(
@@ -572,7 +574,7 @@ class WordFactoriContext(CommonContext):
             frozenset(self.checked_locations)
             if checked_locations is None else frozenset(checked_locations)
         )
-        local_ids = {location.code for location in LOCATIONS}
+        local_ids = {location.code for location in self.active_locations()}
         locations = sorted(checked_locations & local_ids)
         if locations and self._dispatch_room_matches(identity, connection_generation):
             await self.send_msgs([{
@@ -602,7 +604,7 @@ class WordFactoriContext(CommonContext):
             if connection_generation is None else connection_generation
         )
         try:
-            local_ids = {location.code for location in LOCATIONS}
+            local_ids = {location.code for location in self.active_locations()}
             checked = checked_locations & local_ids
             async with self._dispatch_lock:
                 if not self._dispatch_room_matches(identity, connection_generation):
@@ -749,7 +751,9 @@ class WordFactoriContext(CommonContext):
         view = inventory_view(ReceivedItem(index, name) for index, name in self.bridge_state.applied.items())
         signature = tuple(sorted(self.bridge_state.applied.values()))
         if signature != self.last_render_signature:
-            levels = render_levels(view.owned_machines, view.world_access)
+            levels = render_levels(
+                view.owned_machines, view.world_access, locations=self.active_locations(),
+            )
             write_levels(self.levels_path, levels)
             self.last_render_signature = signature
             logger.info("Word Factori unlocks updated. Reload the AP mod or reselect its save slot in game.")
@@ -771,6 +775,46 @@ class WordFactoriContext(CommonContext):
         except (OSError, ValueError, TypeError):
             return {}
         return payload if isinstance(payload, dict) else {}
+
+    def selected_campaign(self) -> CampaignManifest | None:
+        level_set = self.slot_data.get("level_set", DEFAULT_LEVEL_SET)
+        try:
+            manifest = campaign_for_level_set(level_set)
+        except (TypeError, ValueError):
+            return None
+        if (
+            self.slot_data.get("campaign_id") != manifest.campaign_id
+            or self.slot_data.get("manifest_version") != manifest.version
+            or self.slot_data.get("manifest_digest") != campaign_digest(manifest)
+            or self.slot_data.get("level_count", len(manifest.levels)) != len(manifest.levels)
+        ):
+            return None
+        return manifest
+
+    def active_locations(self) -> tuple[LocationData, ...]:
+        manifest = self.selected_campaign()
+        if manifest is None:
+            return ()
+        return locations_for_level_set(str(self.slot_data.get("level_set", DEFAULT_LEVEL_SET)))
+
+    def prepare_selected_campaign(self) -> bool:
+        """Install only a bundled, digest-matched curated level set for this slot."""
+        manifest = self.selected_campaign()
+        if manifest is None:
+            return False
+        locations = self.active_locations()
+        try:
+            view = inventory_view(self.network_items())
+            levels = render_levels(
+                view.owned_machines, view.world_access, locations=locations,
+            )
+            write_levels(self.levels_path, levels)
+            write_campaign_identity(self.campaign_path, manifest)
+        except (OSError, TypeError, ValueError) as error:
+            self._bridge_warning(f"Curated campaign installation failed: {error}")
+            return False
+        self.last_render_signature = None
+        return True
 
     def compatible_campaign(self) -> bool:
         return campaign_compatible(self.slot_data, self.installed_campaign())
@@ -816,14 +860,15 @@ class WordFactoriContext(CommonContext):
             return
         if self.ensure_game_slot_binding() is None:
             return
-        valid = {index for index in indices if 0 <= index < len(LOCATIONS)}
+        locations = self.active_locations()
+        valid = {index for index in indices if 0 <= index < len(locations)}
         server_indices = {
-            location.index for location in LOCATIONS if location.code in self.checked_locations
+            location.index for location in locations if location.code in self.checked_locations
         }
         result = reconcile(self.bridge_state, [], valid, server_indices)
         if result.new_checks:
             location_ids = {
-                LOCATIONS[index].code for index in result.new_checks
+                locations[index].code for index in result.new_checks
             } - self.bridge_state.pending_checks
             if location_ids:
                 self.bridge_state = queue_checks(self.bridge_state, location_ids)
@@ -845,13 +890,14 @@ class WordFactoriContext(CommonContext):
             await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
 
     def resolve_location(self, identifier: str) -> int:
+        locations = self.active_locations()
         value = identifier.strip()
         if value.isdigit():
             index = int(value) - 1
-            if 0 <= index < len(LOCATIONS):
+            if 0 <= index < len(locations):
                 return index
         folded = value.casefold()
-        matches = [location.index for location in LOCATIONS if folded in {location.target.casefold(), location.name.casefold()}]
+        matches = [location.index for location in locations if folded in {location.target.casefold(), location.name.casefold()}]
         if len(matches) == 1:
             return matches[0]
         raise ValueError("Use a unique 1-based level number, target word, or full location name.")

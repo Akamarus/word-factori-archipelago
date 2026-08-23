@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .campaign import campaign_digest, load_campaign
+from .campaign import CampaignManifest, campaign_digest, campaign_for_level_set
 
 GAME = "Word Factori"
 BASE_ID = 975_300_000
@@ -26,12 +26,13 @@ class LocationData:
         return BASE_ID + 1000 + self.index
 
 
-_CAMPAIGN = load_campaign()
+DEFAULT_LEVEL_SET = "discovery_labs"
+_CAMPAIGN = campaign_for_level_set(DEFAULT_LEVEL_SET)
 CAMPAIGN_ID = _CAMPAIGN.campaign_id
 CAMPAIGN_VERSION = _CAMPAIGN.version
 CAMPAIGN_DIGEST = campaign_digest(_CAMPAIGN)
-LOCATIONS = tuple(
-    LocationData(
+def locations_for_manifest(manifest: CampaignManifest) -> tuple[LocationData, ...]:
+    return tuple(LocationData(
         stable_key=record.stable_key,
         index=record.index,
         name=record.name,
@@ -43,8 +44,15 @@ LOCATIONS = tuple(
         requirement_options=record.requirement_options,
         module_limits=record.module_limits,
     )
-    for record in _CAMPAIGN.levels
-)
+        for record in manifest.levels
+    )
+
+
+def locations_for_level_set(level_set: str) -> tuple[LocationData, ...]:
+    return locations_for_manifest(campaign_for_level_set(level_set))
+
+
+LOCATIONS = locations_for_manifest(_CAMPAIGN)
 LOCATION_NAME_TO_ID = {location.name: location.code for location in LOCATIONS}
 
 MACHINE_ITEMS = (

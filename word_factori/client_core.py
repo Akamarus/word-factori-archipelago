@@ -53,7 +53,7 @@ def campaign_compatible(
         slot_data.get("campaign_id") == installed.get("campaign_id")
         and slot_data.get("manifest_version") == installed.get("manifest_version")
         and slot_data.get("manifest_digest") == installed.get("manifest_digest")
-        and installed.get("level_count") == len(LOCATIONS)
+        and installed.get("level_count") == slot_data.get("level_count", len(LOCATIONS))
     )
 
 

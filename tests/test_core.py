@@ -7,6 +7,8 @@ from word_factori.bridge import BridgeState, ReceivedItem, bind_game_slot, load_
 from word_factori.client_core import campaign_compatible, game_font_path, goal_reached, inventory_view, mod_is_selected, parse_connection_url, resolve_game_slot_binding, state_identity
 from word_factori.data import CAMPAIGN_DIGEST, ITEM_POOL, LOCATIONS, MACHINE_ITEMS
 from word_factori.mod import render_levels, write_campaign_identity
+from word_factori.campaign import campaign_for_level_set
+from word_factori.data import locations_for_level_set
 from word_factori.requirements import WORD_REQUIREMENT_OPTIONS, access_rule_for
 from word_factori.save import ActiveSlot, parse_active_slot, parse_save
 
@@ -55,6 +57,13 @@ class ModTests(unittest.TestCase):
         self.assertEqual("C", levels[30]["text"])
         self.assertEqual(0, levels[32]["module_counts"]["IFactory"])
 
+    def test_core_custom_level_set_renders_only_its_stable_sequential_levels(self):
+        locations = locations_for_level_set("core_campaign")
+        levels = render_levels({"Bender Access"}, world_access=0, locations=locations)
+        self.assertEqual(30, len(levels))
+        self.assertEqual("I", levels[0]["text"])
+        self.assertEqual("PITCHFORK", levels[-1]["text"])
+
     def test_missing_machine_is_zero_and_received_machine_is_unlimited(self):
         locked = render_levels({"Bender Access"}, 5)
         unlocked = render_levels({"Bender Access", "Rotation Access"}, 5)
@@ -79,9 +88,17 @@ class ModTests(unittest.TestCase):
             write_campaign_identity(path)
             payload = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual("word-factori-hybrid", payload["campaign_id"])
-        self.assertEqual("1.1.0", payload["manifest_version"])
+        self.assertEqual("1.2.0", payload["manifest_version"])
         self.assertEqual(CAMPAIGN_DIGEST, payload["manifest_digest"])
         self.assertEqual(40, payload["level_count"])
+
+    def test_campaign_identity_can_be_written_for_selected_curated_set(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "archipelago_campaign.json"
+            write_campaign_identity(path, campaign_for_level_set("core_campaign"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual("word-factori-core", payload["campaign_id"])
+        self.assertEqual(30, payload["level_count"])
 
 
 class SaveTests(unittest.TestCase):

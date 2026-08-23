@@ -202,8 +202,10 @@ sys.modules.setdefault("NetUtils", net_utils)
 from word_factori.client import WordFactoriCommandProcessor, WordFactoriContext
 from word_factori.bridge import BridgeState
 from word_factori.client_messages import ClientMessageKind
+from word_factori.campaign import campaign_digest, campaign_for_level_set
 from word_factori.data import (
     CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, ITEM_NAME_TO_ID, LOCATIONS,
+    locations_for_level_set,
 )
 from word_factori.dispatch import DispatchDirection
 from word_factori.dispatch_store import DispatchLedger, load_ledger, save_ledger
@@ -219,6 +221,39 @@ from word_factori.overlay_supervisor import OverlayConfig
 
 
 class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_selected_core_level_set_is_validated_and_installed_before_play(self):
+        manifest = campaign_for_level_set("core_campaign")
+        locations = locations_for_level_set("core_campaign")
+        self.ctx.slot_data = {
+            **self.ctx.slot_data,
+            "level_set": "core_campaign",
+            "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version,
+            "manifest_digest": campaign_digest(manifest),
+            "level_count": len(locations),
+        }
+
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        identity = json.loads(self.ctx.campaign_path.read_text(encoding="utf-8"))
+        levels = json.loads(self.ctx.levels_path.read_text(encoding="utf-8"))
+        self.assertEqual("word-factori-core", identity["campaign_id"])
+        self.assertEqual(30, identity["level_count"])
+        self.assertEqual(30, len(levels))
+        self.assertTrue(self.ctx.compatible_campaign())
+
+    async def test_tampered_curated_level_set_identity_is_never_written(self):
+        self.ctx.slot_data = {
+            **self.ctx.slot_data,
+            "level_set": "core_campaign",
+            "manifest_digest": "0" * 64,
+            "level_count": 30,
+        }
+        original = self.ctx.campaign_path.read_text(encoding="utf-8")
+
+        self.assertFalse(self.ctx.prepare_selected_campaign())
+        self.assertEqual(original, self.ctx.campaign_path.read_text(encoding="utf-8"))
+        self.assertFalse(self.ctx.levels_path.exists())
+
     async def asyncSetUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

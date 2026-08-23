@@ -5,16 +5,19 @@ import os
 import tempfile
 from pathlib import Path
 
-from .data import CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, LOCATIONS
+from .campaign import CampaignManifest, campaign_digest
+from .data import CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, LOCATIONS, LocationData
 
 MODULES = {
     "Bender Access": ("Bend",), "Rotation Access": ("Rotate_cw", "Rotate_ccw"),
     "Reflection Access": ("Reflect_hor", "Reflect_vert"), "Merger2 Access": ("Merger2",),
     "Merger3 Access": ("Merger3",), "Merger4 Access": ("Merger4",),
 }
-def render_levels(owned: set[str], world_access: int) -> list[dict]:
+def render_levels(
+    owned: set[str], world_access: int, *, locations: tuple[LocationData, ...] = LOCATIONS,
+) -> list[dict]:
     levels = []
-    for location in LOCATIONS:
+    for location in locations:
         limits = dict(location.module_limits)
         for item, modules in MODULES.items():
             if item not in owned:
@@ -31,12 +34,16 @@ def write_levels(path: Path, levels: list[dict]) -> None:
     _write_json(path, levels)
 
 
-def write_campaign_identity(path: Path) -> None:
+def write_campaign_identity(path: Path, manifest: CampaignManifest | None = None) -> None:
+    campaign_id = CAMPAIGN_ID if manifest is None else manifest.campaign_id
+    version = CAMPAIGN_VERSION if manifest is None else manifest.version
+    digest = CAMPAIGN_DIGEST if manifest is None else campaign_digest(manifest)
+    level_count = len(LOCATIONS) if manifest is None else len(manifest.levels)
     _write_json(path, {
-        "campaign_id": CAMPAIGN_ID,
-        "manifest_version": CAMPAIGN_VERSION,
-        "manifest_digest": CAMPAIGN_DIGEST,
-        "level_count": len(LOCATIONS),
+        "campaign_id": campaign_id,
+        "manifest_version": version,
+        "manifest_digest": digest,
+        "level_count": level_count,
     })
 
 

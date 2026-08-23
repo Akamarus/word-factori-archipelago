@@ -8,12 +8,32 @@ from word_factori.campaign import (
     campaign_digest,
     load_campaign,
     validate_campaign,
+    available_level_sets,
+    campaign_for_level_set,
 )
 from word_factori.recipe_graph import RecipeGraph
 from word_factori.data import BASE_ID, ITEM_POOL, LOCATIONS, MACHINE_ITEMS
 
 
 class CampaignManifestTests(unittest.TestCase):
+    def test_curated_level_sets_are_versioned_stable_and_share_the_core_campaign(self):
+        self.assertEqual(("core_campaign", "discovery_labs"), available_level_sets())
+        core = campaign_for_level_set("core_campaign")
+        discovery = campaign_for_level_set("discovery_labs")
+
+        self.assertEqual("word-factori-core", core.campaign_id)
+        self.assertEqual("word-factori-hybrid", discovery.campaign_id)
+        self.assertEqual("1.2.0", core.version)
+        self.assertEqual("1.2.0", discovery.version)
+        self.assertEqual(30, len(core.levels))
+        self.assertEqual(40, len(discovery.levels))
+        self.assertEqual(core.levels, discovery.levels[:30])
+        self.assertNotEqual(campaign_digest(core), campaign_digest(discovery))
+
+    def test_unknown_or_tampered_level_set_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "level set"):
+            campaign_for_level_set("workshop-download")
+
     def test_hybrid_has_stable_campaign_and_appended_labs(self):
         manifest = load_campaign()
         self.assertEqual("word-factori-hybrid", manifest.campaign_id)

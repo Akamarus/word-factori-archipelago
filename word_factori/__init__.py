@@ -12,8 +12,9 @@ else:
     from .data import (
         CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, GAME, ITEM_NAME_TO_ID,
         ITEM_NAMES, ITEM_POOL, LOCATIONS, LOCATION_NAME_TO_ID, MACHINE_ITEMS,
-        REGION_REQUIREMENTS,
+        REGION_REQUIREMENTS, locations_for_level_set,
     )
+    from .campaign import campaign_digest, campaign_for_level_set
     from .options import WordFactoriOptions
     from .requirements import access_rule_for
     from . import Components as components
@@ -42,6 +43,12 @@ else:
         item_name_to_id = ITEM_NAME_TO_ID
         location_name_to_id = LOCATION_NAME_TO_ID
 
+        def selected_level_set(self) -> str:
+            return "core_campaign" if int(self.options.custom_level_set.value) == 0 else "discovery_labs"
+
+        def selected_locations(self):
+            return locations_for_level_set(self.selected_level_set())
+
         def generate_early(self) -> None:
             self.multiworld.push_precollected(self.create_item("Bender Access"))
 
@@ -57,7 +64,8 @@ else:
                     f"Open {region_name}",
                     lambda state, count=tier: state.has("Progressive World Access", self.player, count),
                 )
-            for data in LOCATIONS:
+            locations = self.selected_locations()
+            for data in locations:
                 location = WordFactoriLocation(self.player, data.name, data.code, regions[data.region])
                 set_rule(location, access_rule_for(data, self.player))
                 regions[data.region].locations.append(location)
@@ -66,7 +74,7 @@ else:
             victory = WordFactoriLocation(self.player, "Victory", None, victory_region)
             victory.place_locked_item(WordFactoriItem("Victory", ItemClassification.progression, None, self.player))
             if campaign_goal:
-                campaign = tuple(location.name for location in LOCATIONS[:30])
+                campaign = tuple(location.name for location in locations[:30])
                 campaign_count = int(self.options.campaign_count.value)
                 set_rule(victory, lambda state: sum(state.can_reach_location(name, self.player) for name in campaign) >= campaign_count)
             else:
@@ -80,7 +88,9 @@ else:
             return WordFactoriItem(name, classification, ITEM_NAME_TO_ID[name], self.player)
 
         def create_items(self) -> None:
-            self.multiworld.itempool += [self.create_item(name) for name in ITEM_POOL]
+            self.multiworld.itempool += [
+                self.create_item(name) for name in ITEM_POOL[:len(self.selected_locations())]
+            ]
 
         def get_filler_item_name(self) -> str:
             return "I Sticker"
@@ -89,14 +99,19 @@ else:
             self.multiworld.completion_condition[self.player] = lambda state: state.has("Victory", self.player)
 
         def fill_slot_data(self) -> dict:
+            level_set = self.selected_level_set()
+            manifest = campaign_for_level_set(level_set)
+            locations = self.selected_locations()
             return {
-                "implementation_version": "1.1.0",
-                "campaign_id": CAMPAIGN_ID,
-                "manifest_version": CAMPAIGN_VERSION,
-                "manifest_digest": CAMPAIGN_DIGEST,
+                "implementation_version": "1.2.0",
+                "level_set": level_set,
+                "campaign_id": manifest.campaign_id,
+                "manifest_version": manifest.version,
+                "manifest_digest": campaign_digest(manifest),
+                "level_count": len(locations),
                 "goal": int(self.options.goal.value),
                 "campaign_count": int(self.options.campaign_count.value),
-                "locations": [{"index": x.index, "name": x.name, "id": x.code, "kind": x.kind} for x in LOCATIONS],
+                "locations": [{"index": x.index, "name": x.name, "id": x.code, "kind": x.kind} for x in locations],
                 "mod_folder": "word factori archipelago",
                 "reload_required_for_items": True,
             }

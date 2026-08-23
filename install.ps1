@@ -79,7 +79,7 @@ try {
     $identityPath = Join-Path $modStage 'archipelago_campaign.json'
     $identity = Get-Content -LiteralPath $identityPath -Raw | ConvertFrom-Json
     if ($identity.campaign_id -ne 'word-factori-hybrid' -or
-        $identity.manifest_version -ne '1.1.0' -or
+        $identity.manifest_version -ne '1.2.0' -or
         $identity.level_count -ne 40 -or
         $identity.manifest_digest -notmatch '^[0-9a-f]{64}$') {
         throw "Staged mod has an invalid Word Factori hybrid campaign identity"

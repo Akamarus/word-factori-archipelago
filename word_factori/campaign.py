@@ -152,3 +152,54 @@ def load_campaign() -> CampaignManifest:
     if not isinstance(payload, dict):
         raise ValueError("campaign root must be an object")
     return manifest_from_payload(payload)
+
+
+def _load_pack_catalog() -> dict[str, Any]:
+    payload = json.loads(files(__package__).joinpath("campaign_packs.json").read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("catalog_version") != 1:
+        raise ValueError("campaign level set catalog is invalid")
+    sets = payload.get("sets")
+    packs = payload.get("packs")
+    if not isinstance(sets, dict) or not isinstance(packs, dict):
+        raise ValueError("campaign level set catalog is invalid")
+    return payload
+
+
+def available_level_sets() -> tuple[str, ...]:
+    catalog = _load_pack_catalog()
+    return tuple(str(key) for key in catalog["sets"])
+
+
+def campaign_for_level_set(level_set: str) -> CampaignManifest:
+    """Assemble one curated set from bundled stable keys only."""
+    if not isinstance(level_set, str):
+        raise ValueError("campaign level set is invalid")
+    catalog = _load_pack_catalog()
+    definition = catalog["sets"].get(level_set)
+    if not isinstance(definition, dict):
+        raise ValueError(f"unknown campaign level set: {level_set}")
+    pack_names = definition.get("packs")
+    if not isinstance(pack_names, list) or not pack_names:
+        raise ValueError("campaign level set has no curated packs")
+    stable_keys: list[str] = []
+    for pack_name in pack_names:
+        pack = catalog["packs"].get(pack_name)
+        if not isinstance(pack, dict) or not isinstance(pack.get("stable_keys"), list):
+            raise ValueError("campaign level set references an invalid pack")
+        stable_keys.extend(str(key) for key in pack["stable_keys"])
+    if len(stable_keys) != len(set(stable_keys)):
+        raise ValueError("campaign level set repeats stable keys")
+    source = load_campaign()
+    records = {record.stable_key: record for record in source.levels}
+    if any(key not in records for key in stable_keys):
+        raise ValueError("campaign level set references an unknown stable key")
+    levels = tuple(records[key] for key in stable_keys)
+    if [record.index for record in levels] != list(range(len(levels))):
+        raise ValueError("campaign level set must preserve native sequential order")
+    manifest = CampaignManifest(
+        campaign_id=str(definition.get("campaign_id", "")),
+        version=str(definition.get("manifest_version", "")),
+        levels=levels,
+    )
+    validate_campaign(manifest)
+    return manifest

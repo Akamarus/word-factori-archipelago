@@ -1,0 +1,40 @@
+{
+  "catalog_version": 1,
+  "sets": {
+    "core_campaign": {
+      "display_name": "Core Campaign",
+      "campaign_id": "word-factori-core",
+      "manifest_version": "1.2.0",
+      "packs": ["core"]
+    },
+    "discovery_labs": {
+      "display_name": "Core Campaign + Discovery Labs",
+      "campaign_id": "word-factori-hybrid",
+      "manifest_version": "1.2.0",
+      "packs": ["core", "discovery"]
+    }
+  },
+  "packs": {
+    "core": {
+      "display_name": "Core Campaign",
+      "stable_keys": [
+        "complete-i", "complete-c", "complete-v", "complete-l", "complete-o",
+        "complete-a", "complete-ox", "complete-ivy", "complete-cat", "complete-qi",
+        "complete-owl", "complete-ax", "complete-bald", "complete-pixy", "complete-face",
+        "complete-book", "complete-chef", "complete-hack", "complete-jewel", "complete-voxel",
+        "complete-phone", "complete-rabbit", "complete-doctor", "complete-dragon", "complete-axolotl",
+        "complete-dinosaur", "challenge-cat-compact", "challenge-book-low-cycles",
+        "challenge-phone-no-waste", "pitchfork-final"
+      ]
+    },
+    "discovery": {
+      "display_name": "Discovery Labs",
+      "stable_keys": [
+        "discover-c-bending", "discover-v-dual-merge", "discover-m-triple-merge",
+        "discover-w-quad-merge", "discover-u-rotation", "discover-j-joining",
+        "discover-x-reflection", "discover-e-rotated-quad", "discover-h-complex-merge",
+        "discover-r-master-reflection"
+      ]
+    }
+  }
+}

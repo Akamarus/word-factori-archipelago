@@ -19,7 +19,16 @@ class CampaignCount(Range):
     default = 25
 
 
+class CustomLevelSet(Choice):
+    """Choose the curated custom levels assembled into this seed."""
+    display_name = "Custom Level Set"
+    option_core_campaign = 0
+    option_discovery_labs = 1
+    default = 1
+
+
 @dataclass
 class WordFactoriOptions(PerGameCommonOptions):
     goal: Goal
     campaign_count: CampaignCount
+    custom_level_set: CustomLevelSet
