@@ -1,3 +1,4 @@
+import ctypes
 import json
 import tempfile
 import threading
@@ -29,9 +30,11 @@ from word_factori.overlay_renderer import (
     WM_HOTKEY,
     WM_NCHITTEST,
     drain_parent_messages,
+    enable_overlay_dpi_awareness,
     present_dispatch_row,
     present_client_message,
     present_client_notice,
+    native_region_corner_diameters,
     runtime_font_path,
     row_height_for_texture,
     window_relative_regions,
@@ -162,6 +165,47 @@ class WindowTrackerTests(unittest.TestCase):
 
 
 class RendererBoundaryTests(unittest.TestCase):
+    def test_overlay_dpi_awareness_uses_per_monitor_v2_before_kivy(self):
+        class User32:
+            def __init__(self):
+                self.contexts = []
+
+            def SetThreadDpiAwarenessContext(self, context):
+                self.contexts.append(context.value)
+                return 1
+
+        user32 = User32()
+        self.assertTrue(enable_overlay_dpi_awareness(user32))
+        self.assertEqual([ctypes.c_void_p(-4).value], user32.contexts)
+
+        source = Path("word_factori/overlay_renderer.py").read_text(encoding="utf-8")
+        child = source.split("def overlay_process_main", 1)[1]
+        self.assertLess(
+            child.index("enable_overlay_dpi_awareness()"),
+            child.index("from kivy.config import Config"),
+        )
+
+    def test_borderless_overlay_allows_programmatic_sdl_surface_resize(self):
+        source = Path("word_factori/overlay_renderer.py").read_text(encoding="utf-8")
+        child = source.split("def overlay_process_main", 1)[1]
+
+        self.assertIn('Config.set("graphics", "borderless", "1")', child)
+        self.assertIn('Config.set("graphics", "resizable", "1")', child)
+        self.assertLess(
+            child.index('Config.set("graphics", "resizable", "1")'),
+            child.index("from kivy.app import App"),
+        )
+
+    def test_minimized_game_is_hidden_before_any_window_move_or_resize(self):
+        source = Path("word_factori/overlay_renderer.py").read_text(encoding="utf-8")
+        follow = source.split("def follow_game", 1)[1]
+
+        self.assertIn("if state is None or not state.visible:", follow)
+        self.assertLess(
+            follow.index("if state is None or not state.visible:"),
+            follow.index("left, top, width, height = state.bounds"),
+        )
+
     def test_client_message_and_notice_presentations_are_bounded_and_truthful(self):
         message = present_client_message({
             "kind": "hint", "text": "Try Ω factory", "observed_at": "now",
@@ -177,6 +221,13 @@ class RendererBoundaryTests(unittest.TestCase):
         self.assertEqual("!", notice.icon)
         self.assertEqual("Wrong slot", notice.text)
         self.assertEqual("Reconnect", notice.action)
+
+    def test_chat_rows_grow_to_fit_wrapped_command_output(self):
+        source = Path("word_factori/overlay_renderer.py").read_text(encoding="utf-8")
+        chat_row = source.split("class ChatMessageRow", 1)[1].split("class SubmitInput", 1)[0]
+
+        self.assertIn("row_height_for_texture", chat_row)
+        self.assertIn("texture_size", chat_row)
 
     def test_child_writer_encodes_full_client_intents(self):
         class Connection:
@@ -216,13 +267,48 @@ class RendererBoundaryTests(unittest.TestCase):
             game_active=True, ledger_open=True, accepts_keyboard=True, game_hwnd=88,
         )
         self.assertFalse(api.style & 0x08000000)
-        self.assertEqual(77, api.activated[-1])
+        self.assertEqual([("overlay", 77, 88)], api.focus_calls)
 
         hook.set_interaction_state(
             game_active=True, ledger_open=True, accepts_keyboard=False, game_hwnd=88,
         )
         self.assertEqual(passive_style, api.style)
         self.assertEqual(88, api.activated[-1])
+
+    def test_passive_overlay_uses_native_region_instead_of_stale_layered_hit_mask(self):
+        api = FakeHookAPI()
+        hook = OverlayWindowHook(
+            hwnd=77,
+            geometry=lambda: OverlayGeometry(mailbox=Rect(10, 10, 40, 40)),
+            action=lambda kind: None,
+            api=api,
+        )
+
+        hook.install()
+
+        self.assertFalse(api.style & 0x00080000)
+        self.assertTrue(api.style & 0x08000000)
+
+    def test_game_owns_overlay_for_keyboard_z_order_and_owner_is_restored(self):
+        api = FakeHookAPI()
+        hook = OverlayWindowHook(
+            hwnd=77,
+            geometry=lambda: OverlayGeometry(mailbox=Rect(10, 10, 40, 40)),
+            action=lambda kind: None,
+            api=api,
+        )
+        hook.install()
+
+        hook.set_interaction_state(
+            game_active=True, ledger_open=True, accepts_keyboard=True, game_hwnd=88,
+        )
+        hook.set_interaction_state(
+            game_active=True, ledger_open=True, accepts_keyboard=True, game_hwnd=88,
+        )
+        self.assertEqual([(77, 88)], api.owner_changes)
+
+        self.assertTrue(hook.shutdown())
+        self.assertEqual([(77, 88), (77, 0)], api.owner_changes)
 
     def test_keyboard_mode_does_not_steal_focus_back_after_alt_tab(self):
         api = FakeHookAPI()
@@ -240,7 +326,8 @@ class RendererBoundaryTests(unittest.TestCase):
             game_active=False, ledger_open=True, accepts_keyboard=False, game_hwnd=88,
         )
 
-        self.assertEqual([77], api.activated)
+        self.assertEqual([("overlay", 77, 88)], api.focus_calls)
+        self.assertEqual([], api.activated)
 
     def test_renderer_action_encoding_requires_current_snapshot_generation(self):
         with self.assertRaises(ValueError):
@@ -283,10 +370,25 @@ class RendererBoundaryTests(unittest.TestCase):
         adapter.hide_window(77)
 
         self.assertEqual([
-            (77, 0, 0, 0, 0, 0, 0x0057),
+            (77, -1, 0, 0, 0, 0, 0x0053),
             (77, 0, 0, 0, 0, 0, 0x0097),
         ], user32.position_calls)
         self.assertEqual([77, 77], user32.visibility_checks)
+
+    def test_visible_hook_reasserts_topmost_placement_after_external_resize(self):
+        api = FakeHookAPI()
+        hook = OverlayWindowHook(
+            hwnd=77,
+            geometry=lambda: OverlayGeometry(mailbox=Rect(10, 10, 40, 40)),
+            action=lambda kind: None,
+            api=api,
+        )
+        hook.install()
+
+        hook.set_visible(True)
+        hook.set_visible(True)
+
+        self.assertEqual([77, 77], api.shown)
 
     def test_production_visibility_adapter_raises_when_set_window_pos_fails(self):
         user32 = FakeVisibilityUser32(set_position_result=False)
@@ -412,6 +514,24 @@ class RendererBoundaryTests(unittest.TestCase):
         self.assertEqual(
             (Rect(18, 51, 30, 40), Rect(58, 91, 70, 80)),
             window_relative_regions(regions, (8, 31)),
+        )
+
+    def test_native_regions_match_mailbox_toast_and_panel_rounding(self):
+        self.assertEqual(
+            (36, 32, 40),
+            native_region_corner_diameters((
+                Rect(24, 400, 72, 72),
+                Rect(112, 360, 420, 96),
+                Rect(300, 100, 760, 620),
+            )),
+        )
+        self.assertEqual(
+            (45, 40, 50),
+            native_region_corner_diameters((
+                Rect(30, 500, 90, 90),
+                Rect(140, 450, 525, 120),
+                Rect(400, 120, 950, 775),
+            )),
         )
 
     def test_region_or_native_visibility_failure_marks_bootstrap_failed(self):
@@ -769,12 +889,22 @@ class FakeHookAPI:
         self.fail_f8_registration = False
         self.fail_escape_registration = False
         self.activated = []
+        self.focus_calls = []
+        self.owner = 0
+        self.owner_changes = []
 
     def get_extended_style(self, hwnd):
         return self.style
 
     def set_extended_style(self, hwnd, style):
         self.style = style
+
+    def get_owner(self, hwnd):
+        return self.owner
+
+    def set_owner(self, hwnd, owner):
+        self.owner = owner
+        self.owner_changes.append((hwnd, owner))
 
     def install_window_procedure(self, hwnd, callback):
         self.callback = callback
@@ -828,6 +958,9 @@ class FakeHookAPI:
 
     def activate_window(self, hwnd):
         self.activated.append(hwnd)
+
+    def activate_overlay(self, hwnd, game_hwnd):
+        self.focus_calls.append(("overlay", hwnd, game_hwnd))
 
     def call_original(self, original, hwnd, message, wparam, lparam):
         return 987

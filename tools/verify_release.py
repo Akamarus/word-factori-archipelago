@@ -6,15 +6,15 @@ import importlib
 import json
 import sys
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from tools.build_release import (
-    LEGACY_RELEASE_ARCHIVE,
     PROHIBITED_RELEASE_BASENAMES,
     RELEASE_ARCHIVE,
+    RELEASE_MANIFEST,
     WORLD_ARCHIVE,
     include,
 )
@@ -50,6 +50,7 @@ def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | Non
                 "install.ps1",
                 "Install Word Factori Archipelago.cmd",
                 "word_factori.apworld",
+                "release-manifest.json",
             )
         ]
         for root in roots:
@@ -72,14 +73,42 @@ def verify_headless_modules() -> None:
         raise AssertionError("headless release verification imported Kivy")
 
 
+def load_release_manifest() -> dict[str, str]:
+    try:
+        payload = json.loads(RELEASE_MANIFEST.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise AssertionError(f"release manifest is unreadable: {error}") from error
+    files = payload.get("files") if isinstance(payload, dict) and payload.get("format") == 1 else None
+    if not isinstance(files, dict) or not all(
+        isinstance(name, str)
+        and PurePosixPath(name).as_posix() == name
+        and not PurePosixPath(name).is_absolute()
+        and ".." not in PurePosixPath(name).parts
+        and "\\" not in name
+        and name != RELEASE_MANIFEST.name
+        and isinstance(checksum, str)
+        and len(checksum) == 64
+        and all(character in "0123456789abcdef" for character in checksum)
+        for name, checksum in files.items()
+    ):
+        raise AssertionError("release manifest has an invalid schema")
+    return files
+
+
+def is_runtime_cache(name: str) -> bool:
+    parts = Path(name).parts
+    return "__pycache__" in parts or name.casefold().endswith((".pyc", ".pyo"))
+
+
 def main(*, verify_installed: bool = False) -> None:
     verify_headless_modules()
     if RELEASE_ARCHIVE.name != "word-factori-archipelago-hybrid-1.2.0.zip":
         raise AssertionError("unexpected hybrid release name")
-    if not LEGACY_RELEASE_ARCHIVE.is_file():
-        raise AssertionError("stable 1.0.0 release archive was not preserved")
     verify_archive_matches_disk(WORLD_ARCHIVE)
-    verify_archive_matches_disk(RELEASE_ARCHIVE, ("docs", "game_mod", "tests", "tools", "word_factori"))
+    release_archive_present = RELEASE_ARCHIVE.is_file()
+    if release_archive_present:
+        verify_archive_matches_disk(RELEASE_ARCHIVE, ("docs", "game_mod", "tests", "tools", "word_factori"))
+    manifest_files = load_release_manifest()
 
     game_mod = ROOT / "game_mod" / "word factori archipelago"
     payloads = {path.name: json.loads(path.read_text(encoding="utf-8")) for path in game_mod.glob("*.json")}
@@ -125,26 +154,50 @@ def main(*, verify_installed: bool = False) -> None:
             if not installed.is_file() or digest(installed.read_bytes()) != digest(source.read_bytes()):
                 raise AssertionError(f"installed mod differs at {source.name}")
 
-    with zipfile.ZipFile(RELEASE_ARCHIVE) as archive:
-        names = archive.namelist()
-        prohibited = find_prohibited_release_entries(names)
-        if prohibited:
-            raise AssertionError(f"proprietary/user data entered release: {prohibited}")
-        if any(name.startswith("tests/output") or "__pycache__" in name for name in names):
-            raise AssertionError("generated output or caches entered release")
-        for required in (
-            "word_factori/campaign_packs.json",
-            "word_factori/client_messages.py",
-            "word_factori/overlay_renderer.py",
-            "docs/testing/full-ingame-client-acceptance.md",
-        ):
-            if required not in names:
-                raise AssertionError(f"release is missing {required}")
+    if release_archive_present:
+        with zipfile.ZipFile(RELEASE_ARCHIVE) as archive:
+            names = archive.namelist()
+            actual_files = set(names)
+            expected_files = set(manifest_files) | {RELEASE_MANIFEST.name}
+            if actual_files != expected_files:
+                raise AssertionError("release entries differ from release-manifest.json")
+            for name, expected in manifest_files.items():
+                if digest(archive.read(name)) != expected:
+                    raise AssertionError(f"release manifest hash differs at {name}")
+    else:
+        names = [
+            path.relative_to(ROOT).as_posix()
+            for path in ROOT.rglob("*")
+            if path.is_file() and not is_runtime_cache(path.relative_to(ROOT).as_posix())
+        ]
+        expected_files = set(manifest_files) | {RELEASE_MANIFEST.name}
+        if set(names) != expected_files:
+            raise AssertionError("extracted entries differ from release-manifest.json")
+        for name, expected in manifest_files.items():
+            if digest((ROOT / name).read_bytes()) != expected:
+                raise AssertionError(f"extracted release manifest hash differs at {name}")
+    prohibited = find_prohibited_release_entries(names)
+    if prohibited:
+        raise AssertionError(f"proprietary/user data entered release: {prohibited}")
+    if any(name.startswith("tests/output") or "__pycache__" in name for name in names):
+        raise AssertionError("generated output or caches entered release")
+    for required in (
+        "word_factori/campaign_packs.json",
+        "word_factori/client_messages.py",
+        "word_factori/overlay_renderer.py",
+        "docs/testing/full-ingame-client-acceptance.md",
+    ):
+        if required not in names:
+            raise AssertionError(f"release is missing {required}")
 
     print(f"APWorld SHA-256 {digest(WORLD_ARCHIVE.read_bytes())}")
-    print(f"Release SHA-256 {digest(RELEASE_ARCHIVE.read_bytes())}")
+    if release_archive_present:
+        print(f"Release SHA-256 {digest(RELEASE_ARCHIVE.read_bytes())}")
+    else:
+        print("Release archive not present; validated extracted manifest and hygiene")
     installed_text = ", installed-copy parity" if verify_installed else ""
-    print(f"Release verification passed: source parity, JSON/index integrity, fresh recipe derivation{installed_text}, and data exclusions")
+    parity_text = "source parity" if release_archive_present else "extracted manifest/hygiene"
+    print(f"Release verification passed: {parity_text}, JSON/index integrity, fresh recipe derivation{installed_text}, and data exclusions")
 
 
 if __name__ == "__main__":

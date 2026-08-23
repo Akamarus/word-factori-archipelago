@@ -121,6 +121,26 @@ class SaveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exactly one active"):
             parse_save(payload)
 
+    def test_stale_active_flag_is_disambiguated_by_game_previous_save(self):
+        payload = {"slots": {
+            "2": {
+                "slot_is_active": 1,
+                "previous_save": -1.0,
+                "random_id": "stale-slot",
+                "beaten_levels": {"0": 1},
+            },
+            "0": {
+                "slot_is_active": True,
+                "previous_save": 0.0,
+                "random_id": "selected-slot",
+                "beaten_levels": {},
+            },
+        }}
+        active = parse_active_slot(payload)
+        self.assertEqual("0", active.key)
+        self.assertEqual("selected-slot", active.random_id)
+        self.assertEqual(frozenset(), active.beaten_levels)
+
 
 class BridgeTests(unittest.TestCase):
     def test_game_slot_binding_survives_sidecar_round_trip(self):
@@ -222,8 +242,12 @@ class ClientCoreTests(unittest.TestCase):
         expected = r"C:\Users\Player\AppData\Local\factori\mods\word factori archipelago"
         self.assertTrue(mod_is_selected({"folder": expected}, expected))
         self.assertTrue(mod_is_selected({"folder": "word factori archipelago"}, expected))
+        self.assertTrue(mod_is_selected({"folder": "mods/word factori archipelago"}, expected))
+        self.assertTrue(mod_is_selected({"folder": r"mods\word factori archipelago"}, expected))
         self.assertFalse(mod_is_selected({"folder": r"C:\somewhere\word factori archipelago"}, expected))
         self.assertFalse(mod_is_selected({"folder": r"C:\somewhere\another mod"}, expected))
+        self.assertFalse(mod_is_selected({"folder": r"other\word factori archipelago"}, expected))
+        self.assertFalse(mod_is_selected({"folder": r"mods\nested\word factori archipelago"}, expected))
         self.assertFalse(mod_is_selected({"folder": None}, expected))
 
     def test_manifest_mismatch_is_incompatible(self):

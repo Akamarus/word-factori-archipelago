@@ -57,6 +57,19 @@ class OverlayReducerTests(unittest.TestCase):
         self.assertFalse(state.input_focused)
         self.assertFalse(snapshot(state).accepts_keyboard)
 
+    def test_focus_return_restores_keyboard_only_for_open_input_views(self):
+        chat = apply_action(OverlayState.closed(), OverlayAction("open-chat"))
+        chat = apply_action(chat, OverlayAction("focus-lost"))
+        self.assertFalse(chat.input_focused)
+
+        chat = apply_action(chat, OverlayAction("focus-returned"))
+        self.assertTrue(chat.input_focused)
+
+        items = apply_action(OverlayState.closed(), OverlayAction("open-items"))
+        items = apply_action(items, OverlayAction("focus-lost"))
+        items = apply_action(items, OverlayAction("focus-returned"))
+        self.assertFalse(items.input_focused)
+
     def test_items_connect_and_password_views_have_explicit_focus_contract(self):
         items = apply_action(OverlayState.closed(), OverlayAction("open-items"))
         connect = apply_action(items, OverlayAction("open-connect"))

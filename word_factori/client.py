@@ -73,6 +73,8 @@ CAMPAIGN_MISMATCH = (
     "Campaign mismatch: this room does not match a bundled Word Factori level set. "
     "Install the matching release before scanning or completing levels."
 )
+_OVERLAY_PASSWORD_POLL_SECONDS = 0.1
+_OVERLAY_PASSWORD_TIMEOUT_SECONDS = 300.0
 
 
 @dataclass(frozen=True)
@@ -188,19 +190,46 @@ class WordFactoriContext(CommonContext):
             self._overlay_session_generation = current
             self._presentation_generation += 1
 
+    async def _standard_server_auth(self, password_requested: bool) -> None:
+        await self._apply_local_overlay_action(OverlayAction("open-items"))
+        await self._apply_local_overlay_action(OverlayAction("close"))
+        await super().server_auth(password_requested)
+
+    async def _wait_for_overlay_password(self, session_generation: int) -> str | None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _OVERLAY_PASSWORD_TIMEOUT_SECONDS
+        while loop.time() < deadline:
+            if (
+                bool(getattr(self.overlay, "disabled", False))
+                or int(getattr(self.overlay, "session_generation", 0)) != session_generation
+            ):
+                return None
+            try:
+                return await asyncio.wait_for(
+                    self._overlay_password_queue.get(),
+                    timeout=min(_OVERLAY_PASSWORD_POLL_SECONDS, deadline - loop.time()),
+                )
+            except asyncio.TimeoutError:
+                pass
+        return None
+
     async def server_auth(self, password_requested: bool = False) -> None:
         self._set_overlay_connection_status("authenticating")
         if password_requested and not self.password:
+            while not self._overlay_password_queue.empty():
+                self._overlay_password_queue.get_nowait()
             prompted = False
             if self.overlay_preferences.enabled and not bool(getattr(self.overlay, "disabled", False)):
                 prompted = await self._apply_local_overlay_action(OverlayAction("request-password"))
                 prompted = prompted and self.publish_overlay(self.connected_identity)
             if prompted:
-                self.password = await self._overlay_password_queue.get()
+                session_generation = int(getattr(self.overlay, "session_generation", 0))
+                self.password = await self._wait_for_overlay_password(session_generation)
+                if self.password is None:
+                    self._overlay_warning("password prompt unavailable; using regular client")
+                    return await self._standard_server_auth(password_requested)
             else:
-                await self._apply_local_overlay_action(OverlayAction("open-items"))
-                await self._apply_local_overlay_action(OverlayAction("close"))
-                await super().server_auth(password_requested)
+                return await self._standard_server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
 

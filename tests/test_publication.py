@@ -2,6 +2,10 @@ import unittest
 import zipfile
 import hashlib
 import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 
 from tools import build_release
 from tools import verify_release
@@ -44,6 +48,7 @@ class PublicationTests(unittest.TestCase):
             names = set(archive.namelist())
 
         self.assertIn("Install Word Factori Archipelago.cmd", names)
+        self.assertIn("release-manifest.json", names)
         self.assertIn("word_factori/campaign_packs.json", names)
         self.assertIn("word_factori/client_messages.py", names)
         self.assertIn("word_factori/overlay_renderer.py", names)
@@ -53,6 +58,13 @@ class PublicationTests(unittest.TestCase):
         generated_room = ROOT / "tests" / "live-room-example" / "AP_seed.archipelago"
 
         self.assertFalse(include(generated_room))
+
+    def test_release_includes_only_approved_live_evidence_images(self):
+        approved = ROOT / "docs" / "testing" / "live-overlay-items-composite.png"
+        diagnostic = ROOT / "docs" / "testing" / "live-overlay-debug-plane.png"
+
+        self.assertTrue(include(approved))
+        self.assertFalse(include(diagnostic))
 
     def test_sensitive_and_session_artifacts_are_rejected_by_packaging_policy(self):
         prohibited = (
@@ -76,6 +88,29 @@ class PublicationTests(unittest.TestCase):
         ]
 
         self.assertEqual(names[:2], verify_release.find_prohibited_release_entries(names))
+
+    def test_release_verifier_does_not_require_unshipped_legacy_archive(self):
+        build_release.write_world()
+        build_release.write_release()
+        with tempfile.TemporaryDirectory() as directory:
+            with zipfile.ZipFile(build_release.RELEASE_ARCHIVE) as archive:
+                archive.extractall(directory)
+            result = subprocess.run(
+                [sys.executable, "tools/verify_release.py"],
+                cwd=directory,
+                capture_output=True,
+                text=True,
+            )
+            (Path(directory) / "docs" / "testing" / "live-overlay-debug-plane.png").write_bytes(b"debug")
+            unexpected = subprocess.run(
+                [sys.executable, "tools/verify_release.py"],
+                cwd=directory,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertNotEqual(0, unexpected.returncode, unexpected.stdout + unexpected.stderr)
 
 
 if __name__ == "__main__":

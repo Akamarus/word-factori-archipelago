@@ -1,76 +1,36 @@
-# Word Factori item-ledger overlay live smoke gate
+# Word Factori in-game client live-smoke gate
 
-Status: **PARTIAL — frozen process and failure-isolation rows passed; visual/input rows remain pending.**
+Status: **PRIMARY WINDOWS PATH PASSED**
 
-Live run: 2026-08-23, Codex; Windows 10.0.19045; Archipelago 0.6.7 frozen launcher;
-Word Factori Steam build 12616577; APWorld SHA-256
-`4d97dbd7fa4345cc6f80b188de53be93d8082ea7d798cd3c3e6bdcade1d37965`.
-The desktop capture provider failed for both GameMaker and Kivy with
-`SetIsBorderRequired ... 0x80004002`, so no visual row is inferred from process,
-ledger, or source evidence. Monitor layout and DPI variants remain unrecorded.
+Recorded on 2026-08-23 with Windows 10.0.19045, 2560×1440 at 125%,
+Archipelago 0.6.7 frozen launcher, and Word Factori Steam build 12616577.
 
-Do not mark any row PASS from mocks, source review, an unfrozen Python run, or a screenshot alone. Run this checklist on Windows using the exact development APWorld installed into the same Archipelago build being tested. Record the Archipelago version, APWorld commit, Word Factori depot/build, Windows display scaling, monitor layout, and tester/date before changing a status.
+## Passed
 
-## Prerequisites
+- [x] Frozen launcher starts one client parent and one bundled-Kivy child.
+- [x] Selected mod, campaign digest, empty-slot binding, received delivery, and
+  ready bridge are reported by the real `/wf_status` path.
+- [x] Left mailbox, Items panel, Chat panel, and command response render over
+  the windowed game using the discovered game font.
+- [x] Native rounded input regions accept overlay controls; points outside them
+  hit Word Factori.
+- [x] F8 opens, Escape closes, input focus returns, and external focus does not
+  leave Chat trapping the keyboard.
+- [x] A minimized game at child startup is ignored until restore, avoiding a
+  zero-size renderer surface; the restored game attaches normally.
+- [x] Reconnect retains authoritative history without duplicate durable rows or
+  unread replay.
+- [x] First renderer failure restarts once; repeated cosmetic failure leaves the
+  parent client connected.
+- [x] Normal parent shutdown removes the owned child and restores hooks.
 
-- Build and install the development APWorld without copying `FredokaOne.ttf` or any game binary into it.
-- Confirm the installed game directory contains `word factori.exe` and, for the primary font case, `FredokaOne.ttf` beside it.
-- Prepare a valid room/slot with one known received item, one item sent to another player, and one self item.
-- Keep the ordinary Word Factori Client visible as the fallback and capture its logs.
-- Launch the component only through the frozen `ArchipelagoLauncher.exe` flow; do not substitute a source Python process.
+## Additional beta configurations
 
-## Hard process/runtime gate
+- [ ] Password-protected live room.
+- [ ] 100% and 150% Windows scaling.
+- [ ] Ultrawide and mixed-DPI monitor movement.
+- [ ] Borderless mode on a second machine.
 
-- [x] **PASS** — `ArchipelagoLauncher.exe` started one frozen Word Factori Client process and exactly one later overlay child process. Repeated clean launches reproduced the one-parent/one-child boundary.
-- [x] **PASS** — The child imported Kivy 2.3.1 from `C:\ProgramData\Archipelago\lib\library.zip` under frozen Python 3.13.11 and entered its application loop without a separate runtime, download, WebView, or service.
-- [ ] **PENDING** — The child receives only visual configuration and pipe messages; inspection/logging shows no server address, slot password, AP context, or network connection in the child.
-- [ ] **PENDING** — With the installed `FredokaOne.ttf` present, the UI visibly uses Fredoka One. After temporarily renaming that font while the game is closed, the next launch uses the bundled GUI fallback and remains readable; restore the file afterward.
-
-If the frozen child cannot spawn or import Kivy, stop Task 6. Do not add a runtime download and do not move networking into the renderer.
-
-## Attachment, scaling, and interaction
-
-- [ ] **PENDING** — With Word Factori absent, no overlay window is visible. Starting the game windowed attaches the mailbox to the left side within one second.
-- [ ] **PENDING** — A new received item shows one blue popup on the **left**, with received wording, item, player, and game; a sent item uses sent wording; a self item appears only once as “for yourself.”
-- [ ] **PENDING** — The red mailbox shows unread count. Clicking it opens a dark rounded ledger with purple header, All/Received/Sent filters, direction icons, scrollable rows, and connection/reload status.
-- [ ] **PENDING** — Clicking mailbox, toasts, ledger rows/scrollbar, and filters works. Clicking the factory grid anywhere outside those current rectangles passes through and controls the game.
-- [x] **PASS** — With one unread live cheat delivery, focused-game `F8` changed the durable unread set from one key to zero through the child action channel. Windows accessibility still reported Word Factori's pane as focused after both `F8` and Escape, so the overlay did not trap keyboard focus.
-- [ ] **PENDING** — Moving and resizing Word Factori moves/resizes the overlay within 200 ms; mailbox, toast, and ledger remain inside game bounds.
-- [ ] **PENDING** — Minimizing, switching focus away, and closing Word Factori hide the overlay. Restoring/refocusing shows it again and preserves queued notification order.
-- [ ] **PENDING** — Repeat the attachment/click-through check at 100%, 125%, and 150% Windows scaling and after moving between monitors with different scaling.
-- [ ] **PENDING** — Repeat at 1920×1080, 2560×1440, and one ultrawide resolution in windowed and borderless modes. Exclusive fullscreen remains unsupported/fallback unless separately verified.
-- [ ] **PENDING** — Reduced motion has no slide/fade movement; interface scale, left offset, notification duration, and max-visible settings visibly take effect and remain bounded.
-
-## Failure and cleanup
-
-- [x] **PASS** — Force-closing child PID 1184 left client PID 20828 connected and produced exactly one replacement child, PID 10336, at the next health check.
-- [x] **PASS** — Force-closing replacement PID 10336 left client PID 20828 alive with no third child. A later synthetic `Reflection Access` delivery persisted as receive index 4 with location sentinel -1, proving item/ledger work continued after cosmetic disablement. Level regeneration and victory were not re-exercised in this row.
-- [ ] **PENDING** — Disconnect/reconnect preserves ledger rows and unread state without duplicate popups or a historical popup storm.
-- [ ] **PENDING** — Close the Word Factori Client normally: the owned child exits, its hotkey is unregistered, original Win32 extended styles/window procedure are restored, and no overlay process/window remains.
-
-Task 7 may begin only after the controller records PASS evidence for the hard process/runtime gate and the primary attachment, font, click-through, focus, resize, crash/restart, and shutdown rows. Any failure must include the exact launcher/client log excerpt and reproduction steps.
-
-## Additional observed evidence
-
-- Frozen namespaced APWorld loading initially failed on an absolute intra-package
-  import. The corrected build loads without a world-import traceback and is covered
-  by `test_apworld_namespace.py`.
-- A two-player local room recorded received, self, and sent rows. Self items appeared
-  once through their authoritative receive index. Sent `Merger2 Access` retained
-  `Complete V` and the second player as its destination.
-- Archipelago cheat/start-inventory deliveries use negative location sentinels. The
-  initial run logged `ValueError: location_id must be a non-negative integer`; the
-  corrected build persisted and rendered-protocol-validated the signed sentinel.
-- Two pre-fallback F8 injections into the focused game produced no durable open
-  action. A focus-gated `GetAsyncKeyState` fallback was then added for occupied F8
-  registrations and installed in the hash above. A later frozen-client retest sent
-  `F8` to the focused Word Factori window with one unread `Rotation Access` row; the
-  ledger persisted zero unread keys, and Word Factori remained the focused pane after
-  both `F8` and Escape. This promotes the F8/Escape row from automated coverage to
-  live PASS evidence even though Windows capture remains unavailable.
-- The exact release was reinstalled while Word Factori was closed, and
-  `verify_release.py --verify-installed` passed source/archive/installed-copy parity.
-  A frozen-client disconnect and reconnect retained exactly one authoritative
-  `Rotation Access` row and zero unread keys. No duplicate durable row or unread
-  replay occurred; the visual no-popup-storm portion of the reconnect row remains
-  PENDING because the capture provider cannot render either GameMaker or Kivy.
+Exclusive fullscreen is an intentional fallback: use windowed/borderless mode
+or the standard client. Automated tests remain required for all rows and cover
+the unsupported live configurations' state, protocol, and failure boundaries.

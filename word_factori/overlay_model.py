@@ -336,7 +336,10 @@ def apply_action(state: OverlayState, action: OverlayAction) -> OverlayState:
     if action.kind == "focus-lost":
         return replace(state, is_focused=False, input_focused=False)
     if action.kind == "focus-returned":
-        return replace(state, is_focused=True)
+        accepts_keyboard = state.is_open and state.active_view in (
+            OverlayView.CHAT, OverlayView.CONNECT, OverlayView.PASSWORD,
+        )
+        return replace(state, is_focused=True, input_focused=accepts_keyboard)
     if action.kind == "connection-status":
         return replace(state, connection_status=action.value)
     if action.kind == "reload-required":

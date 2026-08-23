@@ -11,6 +11,7 @@ docs/superpowers/
 # Build artifacts are published as GitHub release assets
 word_factori.apworld
 word-factori-archipelago-*.zip
+release-manifest.json
 
 # Local user/game data and proprietary game binaries
 save.json

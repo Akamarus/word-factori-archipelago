@@ -46,9 +46,9 @@ _HOTKEY_ID = 0x5746
 _ESCAPE_HOTKEY_ID = 0x5747
 _GWL_EXSTYLE = -20
 _GWLP_WNDPROC = -4
+_GWLP_HWNDPARENT = -8
 _WS_EX_TOPMOST = 0x00000008
 _WS_EX_TOOLWINDOW = 0x00000080
-_WS_EX_LAYERED = 0x00080000
 _WS_EX_NOACTIVATE = 0x08000000
 _SWP_NOSIZE = 0x0001
 _SWP_NOMOVE = 0x0002
@@ -68,6 +68,23 @@ def runtime_font_path(configured: str | None, tracker: object | None) -> str | N
     except Exception:
         return None
     return str(candidate) if candidate is not None else None
+
+
+def enable_overlay_dpi_awareness(user32: object | None = None) -> bool:
+    """Keep Kivy pixels, Win32 hit regions, and tracked game bounds identical."""
+    if user32 is None:
+        if os.name != "nt":
+            return False
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        setter = user32.SetThreadDpiAwarenessContext  # type: ignore[attr-defined]
+        setter.argtypes = (ctypes.c_void_p,)
+        setter.restype = ctypes.c_void_p
+    else:
+        setter = user32.SetThreadDpiAwarenessContext  # type: ignore[attr-defined]
+    try:
+        return bool(setter(ctypes.c_void_p(-4)))  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    except (AttributeError, OSError):
+        return False
 
 
 class RuntimeFontResolver:
@@ -146,6 +163,26 @@ def window_relative_regions(regions: tuple[Rect, ...], client_offset: tuple[int,
         raise ValueError("window region offset inputs are invalid")
     offset_x, offset_y = client_offset
     return tuple(Rect(region.x + offset_x, region.y + offset_y, region.width, region.height) for region in regions)
+
+
+def native_region_corner_diameters(regions: tuple[Rect, ...]) -> tuple[int, ...]:
+    """Match the native clipping region to the three rounded Kivy surfaces."""
+    if not isinstance(regions, tuple) or not all(isinstance(region, Rect) for region in regions):
+        raise ValueError("native regions must be a tuple of rectangles")
+    if not regions:
+        return ()
+    mailbox = regions[0]
+    scale = max(0.5, min(min(mailbox.width, mailbox.height) / 72.0, 4.0))
+    diameters: list[int] = []
+    for index, region in enumerate(regions):
+        if index == 0:
+            base = 36  # MailboxButton radius dp(18).
+        elif region.width >= region.height * 2:
+            base = 32  # DeliveryToast radius dp(16).
+        else:
+            base = 40  # FullClientPanel radius dp(20).
+        diameters.append(max(0, min(region.width, region.height, int(round(base * scale)))))
+    return tuple(diameters)
 
 
 def _fit_rect(x: float, y: float, width: float, height: float, outer_width: int, outer_height: int) -> Rect:
@@ -511,6 +548,8 @@ class KeyPressState:
 class OverlayHookAPI(Protocol):
     def get_extended_style(self, hwnd: int) -> int: ...
     def set_extended_style(self, hwnd: int, style: int) -> None: ...
+    def get_owner(self, hwnd: int) -> int: ...
+    def set_owner(self, hwnd: int, owner: int) -> None: ...
     def install_window_procedure(self, hwnd: int, callback: Callable[[int, int, int, int], int]) -> object: ...
     def restore_window_procedure(self, hwnd: int, original: object) -> None: ...
     def register_hotkey(self, hwnd: int, hotkey_id: int, modifiers: int, key: int) -> None: ...
@@ -523,6 +562,7 @@ class OverlayHookAPI(Protocol):
     def show_no_activate(self, hwnd: int) -> None: ...
     def hide_window(self, hwnd: int) -> None: ...
     def activate_window(self, hwnd: int) -> None: ...
+    def activate_overlay(self, hwnd: int, game_hwnd: int) -> None: ...
     def call_original(self, original: object | None, hwnd: int, message: int, wparam: int, lparam: int) -> int: ...
 
 
@@ -542,6 +582,8 @@ class OverlayWindowHook:
         self._action = action
         self._api = api
         self._original_style: int | None = None
+        self._original_owner: int | None = None
+        self._owner_hwnd: int | None = None
         self._passive_style: int | None = None
         self._original_procedure: object | None = None
         self._game_active = False
@@ -567,7 +609,12 @@ class OverlayWindowHook:
         if self._installed:
             return
         original_style = self._api.get_extended_style(self._hwnd)
-        style = original_style | _WS_EX_LAYERED | _WS_EX_TOPMOST | _WS_EX_NOACTIVATE | _WS_EX_TOOLWINDOW
+        original_owner = self._api.get_owner(self._hwnd)
+        # The disjoint native region provides transparent click-through without
+        # WS_EX_LAYERED. SDL's layered per-pixel input surface stays at its
+        # initial 800x600 after a programmatic resize on Windows, which makes
+        # visibly rendered controls outside that area unclickable.
+        style = original_style | _WS_EX_TOPMOST | _WS_EX_NOACTIVATE | _WS_EX_TOOLWINDOW
         original_procedure: object | None = None
         try:
             self._api.set_extended_style(self._hwnd, style)
@@ -584,6 +631,7 @@ class OverlayWindowHook:
                 pass
             raise
         self._original_style = original_style
+        self._original_owner = original_owner
         self._passive_style = style
         self._original_procedure = original_procedure
         self._installed = True
@@ -623,13 +671,19 @@ class OverlayWindowHook:
     ) -> None:
         self._game_active = bool(game_active)
         self._ledger_open = bool(ledger_open)
+        if type(game_hwnd) is int and game_hwnd > 0 and game_hwnd != self._owner_hwnd:
+            self._api.set_owner(self._hwnd, game_hwnd)
+            self._owner_hwnd = game_hwnd
         wants_keyboard = self._game_active and self._ledger_open and bool(accepts_keyboard)
         if wants_keyboard != self._accepts_keyboard:
             if self._passive_style is None:
                 raise RuntimeError("overlay hook is not installed")
             if wants_keyboard:
                 self._api.set_extended_style(self._hwnd, self._passive_style & ~_WS_EX_NOACTIVATE)
-                self._api.activate_window(self._hwnd)
+                if type(game_hwnd) is int and game_hwnd > 0:
+                    self._api.activate_overlay(self._hwnd, game_hwnd)
+                else:
+                    self._api.activate_window(self._hwnd)
             else:
                 self._api.set_extended_style(self._hwnd, self._passive_style)
                 if self._game_active and type(game_hwnd) is int and game_hwnd > 0:
@@ -696,13 +750,16 @@ class OverlayWindowHook:
             return
         if visible:
             self.refresh_region(force=True)
-        if visible == self._visible:
-            return
-        if visible:
+            # Kivy/SDL can demote the window while moving or resizing it to
+            # follow the game. Reassert no-activate topmost placement whenever
+            # the active game is sampled, even when visibility did not change.
             self._api.show_no_activate(self._hwnd)
-        else:
-            self._api.hide_window(self._hwnd)
-        self._visible = visible
+            self._visible = True
+            return
+        if not self._visible:
+            return
+        self._api.hide_window(self._hwnd)
+        self._visible = False
 
     def _window_procedure(self, hwnd: int, message: int, wparam: int, lparam: int) -> int:
         if message == WM_HOTKEY and int(wparam) == _HOTKEY_ID:
@@ -786,6 +843,14 @@ class OverlayWindowHook:
                 else:
                     self._original_style = None
                     self._passive_style = None
+            if self._original_owner is not None:
+                try:
+                    self._api.set_owner(self._hwnd, self._original_owner)
+                except Exception:
+                    success = False
+                else:
+                    self._original_owner = None
+                    self._owner_hwnd = None
         self._shutdown_pending = not success
         return success
 
@@ -931,6 +996,10 @@ class CtypesOverlayHookAPI:
         self._user32.SetWindowRgn.restype = ctypes.c_int
         self._gdi32.CreateRectRgn.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int)
         self._gdi32.CreateRectRgn.restype = wintypes.HANDLE
+        self._gdi32.CreateRoundRectRgn.argtypes = (
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        )
+        self._gdi32.CreateRoundRectRgn.restype = wintypes.HANDLE
         self._gdi32.CombineRgn.argtypes = (wintypes.HANDLE, wintypes.HANDLE, wintypes.HANDLE, ctypes.c_int)
         self._gdi32.CombineRgn.restype = ctypes.c_int
         self._gdi32.DeleteObject.argtypes = (wintypes.HANDLE,)
@@ -947,6 +1016,15 @@ class CtypesOverlayHookAPI:
         topmost = -1 if style & _WS_EX_TOPMOST else -2
         flags = 0x0001 | 0x0002 | 0x0010 | 0x0020  # NOSIZE, NOMOVE, NOACTIVATE, FRAMECHANGED
         self._user32.SetWindowPos(hwnd, topmost, 0, 0, 0, 0, flags)
+
+    def get_owner(self, hwnd: int) -> int:
+        return int(self._get_long(hwnd, _GWLP_HWNDPARENT))
+
+    def set_owner(self, hwnd: int, owner: int) -> None:
+        ctypes.set_last_error(0)
+        result = self._set_long(hwnd, _GWLP_HWNDPARENT, owner)
+        if not result and ctypes.get_last_error():
+            raise ctypes.WinError(ctypes.get_last_error())
 
     def install_window_procedure(self, hwnd: int, callback: Callable[[int, int, int, int], int]) -> object:
         native = self._wndproc_type(callback)
@@ -1002,14 +1080,16 @@ class CtypesOverlayHookAPI:
 
     def set_window_region(self, hwnd: int, regions: tuple[Rect, ...]) -> None:
         regions = window_relative_regions(regions, self._client_window_offset(hwnd))
+        corner_diameters = native_region_corner_diameters(regions)
         combined = self._gdi32.CreateRectRgn(0, 0, 0, 0)
         if not combined:
             raise ctypes.WinError(ctypes.get_last_error())
         transferred = False
         try:
-            for rectangle in regions:
-                part = self._gdi32.CreateRectRgn(
+            for rectangle, diameter in zip(regions, corner_diameters):
+                part = self._gdi32.CreateRoundRectRgn(
                     rectangle.x, rectangle.y, rectangle.right, rectangle.top,
+                    diameter, diameter,
                 )
                 if not part:
                     raise ctypes.WinError(ctypes.get_last_error())
@@ -1030,10 +1110,13 @@ class CtypesOverlayHookAPI:
             raise ctypes.WinError(ctypes.get_last_error())
 
     def _set_native_visibility(self, hwnd: int, visible: bool) -> None:
-        flags = _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOACTIVATE
+        flags = _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE
+        insert_after = -1 if visible else 0  # HWND_TOPMOST for every visible refresh.
+        if not visible:
+            flags |= _SWP_NOZORDER
         flags |= _SWP_SHOWWINDOW if visible else _SWP_HIDEWINDOW
         ctypes.set_last_error(0)
-        if not self._user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, flags):
+        if not self._user32.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, flags):
             raise ctypes.WinError(ctypes.get_last_error())
         if bool(self._user32.IsWindowVisible(hwnd)) is not visible:
             requested = "visible" if visible else "hidden"
@@ -1048,6 +1131,14 @@ class CtypesOverlayHookAPI:
     def activate_window(self, hwnd: int) -> None:
         # Windows may reject foreground activation under its focus-stealing rules.
         # The style transition remains valid, so activation is intentionally best effort.
+        self._user32.SetForegroundWindow(hwnd)
+
+    def activate_overlay(self, hwnd: int, game_hwnd: int) -> None:
+        # Keep Word Factori immediately behind the keyboard-active overlay. If
+        # another application was previously above the game, activating the
+        # tool window alone would expose that application around the panel.
+        flags = _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE
+        self._user32.SetWindowPos(game_hwnd, 0, 0, 0, 0, 0, flags)  # HWND_TOP
         self._user32.SetForegroundWindow(hwnd)
 
     def call_original(self, original: object | None, hwnd: int, message: int, wparam: int, lparam: int) -> int:
@@ -1101,6 +1192,8 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
     validated = validated_renderer_config(config)
     if not validated["enabled"]:
         return
+    if os.name == "nt" and not enable_overlay_dpi_awareness():
+        raise RuntimeError("per-monitor DPI awareness is unavailable")
     try:
         tracker = Win32WindowTracker()
     except Exception:
@@ -1112,7 +1205,10 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
     from kivy.config import Config
 
     Config.set("graphics", "borderless", "1")
-    Config.set("graphics", "resizable", "0")
+    # Borderless keeps the player from resizing the overlay directly, while
+    # SDL's resizable surface must remain enabled so programmatic game-window
+    # tracking expands the layered hit surface beyond its initial 800x600.
+    Config.set("graphics", "resizable", "1")
     Config.set("graphics", "multisamples", "0")
     from kivy.app import App
     from kivy.clock import Clock
@@ -1259,15 +1355,20 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
 
     class ChatMessageRow(BoxLayout):
         def __init__(self, row: Mapping[str, object], **kwargs: object) -> None:
-            super().__init__(orientation="horizontal", size_hint_y=None, height=dp(62), padding=(dp(8), dp(5)), spacing=dp(8), **kwargs)
+            super().__init__(orientation="horizontal", size_hint_y=None, height=dp(76), padding=(dp(8), dp(5)), spacing=dp(8), **kwargs)
             presentation = present_client_message(row)
             self.add_widget(Label(text=presentation.icon, font_name=font_name, font_size=dp(18), size_hint_x=None, width=dp(28), color=(0.39, 0.74, 1, 1)))
-            details = fitted_label(
+            details = Label(
                 text=f"{presentation.label} • {presentation.metadata}\n{presentation.text}",
                 font_name=font_name, font_size=dp(13), color=(0.96, 0.98, 1, 1),
                 halign="left", valign="middle",
             )
+            details.bind(width=lambda instance, value: setattr(instance, "text_size", (value, None)))
+            details.bind(texture_size=lambda _instance, value: self.resize_for_texture(value[1]))
             self.add_widget(details)
+
+        def resize_for_texture(self, texture_height: float) -> None:
+            self.height = dp(row_height_for_texture(texture_height))
 
     class SubmitInput(TextInput):
         """Enter submits; Shift+Enter inserts a newline for chat."""
@@ -1667,7 +1768,11 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 self.root_layout.disabled = not shown
             if not shown:
                 self.geometry = None
-            if state is None:
+            # A minimized Win32 window reports a small sentinel rectangle near
+            # (-32000, -32000). Never feed that rectangle into SDL: moving an
+            # owned Kivy window there can transiently create a zero-sized mouse
+            # surface and terminate the cosmetic renderer.
+            if state is None or not state.visible:
                 if self.last_focus is not False:
                     self.send_action("focus-lost")
                     self.last_focus = False

@@ -80,7 +80,8 @@ def mod_is_selected(payload: Mapping[str, object], expected_folder: str) -> bool
     expected = ntpath.normcase(ntpath.normpath(expected_folder))
     if ntpath.isabs(actual):
         return actual == expected
-    return actual == ntpath.basename(expected)
+    owned_name = ntpath.basename(expected)
+    return actual in {owned_name, ntpath.join("mods", owned_name)}
 
 
 def parse_connection_url(value: str) -> tuple[str, str | None, str | None]:

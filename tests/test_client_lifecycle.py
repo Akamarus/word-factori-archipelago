@@ -374,6 +374,38 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         fallback.assert_awaited_once_with(True)
         self.assertNotEqual("password", self.ctx.overlay_state.active_view.value)
 
+    async def test_renderer_failure_after_password_prompt_uses_standard_fallback(self):
+        self.ctx.password = None
+        with patch.object(_CommonContext, "server_auth", AsyncMock()) as fallback:
+            task = asyncio.create_task(self.ctx.server_auth(password_requested=True))
+            await asyncio.sleep(0)
+            self.assertEqual("password", self.ctx.overlay_state.active_view.value)
+
+            self.overlay.disabled = True
+            await asyncio.wait_for(task, timeout=0.75)
+
+        fallback.assert_awaited_once_with(True)
+        self.assertNotEqual("password", self.ctx.overlay_state.active_view.value)
+
+    async def test_standard_password_fallback_sends_exactly_one_connect(self):
+        self.ctx.password = None
+        self.overlay.publish_succeeds = False
+
+        async def standard_auth(password_requested):
+            await self.ctx.get_username()
+            await self.ctx.send_connect()
+
+        with (
+            patch.object(_CommonContext, "server_auth", AsyncMock(side_effect=standard_auth)) as fallback,
+            patch.object(self.ctx, "get_username", AsyncMock()) as username,
+            patch.object(self.ctx, "send_connect", AsyncMock()) as connect,
+        ):
+            await self.ctx.server_auth(password_requested=True)
+
+        fallback.assert_awaited_once_with(True)
+        username.assert_awaited_once_with()
+        connect.assert_awaited_once_with()
+
     async def test_stale_full_client_intent_is_ignored(self):
         with patch.object(self.ctx, "connect", AsyncMock()) as connect:
             await self.ctx.handle_overlay_intent(ConnectIntent(

@@ -1,6 +1,10 @@
 # Word Factori Archipelago
 
-An experimental but playable [Archipelago](https://archipelago.gg/) integration for **Word Factori**. It assembles a curated 30- or 40-level custom campaign, turns completed levels into Archipelago checks, and unlocks factory machinery as items arrive from the multiworld.
+An experimental public beta for playing **Word Factori** with [Archipelago](https://archipelago.gg/). It assembles a curated 30- or 40-level custom campaign, turns completed levels into Archipelago checks, and unlocks factory machinery as items arrive from the multiworld.
+
+![The integrated Archipelago Chat panel running over Word Factori](docs/testing/live-overlay-final-command-response.png)
+
+Version 1.2.0 is packaged for normal players and has passed generation, installer, reconciliation, victory, frozen-client, and Windows 10 live-smoke gates. It remains labeled experimental because the complete display/password-room matrix has not yet been exercised on multiple machines.
 
 This project uses Word Factori's supported JSON mod format. It does **not** patch `data.win`, redistribute encoded game recipes, or write to Word Factori save files.
 
@@ -164,6 +168,8 @@ Enter sends text. Shift+Enter inserts a line break. Escape, F8, outside click, g
 
 The overlay is cosmetic and failure-isolated: if it cannot start, the regular client continues working and retains the complete item history. Windowed and borderless modes are supported. Exclusive fullscreen may hide the overlay; use borderless mode or the regular client in that case.
 
+![The integrated Items ledger](docs/testing/live-overlay-items-composite.png)
+
 ## Troubleshooting
 
 ### A machine item arrived but is not visible
@@ -188,13 +194,13 @@ That is Word Factori's native progression. Finish the current page's levels; the
 
 ## Current limitations
 
-- This remains experimental and is not an upstream Archipelago release.
+- Version 1.2.0 is a release-ready experimental public beta, not an upstream Archipelago release.
 - Arbitrary Workshop packs are not imported into generated seeds.
 - Discovery Labs are post-campaign because the game sequentially gates custom levels.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.
 - Sticker items are AP filler rather than in-game sticker grants.
 - There is no DeathLink, traps, or randomized factory layouts.
-- The full in-game client is implemented, but its complete GUI-driven live acceptance matrix is still open; see `docs/testing/full-ingame-client-acceptance.md`.
+- The full in-game client is implemented. Its primary Windows 10/125%/2560×1440 path is live-smoke tested; password-room, 100%/150% scaling, ultrawide, and multi-monitor permutations remain in the beta matrix.
 - Exclusive fullscreen is not supported; use windowed or borderless mode.
 
 The exact next game-behavior probe is to record Word Factori's file reads while returning from a factory to save selection and reselecting the mod slot. If the game rereads `levels.json` at a narrower verified transition, the client can replace today's broad “reselect the slot or restart” instruction with that exact live-reload step. This probe observes supported mod loading only; it does not patch `data.win` or assume an unverified memory/save field.

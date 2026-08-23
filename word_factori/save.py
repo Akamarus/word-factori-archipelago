@@ -12,11 +12,26 @@ class ActiveSlot:
     beaten_levels: frozenset[int]
 
 
+def _matches_previous_save(key: str, slot: dict) -> bool:
+    previous = slot.get("previous_save")
+    if isinstance(previous, bool) or not isinstance(previous, (int, float)):
+        return False
+    try:
+        numeric_key = int(key)
+        return str(numeric_key) == key and int(previous) == numeric_key and previous == numeric_key
+    except (OverflowError, ValueError):
+        return False
+
+
 def parse_active_slot(payload: dict) -> ActiveSlot:
     slots = payload.get("slots")
     if not isinstance(slots, dict):
         raise ValueError("save has no slots object")
     active = [(str(key), slot) for key, slot in slots.items() if slot.get("slot_is_active") == 1]
+    if len(active) > 1:
+        selected = [(key, slot) for key, slot in active if _matches_previous_save(key, slot)]
+        if len(selected) == 1:
+            active = selected
     if len(active) != 1:
         raise ValueError(f"expected exactly one active slot, found {len(active)}")
     key, slot = active[0]
