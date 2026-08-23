@@ -10,6 +10,7 @@ from word_factori.overlay_renderer import (
     HTCLIENT,
     HTTRANSPARENT,
     ChildActionWriter,
+    CtypesOverlayHookAPI,
     KeyPressState,
     MOD_NOREPEAT,
     NativeHookBootstrap,
@@ -120,6 +121,39 @@ class WindowTrackerTests(unittest.TestCase):
 
 
 class RendererBoundaryTests(unittest.TestCase):
+    def test_production_visibility_adapter_uses_verified_no_activate_show_and_hide(self):
+        user32 = FakeVisibilityUser32()
+        adapter = CtypesOverlayHookAPI.__new__(CtypesOverlayHookAPI)
+        adapter._user32 = user32
+
+        adapter.show_no_activate(77)
+        adapter.hide_window(77)
+
+        self.assertEqual([
+            (77, 0, 0, 0, 0, 0, 0x0057),
+            (77, 0, 0, 0, 0, 0, 0x0097),
+        ], user32.position_calls)
+        self.assertEqual([77, 77], user32.visibility_checks)
+
+    def test_production_visibility_adapter_raises_when_set_window_pos_fails(self):
+        user32 = FakeVisibilityUser32(set_position_result=False)
+        adapter = CtypesOverlayHookAPI.__new__(CtypesOverlayHookAPI)
+        adapter._user32 = user32
+
+        with self.assertRaises(OSError):
+            adapter.show_no_activate(77)
+
+    def test_production_visibility_adapter_raises_on_visibility_mismatch(self):
+        user32 = FakeVisibilityUser32(apply_visibility=False)
+        adapter = CtypesOverlayHookAPI.__new__(CtypesOverlayHookAPI)
+        adapter._user32 = user32
+
+        with self.assertRaisesRegex(OSError, "visible state"):
+            adapter.show_no_activate(77)
+        user32.visible = True
+        with self.assertRaisesRegex(OSError, "hidden state"):
+            adapter.hide_window(77)
+
     def test_hotkeys_are_gated_by_game_focus_and_ledger_state(self):
         api = FakeHookAPI()
         actions = []
@@ -511,6 +545,34 @@ class RendererBoundaryTests(unittest.TestCase):
         self.assertEqual(32, api.style)
         self.assertEqual([api.original], api.restored)
         self.assertEqual(set(), api.hotkeys)
+
+
+class FakeVisibilityUser32:
+    def __init__(self, *, set_position_result=True, apply_visibility=True):
+        self.set_position_result = set_position_result
+        self.apply_visibility = apply_visibility
+        self.visible = False
+        self.position_calls = []
+        self.visibility_checks = []
+        self.show_window_calls = []
+
+    def SetWindowPos(self, *arguments):
+        self.position_calls.append(arguments)
+        if self.set_position_result and self.apply_visibility:
+            flags = arguments[-1]
+            if flags & 0x0040:
+                self.visible = True
+            elif flags & 0x0080:
+                self.visible = False
+        return self.set_position_result
+
+    def IsWindowVisible(self, hwnd):
+        self.visibility_checks.append(hwnd)
+        return self.visible
+
+    def ShowWindow(self, hwnd, command):
+        self.show_window_calls.append((hwnd, command))
+        return False
 
 
 class FakeHookAPI:

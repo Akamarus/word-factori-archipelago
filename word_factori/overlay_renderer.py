@@ -39,6 +39,12 @@ _WS_EX_TOPMOST = 0x00000008
 _WS_EX_TOOLWINDOW = 0x00000080
 _WS_EX_LAYERED = 0x00080000
 _WS_EX_NOACTIVATE = 0x08000000
+_SWP_NOSIZE = 0x0001
+_SWP_NOMOVE = 0x0002
+_SWP_NOZORDER = 0x0004
+_SWP_NOACTIVATE = 0x0010
+_SWP_SHOWWINDOW = 0x0040
+_SWP_HIDEWINDOW = 0x0080
 _MAX_PIPE_MESSAGES_PER_TICK = 64
 _DEFAULT_HOOK_ATTEMPTS = 30  # Three seconds at the 100 ms tracking cadence.
 _DEFAULT_ACTION_CAPACITY = 64
@@ -704,8 +710,8 @@ class CtypesOverlayHookAPI:
         self._user32.RegisterHotKey.restype = wintypes.BOOL
         self._user32.UnregisterHotKey.argtypes = (wintypes.HWND, ctypes.c_int)
         self._user32.UnregisterHotKey.restype = wintypes.BOOL
-        self._user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
-        self._user32.ShowWindow.restype = wintypes.BOOL
+        self._user32.IsWindowVisible.argtypes = (wintypes.HWND,)
+        self._user32.IsWindowVisible.restype = wintypes.BOOL
         self._user32.GetCursorPos.argtypes = (ctypes.POINTER(wintypes.POINT),)
         self._user32.GetCursorPos.restype = wintypes.BOOL
         self._user32.GetAsyncKeyState.argtypes = (ctypes.c_int,)
@@ -816,11 +822,21 @@ class CtypesOverlayHookAPI:
         if not self._user32.SetWindowRgn(hwnd, None, True):
             raise ctypes.WinError(ctypes.get_last_error())
 
+    def _set_native_visibility(self, hwnd: int, visible: bool) -> None:
+        flags = _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOACTIVATE
+        flags |= _SWP_SHOWWINDOW if visible else _SWP_HIDEWINDOW
+        ctypes.set_last_error(0)
+        if not self._user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, flags):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if bool(self._user32.IsWindowVisible(hwnd)) is not visible:
+            requested = "visible" if visible else "hidden"
+            raise OSError(f"overlay window did not reach requested {requested} state")
+
     def show_no_activate(self, hwnd: int) -> None:
-        self._user32.ShowWindow(hwnd, 4)
+        self._set_native_visibility(hwnd, True)
 
     def hide_window(self, hwnd: int) -> None:
-        self._user32.ShowWindow(hwnd, 0)
+        self._set_native_visibility(hwnd, False)
 
     def call_original(self, original: object | None, hwnd: int, message: int, wparam: int, lparam: int) -> int:
         if original is None:
