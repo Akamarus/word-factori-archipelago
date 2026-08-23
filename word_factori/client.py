@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import json
 import os
 import re
@@ -52,6 +52,14 @@ CAMPAIGN_MISMATCH = (
     "Campaign mismatch: this Archipelago room requires a different Word Factori hybrid mod. "
     "Reinstall the release matching the room before scanning or completing levels."
 )
+
+
+@dataclass(frozen=True)
+class _DispatchItemSnapshot:
+    item: int
+    location: int
+    player: int
+    flags: int
 
 
 def _safe_filename(value: str) -> str:
@@ -130,7 +138,7 @@ class WordFactoriContext(CommonContext):
             save_state(self.state_path(), self.bridge_state)
             self.last_render_signature = None
             asyncio.create_task(self._connected_reconcile(
-                self.connected_identity, tuple(self.items_received),
+                self.connected_identity, self._snapshot_dispatch_items(self.items_received),
                 frozenset(self.checked_locations),
             ))
             asyncio.create_task(self._resend_pending_checks())
@@ -138,11 +146,12 @@ class WordFactoriContext(CommonContext):
                 asyncio.create_task(self._send_goal())
         elif cmd == "ReceivedItems":
             asyncio.create_task(self._received_items_reconcile(
-                self.connected_identity, tuple(self.items_received),
+                self.connected_identity, self._snapshot_dispatch_items(self.items_received),
             ))
         elif cmd == "LocationInfo" and self.connected_identity is not None:
             asyncio.create_task(self._backfill_location_info_safely(
-                self.connected_identity, tuple(args.get("locations") or ()),
+                self.connected_identity,
+                self._snapshot_dispatch_items(args.get("locations") or ()),
                 frozenset(self.checked_locations),
             ))
         elif cmd == "RoomUpdate":
@@ -160,6 +169,20 @@ class WordFactoriContext(CommonContext):
 
     def current_identity(self) -> str:
         return state_identity(self.room_seed_name, self.team, self.slot, self.auth)
+
+    def _snapshot_dispatch_item(self, item) -> _DispatchItemSnapshot:
+        return _DispatchItemSnapshot(
+            int(item.item), int(item.location), int(item.player), int(item.flags),
+        )
+
+    def _snapshot_dispatch_items(self, items) -> tuple[_DispatchItemSnapshot, ...]:
+        snapshots = []
+        for item in items:
+            try:
+                snapshots.append(self._snapshot_dispatch_item(item))
+            except (AttributeError, TypeError, ValueError) as error:
+                logger.warning("Ignoring malformed dispatch item metadata: %s", error)
+        return tuple(snapshots)
 
     def _lookup_item_name(self, item_id: int) -> str:
         try:

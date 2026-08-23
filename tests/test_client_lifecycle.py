@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from dataclasses import FrozenInstanceError
 import json
 import logging
 import os
@@ -307,6 +308,69 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((), self.ctx.dispatch_ledger.events)
         self.assertEqual((), self.ctx.pending_overlay_events)
         self.assertFalse(new_room_path.exists())
+
+    def test_dispatch_item_snapshot_copies_and_freezes_all_packet_fields(self):
+        item = make_network_item(item=7001, location=9001, player=2, flags=1)
+
+        snapshot = self.ctx._snapshot_dispatch_item(item)
+        item.item = 8001
+        item.location = 9002
+        item.player = 3
+        item.flags = 0
+
+        self.assertEqual((7001, 9001, 2, 1), (
+            snapshot.item, snapshot.location, snapshot.player, snapshot.flags,
+        ))
+        with self.assertRaises(FrozenInstanceError):
+            snapshot.flags = 0
+
+    async def test_delayed_received_items_use_callback_time_item_values(self):
+        item = make_network_item(item=7001, location=9001, player=2, flags=1)
+        self.ctx.items_received = [item]
+        lock = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = lock
+        task = self.capture_scheduled_task(lambda: self.ctx.on_package(
+            "ReceivedItems", {"index": 0, "items": (item,)},
+        ))
+        await lock.entered.wait()
+
+        item.item = 8001
+        item.location = 9002
+        item.player = 3
+        item.flags = 0
+        lock.proceed.set()
+        await task
+
+        event = self.ctx.dispatch_ledger.events[0]
+        self.assertEqual((7001, 9001, 2), (
+            event.item_id, event.location_id, event.other_slot,
+        ))
+
+    async def test_delayed_location_info_uses_callback_time_item_values(self):
+        original_location = LOCATIONS[0].code
+        changed_location = LOCATIONS[1].code
+        self.ctx.checked_locations = {original_location, changed_location}
+        item = make_network_item(
+            item=7001, location=original_location, player=2, flags=1,
+        )
+        lock = _ControlledAsyncLock()
+        self.ctx._dispatch_lock = lock
+        task = self.capture_scheduled_task(lambda: self.ctx.on_package(
+            "LocationInfo", {"locations": (item,)},
+        ))
+        await lock.entered.wait()
+
+        item.item = 8001
+        item.location = changed_location
+        item.player = 3
+        item.flags = 0
+        lock.proceed.set()
+        await task
+
+        event = self.ctx.dispatch_ledger.events[0]
+        self.assertEqual((7001, original_location, 2), (
+            event.item_id, event.location_id, event.other_slot,
+        ))
 
     async def test_item_send_self_item_waits_for_authoritative_receive(self):
         self.ctx.on_print_json(item_send_packet(
