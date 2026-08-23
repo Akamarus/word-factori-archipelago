@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from dataclasses import dataclass, replace
 import json
 import os
@@ -38,6 +39,14 @@ from .client_core import (
     resolve_game_slot_binding,
     state_identity,
     utc_observed_at,
+)
+from .client_messages import (
+    ClientMessageKind,
+    ClientNotice,
+    ClientTranscript,
+    append_message,
+    make_client_message,
+    normalize_print_json,
 )
 from .data import GAME, ITEM_NAME_TO_ID, LOCATIONS
 from .dispatch import DispatchDirection, DispatchEvent, received_event, sent_event
@@ -79,6 +88,10 @@ def _safe_filename(value: str) -> str:
 
 class WordFactoriCommandProcessor(ClientCommandProcessor):
     ctx: "WordFactoriContext"
+
+    def output(self, text: str) -> None:
+        super().output(text)
+        self.ctx.record_command_output(text)
 
     def _cmd_wf_complete(self, identifier: str = "") -> None:
         """Manually report a completed level by 1-based number, target word, or location name."""
@@ -148,6 +161,9 @@ class WordFactoriContext(CommonContext):
             getattr(self.overlay, "session_generation", 0),
         )
         self._overlay_password_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=1)
+        self.transcript = ClientTranscript.empty()
+        self.client_notices: tuple[ClientNotice, ...] = ()
+        self._client_message_sequence = 0
 
     @property
     def last_overlay_error(self) -> str | None:
@@ -213,7 +229,15 @@ class WordFactoriContext(CommonContext):
                 self._overlay_warning(f"overlay shutdown failed: {error}")
 
     def on_package(self, cmd: str, args: dict) -> None:
-        if cmd == "RoomInfo":
+        if cmd == "ConnectionRefused":
+            self._set_overlay_connection_status("error")
+            self.record_client_notice(
+                "connection-refused",
+                "error",
+                "The server refused the connection. Check the address, slot, password, game, and client version.",
+                "Review connection details",
+            )
+        elif cmd == "RoomInfo":
             seed_name = args.get("seed_name")
             self.room_seed_name = str(seed_name) if seed_name is not None else None
         elif cmd == "Connected":
@@ -652,6 +676,20 @@ class WordFactoriContext(CommonContext):
 
     def on_print_json(self, args: dict) -> None:
         super().on_print_json(args)
+        if args.get("type") in {"Chat", "Hint"}:
+            try:
+                rendered = self.jsontotextparser(copy.deepcopy(args.get("data", [])))
+                message = normalize_print_json(
+                    args,
+                    rendered=rendered,
+                    observed_at=utc_observed_at(),
+                    sequence=self._client_message_sequence,
+                )
+                self._client_message_sequence += 1
+                self.transcript = append_message(self.transcript, message)
+                self.publish_overlay(self.connected_identity)
+            except Exception:
+                logger.exception("Client message could not be presented; standard output remains active.")
         if args.get("type") != "ItemSend" or self.connected_identity is None:
             return
         item = args.get("item")
@@ -664,6 +702,36 @@ class WordFactoriContext(CommonContext):
             self.record_item_send(args, self.connected_identity)
         except Exception:
             logger.exception("Dispatch packet could not be recorded; standard client output remains active.")
+
+    def record_command_output(self, text: str) -> None:
+        try:
+            message = make_client_message(
+                ClientMessageKind.COMMAND,
+                text,
+                utc_observed_at(),
+                sequence=self._client_message_sequence,
+            )
+        except ValueError:
+            return
+        self._client_message_sequence += 1
+        self.transcript = append_message(self.transcript, message)
+        self.publish_overlay(self.connected_identity)
+
+    def record_client_notice(
+        self, code: str, severity: str, text: str, action: str | None = None,
+    ) -> None:
+        notice = ClientNotice(code, severity, text, action)
+        self.client_notices = (self.client_notices + (notice,))[-20:]
+        kind = ClientMessageKind.ERROR if severity == "error" else ClientMessageKind.SYSTEM
+        message = make_client_message(
+            kind,
+            text,
+            utc_observed_at(),
+            sequence=self._client_message_sequence,
+        )
+        self._client_message_sequence += 1
+        self.transcript = append_message(self.transcript, message)
+        self.publish_overlay(self.connected_identity)
 
     def network_items(self) -> list[ReceivedItem]:
         received = [ReceivedItem(-1, "Bender Access")]
@@ -843,6 +911,7 @@ class WordFactoriContext(CommonContext):
         try:
             published = self.overlay.publish(snapshot(
                 self.overlay_state, self.dispatch_ledger, self.overlay_preferences,
+                self.transcript, self.client_notices,
                 generation=self._presentation_generation,
             ))
         except Exception as error:

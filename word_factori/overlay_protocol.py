@@ -14,7 +14,9 @@ PROTOCOL_VERSION = 2
 LEGACY_PROTOCOL_VERSION = 1
 _PARENT_TYPES = frozenset(("snapshot", "settings", "shutdown"))
 _SNAPSHOT_FIELDS = frozenset(OverlaySnapshot.__dataclass_fields__)
-_V1_SNAPSHOT_FIELDS = _SNAPSHOT_FIELDS - frozenset(("active_view", "accepts_keyboard"))
+_V1_SNAPSHOT_FIELDS = _SNAPSHOT_FIELDS - frozenset((
+    "active_view", "accepts_keyboard", "transcript_rows", "notice_rows",
+))
 _SETTINGS_FIELDS = frozenset((
     "enabled", "interface_scale", "left_offset", "notification_duration", "reduced_motion", "max_visible",
 ))
@@ -22,6 +24,8 @@ _EVENT_FIELDS = frozenset((
     "key", "direction", "item_id", "item_name", "other_slot", "other_player", "other_game",
     "location_id", "location_name", "receive_index", "observed_at", "historical",
 ))
+_MESSAGE_FIELDS = frozenset(("key", "kind", "text", "sender_slot", "observed_at"))
+_NOTICE_FIELDS = frozenset(("code", "severity", "text", "action"))
 
 
 @dataclass(frozen=True)
@@ -176,6 +180,26 @@ def _validate_event_row(value: object) -> None:
     _require_bool(row["historical"], "historical")
 
 
+def _validate_message_row(value: object) -> None:
+    row = _require_exact_keys(value, _MESSAGE_FIELDS, "message")
+    for field in ("key", "text", "observed_at"):
+        _require_text(row[field], field)
+    if row["kind"] not in ("chat", "hint", "command", "error"):
+        raise ValueError("message kind is invalid")
+    if row["sender_slot"] is not None:
+        _require_int(row["sender_slot"], "sender_slot", minimum=0)
+
+
+def _validate_notice_row(value: object) -> None:
+    row = _require_exact_keys(value, _NOTICE_FIELDS, "notice")
+    for field in ("code", "text"):
+        _require_text(row[field], field)
+    if row["severity"] not in ("info", "warning", "error"):
+        raise ValueError("notice severity is invalid")
+    if row["action"] is not None:
+        _require_text(row["action"], "action")
+
+
 def _validate_settings_payload(payload: dict[str, object]) -> None:
     _require_bool(payload["enabled"], "enabled")
     _require_number(payload["interface_scale"], "interface_scale", 0.75, 2.0)
@@ -225,6 +249,14 @@ def _validate_parent(
         if checked["active_view"] not in ("items", "chat", "connect", "password"):
             raise ValueError("active_view is invalid")
         _require_bool(checked["accepts_keyboard"], "accepts_keyboard")
+        for field, validator in (
+            ("transcript_rows", _validate_message_row),
+            ("notice_rows", _validate_notice_row),
+        ):
+            if not isinstance(checked[field], list):
+                raise ValueError(f"{field} must be an array")
+            for row in checked[field]:
+                validator(row)
     return kind, checked
 
 

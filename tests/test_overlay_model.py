@@ -5,6 +5,12 @@ import tempfile
 from unittest import mock
 
 from word_factori.dispatch import DispatchDirection, DispatchEvent
+from word_factori.client_messages import (
+    ClientMessage,
+    ClientMessageKind,
+    ClientNotice,
+    ClientTranscript,
+)
 from word_factori.overlay_model import (
     OverlayAction,
     OverlayFilter,
@@ -25,6 +31,19 @@ def make_event(index: int, direction: DispatchDirection = DispatchDirection.RECE
 
 
 class OverlayReducerTests(unittest.TestCase):
+    def test_snapshot_presents_chat_command_error_and_notice_rows(self):
+        transcript = ClientTranscript((
+            ClientMessage("chat:1", ClientMessageKind.CHAT, "hello", 2, "now"),
+            ClientMessage("system:2", ClientMessageKind.SYSTEM, "joined", None, "now"),
+            ClientMessage("command:3", ClientMessageKind.COMMAND, "ready", None, "now"),
+        ))
+        notice = ClientNotice("save-mismatch", "error", "Return to the bound save.")
+
+        current = snapshot(OverlayState.closed(), transcript=transcript, notices=(notice,))
+
+        self.assertEqual(["chat", "command"], [row.kind for row in current.transcript_rows])
+        self.assertEqual("save-mismatch", current.notice_rows[0].code)
+
     def test_keyboard_focus_exists_only_in_open_input_views(self):
         state = OverlayState.closed()
         self.assertFalse(snapshot(state).accepts_keyboard)
@@ -228,8 +247,8 @@ class OverlayProtocolTests(unittest.TestCase):
         self.assertEqual(OverlayAction("open", generation=7), decode_child_action(encoded))
 
         legacy_payload = dict(snapshot_message(snapshot(OverlayState.closed())).payload)
-        del legacy_payload["active_view"]
-        del legacy_payload["accepts_keyboard"]
+        for field in ("active_view", "accepts_keyboard", "transcript_rows", "notice_rows"):
+            del legacy_payload[field]
         legacy_snapshot = json.dumps({
             "version": 1, "type": "snapshot", "payload": legacy_payload,
         })

@@ -93,6 +93,13 @@ class _CommonContext:
     def on_print_json(self, args):
         self.print_json_calls.append(args)
 
+    def jsontotextparser(self, data):
+        return "".join(
+            str(part.get("text", ""))
+            for part in data
+            if isinstance(part, dict)
+        )
+
     async def shutdown(self):
         return None
 
@@ -194,6 +201,7 @@ sys.modules.setdefault("NetUtils", net_utils)
 
 from word_factori.client import WordFactoriCommandProcessor, WordFactoriContext
 from word_factori.bridge import BridgeState
+from word_factori.client_messages import ClientMessageKind
 from word_factori.data import (
     CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, ITEM_NAME_TO_ID, LOCATIONS,
 )
@@ -375,6 +383,47 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(live.historical)
         self.assertIsNotNone(live.observed_at)
         self.assertIsNotNone(datetime.fromisoformat(live.observed_at.replace("Z", "+00:00")).tzinfo)
+
+    def test_print_json_reaches_standard_log_and_overlay_transcript(self):
+        packet = {
+            "type": "Chat",
+            "slot": 2,
+            "data": [{"text": "Alex: "}, {"text": "hello"}],
+        }
+
+        self.ctx.on_print_json(packet)
+
+        self.assertEqual([packet], self.ctx.print_json_calls)
+        message = self.ctx.transcript.messages[-1]
+        self.assertIs(ClientMessageKind.CHAT, message.kind)
+        self.assertEqual("Alex: hello", message.text)
+        self.assertEqual("chat", self.overlay.published[-1].transcript_rows[-1].kind)
+
+    async def test_item_send_is_not_duplicated_into_chat_transcript(self):
+        self.ctx.on_print_json(item_send_packet(
+            source=1, receiving=2, location=LOCATIONS[0].code,
+        ))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        self.assertEqual((), self.ctx.transcript.messages)
+
+    def test_command_output_reaches_standard_output_and_chat_view(self):
+        processor = WordFactoriCommandProcessor(self.ctx)
+
+        processor._cmd_wf_status()
+
+        self.assertIn("AP mod", processor.outputs[-1])
+        self.assertIs(ClientMessageKind.COMMAND, self.ctx.transcript.messages[-1].kind)
+        self.assertEqual(processor.outputs[-1], self.ctx.transcript.messages[-1].text)
+
+    def test_connection_refusal_adds_actionable_notice_without_raw_secret(self):
+        self.ctx.on_package("ConnectionRefused", {"errors": ["InvalidPassword"]})
+
+        notice = self.ctx.client_notices[-1]
+        self.assertEqual("connection-refused", notice.code)
+        self.assertEqual("error", notice.severity)
+        self.assertNotIn("InvalidPassword", notice.text)
 
     async def test_item_send_records_only_local_source_or_recipient(self):
         local_send = item_send_packet(source=1, receiving=2, location=LOCATIONS[0].code)

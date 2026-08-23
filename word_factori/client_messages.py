@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping
@@ -72,6 +73,26 @@ class ClientTranscript:
         return cls()
 
 
+@dataclass(frozen=True)
+class ClientNotice:
+    code: str
+    severity: str
+    text: str
+    action: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.code, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", self.code):
+            raise ValueError("client notice code is invalid")
+        if self.severity not in {"info", "warning", "error"}:
+            raise ValueError("client notice severity is invalid")
+        if self.text != _bounded_text(self.text):
+            raise ValueError("client notice text is too long")
+        if self.action is not None and (
+            not isinstance(self.action, str) or not self.action.strip() or len(self.action) > 256
+        ):
+            raise ValueError("client notice action is invalid")
+
+
 def _message_kind(packet_type: object) -> ClientMessageKind:
     if packet_type == "Chat":
         return ClientMessageKind.CHAT
@@ -104,6 +125,36 @@ def normalize_print_json(
         key=f"{kind.value}:{sequence}:{fingerprint}",
         kind=kind,
         text=text,
+        sender_slot=sender,
+        observed_at=observed_at,
+    )
+
+
+def make_client_message(
+    kind: ClientMessageKind,
+    text: str,
+    observed_at: str,
+    *,
+    sequence: int,
+    sender_slot: int | None = None,
+) -> ClientMessage:
+    if not isinstance(kind, ClientMessageKind):
+        raise ValueError("client message kind is invalid")
+    if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
+        raise ValueError("client message sequence is invalid")
+    bounded = _bounded_text(text)
+    sender = _sender_slot(sender_slot)
+    if sender_slot is not None and sender is None:
+        raise ValueError("client message sender slot is invalid")
+    if not isinstance(observed_at, str) or not observed_at.strip():
+        raise ValueError("client message observed time cannot be blank")
+    fingerprint = hashlib.sha256(
+        f"{kind.value}\0{sender}\0{bounded}\0{observed_at}".encode("utf-8"),
+    ).hexdigest()[:16]
+    return ClientMessage(
+        key=f"{kind.value}:{sequence}:{fingerprint}",
+        kind=kind,
+        text=bounded,
         sender_slot=sender,
         observed_at=observed_at,
     )

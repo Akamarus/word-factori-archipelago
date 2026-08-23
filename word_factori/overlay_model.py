@@ -8,6 +8,7 @@ from typing import Iterable, Iterator, Mapping
 
 from .dispatch import DispatchDirection, DispatchEvent
 from .dispatch_store import DispatchLedger
+from .client_messages import ClientMessageKind, ClientNotice, ClientTranscript
 
 
 CONNECTION_STATUSES = frozenset((
@@ -181,6 +182,8 @@ class OverlaySnapshot:
     active_filter: str
     active_view: str
     accepts_keyboard: bool
+    transcript_rows: tuple[JsonObject, ...]
+    notice_rows: tuple[JsonObject, ...]
     connection_status: str
     reload_required: bool
     enabled: bool
@@ -211,6 +214,25 @@ def _event_row(event: DispatchEvent) -> JsonObject:
 def event_payload(event: DispatchEvent) -> JsonObject:
     """Expose the sole event-to-primitive conversion used by the overlay."""
     return _event_row(event)
+
+
+def _message_row(message: object) -> JsonObject:
+    return JsonObject({
+        "key": message.key,
+        "kind": message.kind.value,
+        "text": message.text,
+        "sender_slot": message.sender_slot,
+        "observed_at": message.observed_at,
+    })
+
+
+def _notice_row(notice: ClientNotice) -> JsonObject:
+    return JsonObject({
+        "code": notice.code,
+        "severity": notice.severity,
+        "text": notice.text,
+        "action": notice.action,
+    })
 
 
 def _filtered(events: Iterable[DispatchEvent], active_filter: OverlayFilter) -> Iterator[DispatchEvent]:
@@ -329,8 +351,15 @@ def apply_action(state: OverlayState, action: OverlayAction) -> OverlayState:
     raise AssertionError("validated action kind was not handled")
 
 
-def snapshot(state: OverlayState, ledger: DispatchLedger | Iterable[DispatchEvent] | None = None,
-             preferences: object | None = None, *, generation: int = 0) -> OverlaySnapshot:
+def snapshot(
+    state: OverlayState,
+    ledger: DispatchLedger | Iterable[DispatchEvent] | None = None,
+    preferences: object | None = None,
+    transcript: ClientTranscript | None = None,
+    notices: Iterable[ClientNotice] = (),
+    *,
+    generation: int = 0,
+) -> OverlaySnapshot:
     """Return a renderer-ready snapshot containing only JSON-compatible values."""
     if not isinstance(state, OverlayState):
         raise ValueError("overlay state is invalid")
@@ -350,6 +379,13 @@ def snapshot(state: OverlayState, ledger: DispatchLedger | Iterable[DispatchEven
         raise ValueError("overlay preferences are invalid")
     if preferences.max_visible != state.max_visible:
         raise ValueError("overlay state and preferences max_visible disagree")
+    if transcript is None:
+        transcript = ClientTranscript.empty()
+    if not isinstance(transcript, ClientTranscript):
+        raise ValueError("client transcript is invalid")
+    notice_values = tuple(notices)
+    if not all(isinstance(notice, ClientNotice) for notice in notice_values):
+        raise ValueError("client notices are invalid")
     visible = () if not state.is_focused else tuple(_event_row(event) for event in state.visible_notifications)
     return OverlaySnapshot(
         generation=generation,
@@ -362,6 +398,12 @@ def snapshot(state: OverlayState, ledger: DispatchLedger | Iterable[DispatchEven
         active_filter=state.active_filter.value,
         active_view=state.active_view.value,
         accepts_keyboard=state.input_focused,
+        transcript_rows=tuple(
+            _message_row(message)
+            for message in transcript.messages
+            if message.kind is not ClientMessageKind.SYSTEM
+        ),
+        notice_rows=tuple(_notice_row(notice) for notice in notice_values),
         connection_status=state.connection_status,
         reload_required=state.reload_required,
         enabled=preferences.enabled,

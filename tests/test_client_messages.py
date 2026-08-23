@@ -3,6 +3,7 @@ import unittest
 from word_factori.client_messages import (
     ClientMessage,
     ClientMessageKind,
+    ClientNotice,
     ClientTranscript,
     append_message,
     normalize_print_json,
@@ -88,6 +89,19 @@ class ClientMessageTests(unittest.TestCase):
             ClientMessage("", ClientMessageKind.CHAT, "hello", None, "now")
         with self.assertRaisesRegex(ValueError, "observed"):
             ClientMessage("key", ClientMessageKind.CHAT, "hello", None, "")
+
+    def test_notice_has_stable_safe_fields(self):
+        notice = ClientNotice(
+            code="connection-refused",
+            severity="error",
+            text="The server refused the connection.",
+            action="Check address and slot",
+        )
+        self.assertEqual("connection-refused", notice.code)
+        with self.assertRaisesRegex(ValueError, "code"):
+            ClientNotice("Invalid Code", "error", "message")
+        with self.assertRaisesRegex(ValueError, "severity"):
+            ClientNotice("invalid", "critical", "message")
 
     @staticmethod
     def make_message(index: int) -> ClientMessage:
