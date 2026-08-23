@@ -59,6 +59,8 @@ class _CommonContext:
         self.finished_game = False
         self.sent_messages = []
         self.print_json_calls = []
+        self.connect_calls = []
+        self.disconnect_calls = 0
         self.exit_event = asyncio.Event()
 
     async def get_username(self):
@@ -66,6 +68,15 @@ class _CommonContext:
 
     async def send_connect(self):
         return None
+
+    async def connect(self, address=None):
+        self.connect_calls.append(address)
+
+    async def disconnect(self, allow_autoreconnect=False):
+        self.disconnect_calls += 1
+
+    async def server_auth(self, password_requested=False):
+        return self.password
 
     async def send_msgs(self, messages):
         self.sent_messages.extend(messages)
@@ -190,6 +201,12 @@ from word_factori.dispatch import DispatchDirection
 from word_factori.dispatch_store import DispatchLedger, load_ledger, save_ledger
 from word_factori.overlay_model import OverlayAction, OverlayFilter, OverlayState, apply_action
 from word_factori.overlay_preferences import OverlayPreferences
+from word_factori.overlay_protocol import (
+    ConnectIntent,
+    DisconnectIntent,
+    PasswordIntent,
+    SubmitTextIntent,
+)
 from word_factori.overlay_supervisor import OverlayConfig
 
 
@@ -248,6 +265,80 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         created = asyncio.all_tasks() - before
         self.assertEqual(1, len(created))
         return created.pop()
+
+    async def test_overlay_connect_uses_common_context_connection_path(self):
+        intent = ConnectIntent(
+            "localhost:38281", "Factory", "room-password",
+            self.ctx._presentation_generation,
+        )
+        with patch.object(self.ctx, "connect", AsyncMock()) as connect:
+            await self.ctx.handle_overlay_intent(intent)
+
+        self.assertEqual("Factory", self.ctx.auth)
+        self.assertEqual("room-password", self.ctx.password)
+        connect.assert_awaited_once_with("localhost:38281")
+        self.assertEqual("connecting", self.ctx.overlay_state.connection_status)
+
+    async def test_overlay_disconnect_uses_common_disconnect(self):
+        intent = DisconnectIntent(self.ctx._presentation_generation)
+        with patch.object(self.ctx, "disconnect", AsyncMock()) as disconnect:
+            await self.ctx.handle_overlay_intent(intent)
+
+        disconnect.assert_awaited_once_with()
+
+    async def test_overlay_submit_routes_through_standard_command_processor(self):
+        submitted = []
+
+        class RecordingProcessor:
+            def __init__(processor_self, ctx):
+                processor_self.ctx = ctx
+
+            def __call__(processor_self, text):
+                submitted.append(text)
+
+        self.ctx.command_processor = RecordingProcessor
+        await self.ctx.handle_overlay_intent(SubmitTextIntent(
+            "hello team", self.ctx._presentation_generation,
+        ))
+        await self.ctx.handle_overlay_intent(SubmitTextIntent(
+            "/wf_status", self.ctx._presentation_generation,
+        ))
+
+        self.assertEqual(["hello team", "/wf_status"], submitted)
+
+    async def test_server_auth_requests_password_in_overlay_without_echoing_it(self):
+        self.ctx.password = None
+        task = asyncio.create_task(self.ctx.server_auth(password_requested=True))
+        await asyncio.sleep(0)
+
+        self.assertEqual("password", self.ctx.overlay_state.active_view.value)
+        self.assertFalse(task.done())
+        await self.ctx.handle_overlay_intent(PasswordIntent(
+            "secret", self.ctx._presentation_generation,
+        ))
+        await task
+
+        self.assertEqual("secret", self.ctx.password)
+        self.assertNotIn("secret", repr(self.overlay.published))
+
+    async def test_unavailable_password_prompt_uses_standard_client_fallback(self):
+        self.ctx.password = None
+        self.overlay.publish_succeeds = False
+
+        with patch.object(_CommonContext, "server_auth", AsyncMock()) as fallback:
+            await self.ctx.server_auth(password_requested=True)
+
+        fallback.assert_awaited_once_with(True)
+        self.assertNotEqual("password", self.ctx.overlay_state.active_view.value)
+
+    async def test_stale_full_client_intent_is_ignored(self):
+        with patch.object(self.ctx, "connect", AsyncMock()) as connect:
+            await self.ctx.handle_overlay_intent(ConnectIntent(
+                "localhost:38281", "Factory", None,
+                self.ctx._presentation_generation + 1,
+            ))
+
+        connect.assert_not_awaited()
 
     async def test_dispatch_received_items_are_idempotent_across_reconnect(self):
         first = make_network_item(item=7001, location=9001, player=2, flags=1)

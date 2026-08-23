@@ -48,6 +48,13 @@ from .dispatch_store import (
 from .mod import render_levels, write_levels
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
 from .overlay_preferences import load_preferences
+from .overlay_protocol import (
+    ConnectIntent,
+    DisconnectIntent,
+    OverlayIntent,
+    PasswordIntent,
+    SubmitTextIntent,
+)
 from .overlay_supervisor import OverlayConfig, OverlaySupervisor
 from .save import ActiveSlot, find_save, read_active_slot
 
@@ -140,6 +147,7 @@ class WordFactoriContext(CommonContext):
         self._overlay_session_generation = int(
             getattr(self.overlay, "session_generation", 0),
         )
+        self._overlay_password_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=1)
 
     @property
     def last_overlay_error(self) -> str | None:
@@ -166,7 +174,16 @@ class WordFactoriContext(CommonContext):
     async def server_auth(self, password_requested: bool = False) -> None:
         self._set_overlay_connection_status("authenticating")
         if password_requested and not self.password:
-            await super().server_auth(password_requested)
+            prompted = False
+            if self.overlay_preferences.enabled and not bool(getattr(self.overlay, "disabled", False)):
+                prompted = await self._apply_local_overlay_action(OverlayAction("request-password"))
+                prompted = prompted and self.publish_overlay(self.connected_identity)
+            if prompted:
+                self.password = await self._overlay_password_queue.get()
+            else:
+                await self._apply_local_overlay_action(OverlayAction("open-items"))
+                await self._apply_local_overlay_action(OverlayAction("close"))
+                await super().server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
 
@@ -922,16 +939,57 @@ class WordFactoriContext(CommonContext):
         self.publish_overlay(self.connected_identity)
         return True
 
-    async def _apply_child_overlay_action(self, action: OverlayAction) -> None:
-        if action.generation != self._presentation_generation:
-            return
-        identity = self.connected_identity
-        connection_generation = self._connection_generation
-        await self._apply_overlay_action(
-            action, expected_identity=identity,
-            expected_connection_generation=connection_generation,
-            expected_presentation_generation=action.generation,
-        )
+    async def handle_overlay_intent(self, intent: OverlayIntent) -> bool:
+        """Route one validated renderer intent through parent-side client APIs."""
+        if not isinstance(intent, (
+            OverlayAction, ConnectIntent, DisconnectIntent, SubmitTextIntent, PasswordIntent,
+        )):
+            raise ValueError("overlay intent is invalid")
+        if intent.generation != self._presentation_generation:
+            return False
+        if isinstance(intent, OverlayAction):
+            identity = self.connected_identity
+            if identity is None:
+                return await self._apply_overlay_action(
+                    intent,
+                    expected_presentation_generation=intent.generation,
+                )
+            return await self._apply_overlay_action(
+                intent,
+                expected_identity=identity,
+                expected_connection_generation=self._connection_generation,
+                expected_presentation_generation=intent.generation,
+            )
+        if isinstance(intent, ConnectIntent):
+            self.auth = intent.slot.strip()
+            self.password = intent.password or None
+            self._set_overlay_connection_status("connecting")
+            try:
+                await self.connect(intent.address.strip())
+            except Exception as error:
+                self._set_overlay_connection_status("error")
+                await self._apply_local_overlay_action(OverlayAction("submit-failed"))
+                logger.warning(
+                    "In-game connection request failed (%s); regular client remains active.",
+                    type(error).__name__,
+                )
+                return False
+            return True
+        if isinstance(intent, DisconnectIntent):
+            await self.disconnect()
+            self._set_overlay_connection_status("disconnected")
+            return True
+        if isinstance(intent, SubmitTextIntent):
+            self.command_processor(self)(intent.text)
+            return True
+        if self._overlay_password_queue.full():
+            self._overlay_password_queue.get_nowait()
+        self._overlay_password_queue.put_nowait(intent.password)
+        await self._apply_local_overlay_action(OverlayAction("submit-started"))
+        return True
+
+    async def _apply_child_overlay_action(self, action: OverlayIntent) -> None:
+        await self.handle_overlay_intent(action)
 
     async def _apply_local_overlay_action(self, action: OverlayAction) -> bool:
         identity = self.connected_identity
