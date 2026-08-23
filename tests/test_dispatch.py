@@ -1,6 +1,19 @@
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
 from word_factori.dispatch import DispatchDirection, DispatchEvent, received_event, sent_event
+
+
+def make_received(index: int, *, self_item: bool = False) -> DispatchEvent:
+    return received_event("room", index, index + 1, f"Received {index}", 2, "Alex", "Game",
+                          index + 100, f"Location {index}", None, self_item)
+
+
+def make_sent(index: int, *, self_item: bool = False) -> DispatchEvent:
+    return sent_event("room", index + 100, index + 1, f"Sent {index}", 3, "Sam", "Game",
+                      f"Location {index}", self_item, None)
 
 
 class DispatchEventTests(unittest.TestCase):
@@ -51,6 +64,84 @@ class DispatchEventTests(unittest.TestCase):
             received_event("room", 0, 1, "Item", 2, "Alex", "Game", -3, "Location", None)
         with self.assertRaisesRegex(ValueError, "slot"):
             sent_event("room", 3, 1, "Item", -2, "Alex", "Game", "Location", False, None)
+
+
+class DispatchLedgerTests(unittest.TestCase):
+    def test_first_authoritative_sync_is_historical_and_silent(self):
+        from word_factori.dispatch_store import DispatchLedger, reconcile_received
+        events = (make_received(0), make_received(1))
+        update = reconcile_received(DispatchLedger.empty("room"), events)
+        self.assertEqual(update.historical_count, 2)
+        self.assertEqual(update.notify, ())
+        self.assertTrue(update.state.initialized)
+
+    def test_incremental_receive_notifies_once(self):
+        from word_factori.dispatch_store import DispatchLedger, reconcile_received
+        first = reconcile_received(DispatchLedger.empty("room"), (make_received(0),)).state
+        update = reconcile_received(first, (make_received(0), make_received(1)))
+        self.assertEqual(tuple(event.receive_index for event in update.notify), (1,))
+        again = reconcile_received(update.state, (make_received(0), make_received(1)))
+        self.assertEqual(again.notify, ())
+
+    def test_record_event_deduplicates_and_caps_history(self):
+        from word_factori.dispatch_store import DispatchLedger, record_event
+        state = DispatchLedger.empty("room")
+        for index in range(205):
+            state = record_event(state, make_sent(index), notify=True).state
+        self.assertEqual(len(state.events), 200)
+        duplicate = record_event(state, state.events[-1], notify=True)
+        self.assertEqual(duplicate.notify, ())
+
+    def test_mark_all_read_clears_only_unread_keys(self):
+        from word_factori.dispatch_store import DispatchLedger, mark_all_read, record_event
+        state = record_event(DispatchLedger.empty("room"), make_sent(1), notify=True).state
+        self.assertEqual(mark_all_read(state).unread_keys, frozenset())
+        self.assertEqual(mark_all_read(state).events, state.events)
+
+    def test_authoritative_self_receive_replaces_live_self_row(self):
+        from word_factori.dispatch_store import DispatchLedger, reconcile_received, record_event
+        live = record_event(DispatchLedger.empty("room"), make_sent(7, self_item=True), notify=True).state
+        update = reconcile_received(live, (make_received(7, self_item=True),))
+        self.assertEqual(tuple(event.key for event in update.state.events), ("room:receive:7",))
+        self.assertEqual(update.state.events[0].direction, DispatchDirection.SELF)
+
+    def test_authoritative_receive_removes_stale_rows(self):
+        from word_factori.dispatch_store import DispatchLedger, reconcile_received
+        initial = reconcile_received(DispatchLedger.empty("room"), (make_received(0), make_received(1))).state
+        update = reconcile_received(initial, (make_received(1),))
+        self.assertEqual(tuple(event.receive_index for event in update.state.events), (1,))
+
+    def test_shorter_authoritative_replay_never_lowers_high_water_or_rearms_notifications(self):
+        from word_factori.dispatch_store import DispatchLedger, reconcile_received
+        initial = reconcile_received(DispatchLedger.empty("room"), tuple(make_received(index) for index in range(6))).state
+        shorter = reconcile_received(initial, tuple(make_received(index) for index in range(4))).state
+        replay = reconcile_received(shorter, tuple(make_received(index) for index in range(6)))
+        self.assertEqual(shorter.received_high_water, 5)
+        self.assertEqual(replay.notify, ())
+        self.assertEqual(replay.state.received_high_water, 5)
+
+    def test_ledger_round_trip_and_corruption_recovery(self):
+        from word_factori.dispatch_store import DispatchLedger, load_ledger, reconcile_received, record_event, save_ledger
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.json"
+            received = reconcile_received(DispatchLedger.empty("room"), (make_received(1),)).state
+            state = record_event(received, make_sent(2), notify=True).state
+            save_ledger(path, state)
+            self.assertEqual(load_ledger(path, "room"), state)
+            path.write_text("[]", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "ledger"):
+                load_ledger(path, "room")
+
+    def test_ledger_rejects_unknown_version_and_wrong_room_identity(self):
+        from word_factori.dispatch_store import DispatchLedger, load_ledger, save_ledger
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.json"
+            save_ledger(path, DispatchLedger.empty("room"))
+            with self.assertRaisesRegex(ValueError, "identity"):
+                load_ledger(path, "another-room")
+            path.write_text(json.dumps({"version": 2, "identity": "room", "events": []}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "version"):
+                load_ledger(path, "room")
 
 
 if __name__ == "__main__":
