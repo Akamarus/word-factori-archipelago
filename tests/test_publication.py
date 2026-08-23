@@ -1,5 +1,7 @@
 import unittest
 import zipfile
+import hashlib
+import os
 
 from tools import build_release
 from tools import verify_release
@@ -7,6 +9,33 @@ from tools.build_release import ROOT, include
 
 
 class PublicationTests(unittest.TestCase):
+    def test_release_build_is_byte_reproducible(self):
+        build_release.write_world()
+        build_release.write_release()
+        first_world = hashlib.sha256(build_release.WORLD_ARCHIVE.read_bytes()).digest()
+        first_release = hashlib.sha256(build_release.RELEASE_ARCHIVE.read_bytes()).digest()
+
+        world_stat = build_release.WORLD_ARCHIVE.stat()
+        os.utime(build_release.WORLD_ARCHIVE, (world_stat.st_atime + 10, world_stat.st_mtime + 10))
+        build_release.write_release()
+
+        self.assertEqual(first_world, hashlib.sha256(build_release.WORLD_ARCHIVE.read_bytes()).digest())
+        self.assertEqual(first_release, hashlib.sha256(build_release.RELEASE_ARCHIVE.read_bytes()).digest())
+
+    def test_player_guides_cover_full_client_and_curated_level_sets_without_overclaiming(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        setup = (ROOT / "word_factori" / "docs" / "setup_en.md").read_text(encoding="utf-8")
+        for text in (readme, setup):
+            folded = text.casefold()
+            for required in (
+                "install word factori archipelago.cmd", "f8", "items", "chat",
+                "password", "core_campaign", "discovery_labs", "borderless",
+                "/wf_overlay restart",
+            ):
+                self.assertIn(required, folded)
+            self.assertIn("experimental", folded)
+            self.assertNotIn("release candidate", folded)
+
     def test_release_includes_friendly_installer_and_excludes_game_font(self):
         build_release.write_world()
         build_release.write_release()
@@ -15,6 +44,9 @@ class PublicationTests(unittest.TestCase):
             names = set(archive.namelist())
 
         self.assertIn("Install Word Factori Archipelago.cmd", names)
+        self.assertIn("word_factori/campaign_packs.json", names)
+        self.assertIn("word_factori/client_messages.py", names)
+        self.assertIn("word_factori/overlay_renderer.py", names)
         self.assertFalse(any(name.casefold().endswith("fredokaone.ttf") for name in names))
 
     def test_release_excludes_temporary_live_rooms(self):

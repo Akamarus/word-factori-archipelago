@@ -13,7 +13,7 @@ Run on 2026-08-23 with Python 3.13:
 
 ```text
 python -m unittest discover -s tests -v
-Ran 238 tests in 3.968s
+Ran 246 tests
 OK
 ```
 
@@ -27,6 +27,11 @@ The automated suite currently verifies:
 - no focus steal when the player alt-tabs away;
 - bounded message history, Unicode presentation, actionable notices, and item ledger behavior;
 - renderer isolation, malformed-pipe containment, reconnect reconciliation, and fallback behavior.
+
+The exact installed Archipelago 0.6.7 frozen generator also loaded Word Factori
+world version 1.2.0 and generated a deterministic two-player room containing one
+30-location `core_campaign` player and one 40-location `discovery_labs` player.
+It filled 70 items, calculated the playthrough, and wrote the final room archive.
 
 ## Live acceptance matrix
 
@@ -53,4 +58,3 @@ this machine (`No such interface supported`, Windows error `0x80004002`). This
 prevents trustworthy automated screenshots or clicks in the frozen runtime. It
 does not change the automated result, but it keeps every visual/live row open.
 No row is treated as passed by inference.
-

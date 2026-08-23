@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import sys
 import zipfile
@@ -18,7 +19,7 @@ from tools.build_release import (
     include,
 )
 from tools.derive_requirements import derive
-from word_factori.campaign import load_campaign
+from word_factori.campaign import available_level_sets, campaign_for_level_set, load_campaign
 from word_factori.data import CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, LOCATIONS
 
 
@@ -58,8 +59,22 @@ def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | Non
         raise AssertionError(f"archive parity failed for {archive_path.name}")
 
 
+def verify_headless_modules() -> None:
+    for name in (
+        "word_factori.campaign",
+        "word_factori.client_messages",
+        "word_factori.overlay_model",
+        "word_factori.overlay_protocol",
+        "word_factori.overlay_renderer",
+    ):
+        importlib.import_module(name)
+    if any(name == "kivy" or name.startswith("kivy.") for name in sys.modules):
+        raise AssertionError("headless release verification imported Kivy")
+
+
 def main(*, verify_installed: bool = False) -> None:
-    if RELEASE_ARCHIVE.name != "word-factori-archipelago-hybrid-1.1.0.zip":
+    verify_headless_modules()
+    if RELEASE_ARCHIVE.name != "word-factori-archipelago-hybrid-1.2.0.zip":
         raise AssertionError("unexpected hybrid release name")
     if not LEGACY_RELEASE_ARCHIVE.is_file():
         raise AssertionError("stable 1.0.0 release archive was not preserved")
@@ -81,6 +96,10 @@ def main(*, verify_installed: bool = False) -> None:
         raise AssertionError("game mod campaign identity does not match AP manifest")
     if len(LOCATIONS) != 40:
         raise AssertionError("hybrid campaign must contain 40 locations")
+    if available_level_sets() != ("core_campaign", "discovery_labs"):
+        raise AssertionError("curated level set catalog changed unexpectedly")
+    if tuple(len(campaign_for_level_set(key).levels) for key in available_level_sets()) != (30, 40):
+        raise AssertionError("curated level set sizes are invalid")
     if payloads["recipes.json"] != {"include_vanilla": True}:
         raise AssertionError("game mod does not use vanilla recipes through the supported flag")
 
@@ -113,6 +132,14 @@ def main(*, verify_installed: bool = False) -> None:
             raise AssertionError(f"proprietary/user data entered release: {prohibited}")
         if any(name.startswith("tests/output") or "__pycache__" in name for name in names):
             raise AssertionError("generated output or caches entered release")
+        for required in (
+            "word_factori/campaign_packs.json",
+            "word_factori/client_messages.py",
+            "word_factori/overlay_renderer.py",
+            "docs/testing/full-ingame-client-acceptance.md",
+        ):
+            if required not in names:
+                raise AssertionError(f"release is missing {required}")
 
     print(f"APWorld SHA-256 {digest(WORLD_ARCHIVE.read_bytes())}")
     print(f"Release SHA-256 {digest(RELEASE_ARCHIVE.read_bytes())}")

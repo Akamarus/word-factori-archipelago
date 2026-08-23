@@ -70,8 +70,8 @@ from .save import ActiveSlot, find_save, read_active_slot
 
 MOD_FOLDER = "word factori archipelago"
 CAMPAIGN_MISMATCH = (
-    "Campaign mismatch: this Archipelago room requires a different Word Factori hybrid mod. "
-    "Reinstall the release matching the room before scanning or completing levels."
+    "Campaign mismatch: this room does not match a bundled Word Factori level set. "
+    "Install the matching release before scanning or completing levels."
 )
 
 

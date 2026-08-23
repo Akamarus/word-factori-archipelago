@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORLD_ARCHIVE = ROOT / "word_factori.apworld"
 LEGACY_RELEASE_ARCHIVE = ROOT / "word-factori-archipelago-full-1.0.0.zip"
-RELEASE_ARCHIVE = ROOT / "word-factori-archipelago-hybrid-1.1.0.zip"
+RELEASE_ARCHIVE = ROOT / "word-factori-archipelago-hybrid-1.2.0.zip"
 PROHIBITED_RELEASE_BASENAMES = {
     "data.win",
     "fredokaone.ttf",
@@ -16,6 +16,15 @@ PROHIBITED_RELEASE_BASENAMES = {
     "recipes.data",
     "save.json",
 }
+_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+
+
+def write_reproducible_file(archive: zipfile.ZipFile, path: Path) -> None:
+    info = zipfile.ZipInfo(path.relative_to(ROOT).as_posix(), date_time=_ZIP_TIMESTAMP)
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.create_system = 3
+    info.external_attr = 0o100644 << 16
+    archive.writestr(info, path.read_bytes())
 
 
 def include(path: Path) -> bool:
@@ -37,7 +46,7 @@ def write_world() -> None:
     with zipfile.ZipFile(WORLD_ARCHIVE, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted((ROOT / "word_factori").rglob("*")):
             if path.is_file() and include(path):
-                archive.write(path, path.relative_to(ROOT).as_posix())
+                write_reproducible_file(archive, path)
 
 
 def write_release() -> None:
@@ -51,7 +60,7 @@ def write_release() -> None:
     with zipfile.ZipFile(RELEASE_ARCHIVE, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(set(files)):
             if include(path):
-                archive.write(path, path.relative_to(ROOT).as_posix())
+                write_reproducible_file(archive, path)
 
 
 if __name__ == "__main__":

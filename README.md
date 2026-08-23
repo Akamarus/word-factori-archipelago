@@ -1,6 +1,6 @@
 # Word Factori Archipelago
 
-An experimental but playable [Archipelago](https://archipelago.gg/) integration for **Word Factori**. It adds a curated 40-level campaign, turns completed levels into Archipelago checks, and unlocks factory machinery as items arrive from the multiworld.
+An experimental but playable [Archipelago](https://archipelago.gg/) integration for **Word Factori**. It assembles a curated 30- or 40-level custom campaign, turns completed levels into Archipelago checks, and unlocks factory machinery as items arrive from the multiworld.
 
 This project uses Word Factori's supported JSON mod format. It does **not** patch `data.win`, redistribute encoded game recipes, or write to Word Factori save files.
 
@@ -8,7 +8,7 @@ This project uses Word Factori's supported JSON mod format. It does **not** patc
 
 The integration separates **what you build** from **what Archipelago gives you**:
 
-1. Word Factori presents a fixed, curated sequence of word factories.
+1. The seed selects a bundled, curated sequence of 30 or 40 word factories.
 2. Completing a level reports that level as an Archipelago location check.
 3. Archipelago sends the item placed at that location to its recipient.
 4. Received Word Factori items unlock machines or later campaign tiers.
@@ -26,7 +26,7 @@ The currently tested Word Factori depot is Steam build **12616577**.
 
 ## Simple installation
 
-1. Download `word-factori-archipelago-hybrid-1.1.0.zip` from the [latest release](https://github.com/Akamarus/word-factori-archipelago/releases/latest).
+1. Download `word-factori-archipelago-hybrid-1.2.0.zip` from the [latest release](https://github.com/Akamarus/word-factori-archipelago/releases/latest).
 2. Extract the ZIP to a normal folder.
 3. Close Word Factori and Archipelago.
 4. Double-click **Install Word Factori Archipelago.cmd**.
@@ -55,9 +55,9 @@ The installer replaces only these integration-owned paths:
 1. Copy one of the example player files into your Archipelago `Players` folder:
    - `tests/players/WordFactori.yaml` for the normal Campaign Count goal.
    - `tests/players/WordFactoriTarget.yaml` for the Final Factory goal.
-2. Change the player `name` and any Word Factori options you want.
+2. Change the player `name` and any Word Factori options you want. Keep `custom_level_set: discovery_labs` for all 40 levels, or choose `core_campaign` for the focused 30-level set.
 3. Generate and host the room normally with Archipelago.
-4. Launch **Word Factori Client** from the Archipelago Launcher and connect it to the room.
+4. Launch **Word Factori Client** from the Archipelago Launcher. Connect from the in-game AP panel, through the regular client, or with an `archipelago://` launch link.
 5. Start Word Factori, select the Archipelago mod, and enter a new empty mod save slot.
 6. Complete available levels. When an unlock arrives, return to save select and reload the mod slot, or restart Word Factori.
 
@@ -65,7 +65,7 @@ Connect the Archipelago client **before** completing checks. An existing progres
 
 ## Checks and locations
 
-There are 40 stable locations:
+The selected custom level set determines whether the seed has 30 or 40 stable locations:
 
 | Group | Count | What counts as a check |
 |---|---:|---|
@@ -74,7 +74,7 @@ There are 40 stable locations:
 | Final factory | 1 | Complete PITCHFORK |
 | Discovery Labs | 10 | Produce C, V, M, W, U, J, X, E, H, or R using the lab's declared machine route |
 
-The first 30 locations form the main campaign. Discovery Labs are optional post-campaign checks because Word Factori natively unlocks custom levels in order.
+The first 30 locations form the Core Campaign. `custom_level_set: discovery_labs` appends ten post-campaign Discovery Labs; `core_campaign` ends at PITCHFORK. The client assembles the selected bundled manifest when it connects and asks the player to reload the mod slot. Arbitrary Workshop levels are never silently imported into an AP seed.
 
 Location indices never shift when something is locked. A locked level stays in place with its input or unavailable machines set to zero, which keeps save indices and Archipelago location IDs stable.
 
@@ -126,12 +126,12 @@ Word Factori stores custom-campaign progress separately from its base campaign. 
 
 These files are read-only to the integration. The client writes only:
 
-- the installed mod's `levels.json`; and
+- the installed mod's `levels.json` and `archipelago_campaign.json`; and
 - an idempotency sidecar under `%LOCALAPPDATA%\factori\archipelago`.
 
 Each Archipelago room binds to the active empty Word Factori slot using that slot's stable `random_id`. A slot with previous completions is not auto-bound, and switching slots pauses check submission. This prevents unrelated progress from becoming false checks.
 
-The campaign also has an ID, version, and content digest. If the room and installed mod do not match, both automatic and manual reporting stop until the matching release is installed.
+Every curated set has an ID, version, stable level keys, and content digest. The client installs only a bundled set whose digest exactly matches the room. If the room and installed mod do not match, both automatic and manual reporting stop.
 
 ## Client commands
 
@@ -148,9 +148,19 @@ The campaign also has an ID, version, and content digest. If the room and instal
 
 Manual reporting cannot bypass campaign-digest or save-slot safety checks.
 
-## In-game item display
+## In-game Archipelago client
 
-While Word Factori is focused, received Archipelago items appear as blue popups on the left side of the game. The small **AP MAIL** button shows unread deliveries; click it or press **F8** to open the item ledger. The ledger currently shows items only. Full chat, connection controls, and manual location reporting remain in the regular Word Factori Client until the full in-game client is complete.
+While Word Factori is focused, received Archipelago items appear as blue popups on the left side of the game. The small **AP MAIL** button shows unread deliveries; click it or press **F8** to open the integrated client.
+
+The panel provides:
+
+- **Items** with All, Received, and Sent history;
+- **Chat** with player messages, hints, command results, and safe error notices;
+- manual server address and slot connection, intentional disconnect, and connection status;
+- masked room-password entry; and
+- normal Archipelago chat, `!` server commands, and `/` local commands from one input.
+
+Enter sends text. Shift+Enter inserts a line break. Escape, F8, outside click, game focus loss, or closing the panel releases keyboard focus and clears unsubmitted passwords. The standard Word Factori Client remains the fallback if the renderer cannot start.
 
 The overlay is cosmetic and failure-isolated: if it cannot start, the regular client continues working and retains the complete item history. Windowed and borderless modes are supported. Exclusive fullscreen may hide the overlay; use borderless mode or the regular client in that case.
 
@@ -168,7 +178,7 @@ Run `/wf_status`. The target may require a machine or World Access item that has
 
 Use a new empty save slot for that Archipelago room. The safety system intentionally rejects an unbound slot that already contains completions.
 
-### The in-game item display is missing
+### The in-game client is missing
 
 Use `/wf_overlay status` in the Word Factori Client. Then try `/wf_overlay restart`. Keep Word Factori in windowed or borderless mode; exclusive fullscreen is not supported. Item delivery and check reporting continue in the regular client even when the display is unavailable.
 
@@ -178,14 +188,16 @@ That is Word Factori's native progression. Finish the current page's levels; the
 
 ## Current limitations
 
-- This is a hybrid prototype, not an upstream Archipelago release.
+- This remains experimental and is not an upstream Archipelago release.
 - Arbitrary Workshop packs are not imported into generated seeds.
 - Discovery Labs are post-campaign because the game sequentially gates custom levels.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.
 - Sticker items are AP filler rather than in-game sticker grants.
 - There is no DeathLink, traps, or randomized factory layouts.
-- The in-game display is item-only in this release; a complete in-game client is required before the experimental label is removed.
-- A complete GUI-driven server/client playthrough remains a production acceptance task.
+- The full in-game client is implemented, but its complete GUI-driven live acceptance matrix is still open; see `docs/testing/full-ingame-client-acceptance.md`.
+- Exclusive fullscreen is not supported; use windowed or borderless mode.
+
+The exact next game-behavior probe is to record Word Factori's file reads while returning from a factory to save selection and reselecting the mod slot. If the game rereads `levels.json` at a narrower verified transition, the client can replace today's broad “reselect the slot or restart” instruction with that exact live-reload step. This probe observes supported mod loading only; it does not patch `data.win` or assume an unverified memory/save field.
 
 ## Development and verification
 
