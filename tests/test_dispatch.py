@@ -83,6 +83,22 @@ class DispatchLedgerTests(unittest.TestCase):
         again = reconcile_received(update.state, (make_received(0), make_received(1)))
         self.assertEqual(again.notify, ())
 
+    def test_identical_authoritative_duplicates_collapse_on_incremental_and_replay(self):
+        from word_factori.dispatch_store import DispatchLedger, reconcile_received
+        first = reconcile_received(DispatchLedger.empty("room"), (make_received(0), make_received(0)))
+        self.assertEqual(tuple(event.receive_index for event in first.state.events), (0,))
+        self.assertEqual(first.historical_count, 1)
+        update = reconcile_received(first.state, (make_received(0), make_received(1), make_received(1)))
+        self.assertEqual(tuple(event.receive_index for event in update.notify), (1,))
+        replay = reconcile_received(update.state, (make_received(0), make_received(0), make_received(1)))
+        self.assertEqual(replay.notify, ())
+
+    def test_conflicting_authoritative_duplicate_receive_is_rejected(self):
+        from word_factori.dispatch_store import DispatchLedger, reconcile_received
+        conflict = received_event("room", 1, 999, "Different", 2, "Alex", "Game", 101, "Location 1", None)
+        with self.assertRaisesRegex(ValueError, "conflicting authoritative"):
+            reconcile_received(DispatchLedger.empty("room"), (make_received(1), conflict))
+
     def test_record_event_deduplicates_and_caps_history(self):
         from word_factori.dispatch_store import DispatchLedger, record_event
         state = DispatchLedger.empty("room")
@@ -110,6 +126,18 @@ class DispatchLedgerTests(unittest.TestCase):
         initial = reconcile_received(DispatchLedger.empty("room"), (make_received(0), make_received(1))).state
         update = reconcile_received(initial, (make_received(1),))
         self.assertEqual(tuple(event.receive_index for event in update.state.events), (1,))
+
+    def test_unread_keys_track_retained_events_after_reconciliation_and_trimming(self):
+        from word_factori.dispatch_store import DispatchLedger, reconcile_received, record_event
+        initial = reconcile_received(DispatchLedger.empty("room"), (make_received(0),)).state
+        notified = reconcile_received(initial, (make_received(0), make_received(1))).state
+        reconciled = reconcile_received(notified, (make_received(0),)).state
+        self.assertEqual(reconciled.unread_keys, frozenset())
+
+        state = DispatchLedger.empty("room")
+        for index in range(201):
+            state = record_event(state, make_sent(index), notify=True).state
+        self.assertEqual(state.unread_keys, frozenset(event.key for event in state.events))
 
     def test_shorter_authoritative_replay_never_lowers_high_water_or_rearms_notifications(self):
         from word_factori.dispatch_store import DispatchLedger, reconcile_received
@@ -141,6 +169,52 @@ class DispatchLedgerTests(unittest.TestCase):
                 load_ledger(path, "another-room")
             path.write_text(json.dumps({"version": 2, "identity": "room", "events": []}), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "version"):
+                load_ledger(path, "room")
+
+    def test_corrupt_persisted_schema_is_rejected(self):
+        from word_factori.dispatch_store import DispatchLedger, load_ledger, reconcile_received, record_event, save_ledger
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.json"
+            received = reconcile_received(DispatchLedger.empty("room"), (make_received(2),)).state
+            state = record_event(received, make_sent(3), notify=True).state
+            save_ledger(path, state)
+            valid_payload = json.loads(path.read_text(encoding="utf-8"))
+
+            for version in (True, 1.0):
+                payload = json.loads(json.dumps(valid_payload))
+                payload["version"] = version
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "ledger"):
+                    load_ledger(path, "room")
+
+            payload = json.loads(json.dumps(valid_payload))
+            payload["events"].append(dict(payload["events"][0]))
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "ledger"):
+                load_ledger(path, "room")
+
+            payload = json.loads(json.dumps(valid_payload))
+            payload["events"][0]["key"] = "room:receive:99"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "ledger"):
+                load_ledger(path, "room")
+
+            payload = json.loads(json.dumps(valid_payload))
+            payload["events"][1]["receive_index"] = 3
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "ledger"):
+                load_ledger(path, "room")
+
+            payload = json.loads(json.dumps(valid_payload))
+            payload["unread_keys"].append("room:missing")
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "ledger"):
+                load_ledger(path, "room")
+
+            payload = json.loads(json.dumps(valid_payload))
+            payload["received_high_water"] = 1
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "ledger"):
                 load_ledger(path, "room")
 
 

@@ -45,12 +45,28 @@ def _validate_event_identity(identity: str, event: DispatchEvent) -> None:
         raise ValueError("ledger event identity does not match room identity")
 
 
+def _deduplicate_authoritative(events: Iterable[DispatchEvent]) -> tuple[DispatchEvent, ...]:
+    by_key: dict[str, DispatchEvent] = {}
+    by_index: dict[int, DispatchEvent] = {}
+    for event in events:
+        for existing in (by_key.get(event.key), by_index.get(event.receive_index)):
+            if existing is not None:
+                if existing != event:
+                    raise ValueError("conflicting authoritative receive rows")
+                break
+        else:
+            by_key[event.key] = event
+            by_index[event.receive_index] = event
+    return tuple(by_key.values())
+
+
 def reconcile_received(state: DispatchLedger, authoritative: Iterable[DispatchEvent]) -> LedgerUpdate:
     incoming = tuple(sorted(authoritative, key=lambda event: event.receive_index or 0))
     for event in incoming:
         _validate_event_identity(state.identity, event)
         if event.direction not in (DispatchDirection.RECEIVED, DispatchDirection.SELF) or event.receive_index is None:
             raise ValueError("authoritative ledger events must be received events")
+    incoming = _deduplicate_authoritative(incoming)
     received_keys = {event.key for event in incoming}
     retained = tuple(
         event for event in state.events
@@ -64,8 +80,8 @@ def reconcile_received(state: DispatchLedger, authoritative: Iterable[DispatchEv
         if state.initialized and event.receive_index is not None
         and event.receive_index > state.received_high_water
     )
-    unread = state.unread_keys | frozenset(event.key for event in notify)
     merged = _trim_events(retained + additions)
+    unread = (state.unread_keys | frozenset(event.key for event in notify)) & frozenset(event.key for event in merged)
     highest_incoming = max((event.receive_index for event in incoming if event.receive_index is not None), default=-1)
     high_water = max(state.received_high_water, highest_incoming)
     return LedgerUpdate(
@@ -80,7 +96,7 @@ def record_event(state: DispatchLedger, event: DispatchEvent, *, notify: bool) -
     if event.key in {existing.key for existing in state.events}:
         return LedgerUpdate(state, ())
     events = _trim_events(state.events + (event,))
-    unread = state.unread_keys | ({event.key} if notify else set())
+    unread = (state.unread_keys | ({event.key} if notify else set())) & {existing.key for existing in events}
     return LedgerUpdate(
         replace(state, events=events, unread_keys=frozenset(unread)),
         (event,) if notify else (),
@@ -156,6 +172,23 @@ def _event_from_payload(payload: Any) -> DispatchEvent:
         raise ValueError("ledger event is missing a field") from error
 
 
+def _validate_persisted_event(identity: str, event: DispatchEvent) -> None:
+    _validate_event_identity(identity, event)
+    sent_key = f"{identity}:send:{event.location_id}:{event.item_id}:{event.other_slot}"
+    if event.direction is DispatchDirection.SENT:
+        if event.receive_index is not None or event.key != sent_key:
+            raise ValueError("ledger sent event is inconsistent")
+    elif event.direction is DispatchDirection.RECEIVED:
+        if event.receive_index is None or event.key != f"{identity}:receive:{event.receive_index}":
+            raise ValueError("ledger received event is inconsistent")
+    elif event.direction is DispatchDirection.SELF:
+        if event.receive_index is None:
+            if event.key != sent_key:
+                raise ValueError("ledger self event is inconsistent")
+        elif event.key != f"{identity}:receive:{event.receive_index}":
+            raise ValueError("ledger self event is inconsistent")
+
+
 def load_ledger(path: Path, identity: str) -> DispatchLedger:
     if not path.is_file():
         return DispatchLedger.empty(identity)
@@ -165,7 +198,7 @@ def load_ledger(path: Path, identity: str) -> DispatchLedger:
         raise ValueError("ledger file is malformed") from error
     if not isinstance(payload, dict):
         raise ValueError("ledger file must contain an object")
-    if payload.get("version") != LEDGER_VERSION:
+    if type(payload.get("version")) is not int or payload["version"] != LEDGER_VERSION:
         raise ValueError("ledger version is not supported")
     stored_identity = payload.get("identity")
     if stored_identity != identity:
@@ -183,9 +216,18 @@ def load_ledger(path: Path, identity: str) -> DispatchLedger:
     if isinstance(high_water, bool) or not isinstance(high_water, int) or high_water < -1:
         raise ValueError("ledger received_high_water must be an integer")
     events = tuple(_event_from_payload(event) for event in events_payload)
+    if len({event.key for event in events}) != len(events):
+        raise ValueError("ledger events contain duplicate keys")
     for event in events:
-        _validate_event_identity(identity, event)
-    return DispatchLedger(identity, events, frozenset(unread_payload), initialized, high_water)
+        _validate_persisted_event(identity, event)
+    event_keys = frozenset(event.key for event in events)
+    unread_keys = frozenset(unread_payload)
+    if not unread_keys <= event_keys:
+        raise ValueError("ledger unread_keys must reference retained events")
+    highest_received = max((event.receive_index for event in events if event.receive_index is not None), default=-1)
+    if high_water < highest_received:
+        raise ValueError("ledger received_high_water cannot precede retained events")
+    return DispatchLedger(identity, events, unread_keys, initialized, high_water)
 
 
 def save_ledger(path: Path, state: DispatchLedger) -> None:
