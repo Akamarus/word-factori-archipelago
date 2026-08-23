@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import ntpath
 from typing import Iterable, Mapping
 import urllib.parse
@@ -9,6 +10,11 @@ from pathlib import Path
 from .bridge import ReceivedItem
 from .data import LOCATIONS, MACHINE_ITEMS
 from .save import ActiveSlot
+
+
+def utc_observed_at() -> str:
+    """Return a parseable UTC observation time for live cosmetic events."""
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def game_font_path(executable: Path) -> Path | None:

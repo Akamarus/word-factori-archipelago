@@ -37,6 +37,7 @@ from .client_core import (
     parse_connection_url,
     resolve_game_slot_binding,
     state_identity,
+    utc_observed_at,
 )
 from .data import GAME, ITEM_NAME_TO_ID, LOCATIONS
 from .dispatch import DispatchDirection, DispatchEvent, received_event, sent_event
@@ -219,7 +220,7 @@ class WordFactoriContext(CommonContext):
             identity or self.connected_identity or self.current_identity(), index,
             item.item, item_name, item.player, player_name, player_game,
             item.location, self._lookup_location_name(item.location, item.player),
-            None, self_item=self.slot_concerns_self(item.player),
+            utc_observed_at(), self_item=self.slot_concerns_self(item.player),
         )
 
     def _dispatch_room_matches(self, identity: str) -> bool:
@@ -310,7 +311,7 @@ class WordFactoriContext(CommonContext):
             item.item, self._lookup_item_name(item.item), item.player,
             recipient_name, recipient_game,
             self._lookup_location_name(item.location, self.slot),
-            self.slot_concerns_self(item.player), None,
+            self.slot_concerns_self(item.player), None if historical else utc_observed_at(),
         )
         return replace(event, historical=historical)
 
@@ -372,7 +373,7 @@ class WordFactoriContext(CommonContext):
         event = sent_event(
             identity, item.location,
             item.item, item_name, receiving, recipient_name, recipient_game,
-            self._lookup_location_name(item.location, item.player), False, None,
+            self._lookup_location_name(item.location, item.player), False, utc_observed_at(),
         )
         asyncio.create_task(self._record_dispatch_event_safely(
             identity, event, notify=True,

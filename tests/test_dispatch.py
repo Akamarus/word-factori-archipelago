@@ -74,6 +74,23 @@ class DispatchLedgerTests(unittest.TestCase):
         self.assertEqual(update.historical_count, 2)
         self.assertEqual(update.notify, ())
         self.assertTrue(update.state.initialized)
+        self.assertTrue(all(event.historical for event in update.state.events))
+        self.assertTrue(all(event.observed_at is None for event in update.state.events))
+
+    def test_reconciliation_retains_stored_observation_for_matching_key(self):
+        from word_factori.dispatch_store import DispatchLedger, reconcile_received
+        stored = received_event(
+            "room", 0, 1, "Received 0", 2, "Alex", "Game", 100, "Location 0",
+            "2026-08-23T12:00:00Z",
+        )
+        state = DispatchLedger("room", (stored,), frozenset(), True, 0)
+        replay = received_event(
+            "room", 0, 1, "Received 0", 2, "Alex", "Game", 100, "Location 0",
+            "2026-08-23T13:00:00Z",
+        )
+        update = reconcile_received(state, (replay,))
+        self.assertIs(stored, update.state.events[0])
+        self.assertEqual("2026-08-23T12:00:00Z", update.state.events[0].observed_at)
 
     def test_incremental_receive_notifies_once(self):
         from word_factori.dispatch_store import DispatchLedger, reconcile_received

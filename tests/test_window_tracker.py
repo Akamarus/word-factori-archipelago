@@ -10,6 +10,8 @@ from word_factori.overlay_renderer import (
     HTCLIENT,
     HTTRANSPARENT,
     ChildActionWriter,
+    KeyPressState,
+    MOD_NOREPEAT,
     NativeHookBootstrap,
     OverlayGeometry,
     OverlayWindowHook,
@@ -20,6 +22,7 @@ from word_factori.overlay_renderer import (
     drain_parent_messages,
     present_dispatch_row,
     row_height_for_texture,
+    window_relative_regions,
     validated_renderer_config,
 )
 from word_factori.window_tracker import Win32WindowTracker
@@ -127,21 +130,36 @@ class RendererBoundaryTests(unittest.TestCase):
             api=api,
         )
         hook.install()
+        self.assertIn((api.f8_id, MOD_NOREPEAT, 0x77), api.hotkey_calls)
         hook.set_interaction_state(game_active=False, ledger_open=False)
         api.callback(77, WM_HOTKEY, api.f8_id, 0)
         self.assertEqual([], actions)
         hook.set_interaction_state(game_active=True, ledger_open=False)
-        api.escape_down = True
         hook.poll_pointer()
         api.callback(77, WM_HOTKEY, api.f8_id, 0)
         self.assertEqual(["toggle"], actions)
-        api.escape_down = False
         hook.poll_pointer()
         hook.set_interaction_state(game_active=True, ledger_open=True)
-        api.escape_down = True
-        hook.poll_pointer()
-        hook.poll_pointer()
+        self.assertIn((api.escape_id, MOD_NOREPEAT, 0x1B), api.hotkey_calls)
+        api.callback(77, WM_HOTKEY, api.escape_id, 0)
         self.assertEqual(["toggle", "close"], actions)
+        hook.set_interaction_state(game_active=False, ledger_open=True)
+        self.assertNotIn(api.escape_id, api.hotkeys)
+
+    def test_escape_registration_failure_uses_pressed_since_poll_fallback(self):
+        api = FakeHookAPI()
+        api.fail_escape_registration = True
+        actions = []
+        hook = OverlayWindowHook(
+            hwnd=77, geometry=lambda: OverlayGeometry(mailbox=Rect(1, 2, 3, 4)),
+            action=lambda kind: actions.append(kind), api=api,
+        )
+        hook.install()
+        hook.set_interaction_state(game_active=True, ledger_open=True)
+        api.key_states[0x1B] = [KeyPressState(True, False)]
+        hook.poll_pointer()
+        hook.poll_pointer()
+        self.assertEqual(["close"], actions)
 
     def test_outside_click_closes_once_without_changing_clickthrough_geometry(self):
         api = FakeHookAPI()
@@ -155,17 +173,90 @@ class RendererBoundaryTests(unittest.TestCase):
         hook.install()
         hook.set_interaction_state(game_active=True, ledger_open=True)
         api.point = (700, 500)
-        api.left_down = True
+        api.key_states[0x01] = [KeyPressState(True, False)]
         hook.poll_pointer()
         hook.poll_pointer()
         self.assertEqual(["close"], actions)
         self.assertEqual(HTTRANSPARENT, geometry.hit_test(*api.point))
-        api.left_down = False
-        hook.poll_pointer()
         api.point = (200, 200)
-        api.left_down = True
+        api.key_states[0x01] = [KeyPressState(True, False)]
         hook.poll_pointer()
         self.assertEqual(["close"], actions)
+
+    def test_native_region_tracks_exact_geometry_updates_and_clears(self):
+        api = FakeHookAPI()
+        current = [OverlayGeometry(
+            mailbox=Rect(10, 20, 30, 40),
+            toasts=(Rect(50, 60, 70, 80),),
+            ledger=None,
+        )]
+        hook = OverlayWindowHook(hwnd=77, geometry=lambda: current[0], action=lambda kind: None, api=api)
+        hook.install()
+        self.assertEqual(((Rect(10, 20, 30, 40), Rect(50, 60, 70, 80)),), tuple(api.regions))
+        current[0] = OverlayGeometry(
+            mailbox=Rect(12, 22, 30, 40),
+            toasts=(),
+            ledger=Rect(100, 110, 200, 210),
+        )
+        hook.refresh_region(force=True)
+        self.assertEqual((Rect(12, 22, 30, 40), Rect(100, 110, 200, 210)), api.regions[-1])
+        self.assertTrue(hook.shutdown())
+        self.assertEqual([77], api.cleared_regions)
+
+    def test_client_regions_are_offset_to_window_origin_at_adapter_seam(self):
+        regions = (Rect(10, 20, 30, 40), Rect(50, 60, 70, 80))
+        self.assertEqual(
+            (Rect(18, 51, 30, 40), Rect(58, 91, 70, 80)),
+            window_relative_regions(regions, (8, 31)),
+        )
+
+    def test_region_or_native_visibility_failure_marks_bootstrap_failed(self):
+        region_api = FakeHookAPI()
+        region_api.fail_region = True
+        region_bootstrap = NativeHookBootstrap(
+            handle_provider=lambda: 77, api_factory=lambda: region_api,
+            geometry=lambda: OverlayGeometry(mailbox=Rect(1, 2, 3, 4)),
+            action=lambda kind: None, max_attempts=1,
+        )
+        self.assertEqual("failed", region_bootstrap.tick())
+
+        show_api = FakeHookAPI()
+        show_bootstrap = NativeHookBootstrap(
+            handle_provider=lambda: 77, api_factory=lambda: show_api,
+            geometry=lambda: OverlayGeometry(mailbox=Rect(1, 2, 3, 4)),
+            action=lambda kind: None, max_attempts=1,
+        )
+        self.assertEqual("ready", show_bootstrap.tick())
+        show_api.fail_show = True
+        self.assertFalse(show_bootstrap.set_visible(True))
+        self.assertEqual("failed", show_bootstrap.status)
+
+        hide_api = FakeHookAPI()
+        hide_bootstrap = NativeHookBootstrap(
+            handle_provider=lambda: 77, api_factory=lambda: hide_api,
+            geometry=lambda: OverlayGeometry(mailbox=Rect(1, 2, 3, 4)),
+            action=lambda kind: None, max_attempts=1,
+        )
+        self.assertEqual("ready", hide_bootstrap.tick())
+        self.assertTrue(hide_bootstrap.set_visible(True))
+        hide_api.fail_hide = True
+        self.assertFalse(hide_bootstrap.set_visible(False))
+        self.assertEqual("failed", hide_bootstrap.status)
+
+    def test_failed_wndproc_restore_retains_references_for_shutdown_retry(self):
+        api = FakeHookAPI()
+        api.restore_failures = 1
+        hook = OverlayWindowHook(
+            hwnd=77, geometry=lambda: OverlayGeometry(mailbox=Rect(1, 2, 3, 4)),
+            action=lambda kind: None, api=api,
+        )
+        hook.install()
+        self.assertFalse(hook.shutdown())
+        self.assertTrue(hook.shutdown_pending)
+        self.assertIsNotNone(api.callback)
+        self.assertTrue(hook.shutdown())
+        self.assertFalse(hook.shutdown_pending)
+        self.assertIsNone(api.callback)
 
     def test_native_bootstrap_hides_before_install_retries_and_then_succeeds(self):
         api = FakeHookAPI()
@@ -432,11 +523,18 @@ class FakeHookAPI:
         self.original = object()
         self.restored = []
         self.hotkeys = set()
+        self.hotkey_calls = []
         self.hidden = []
         self.shown = []
-        self.left_down = False
-        self.escape_down = False
         self.point = (900, 400)
+        self.key_states = {}
+        self.regions = []
+        self.cleared_regions = []
+        self.fail_region = False
+        self.fail_show = False
+        self.fail_hide = False
+        self.restore_failures = 0
+        self.fail_escape_registration = False
 
     def get_extended_style(self, hwnd):
         return self.style
@@ -449,9 +547,16 @@ class FakeHookAPI:
         return self.original
 
     def restore_window_procedure(self, hwnd, original):
+        if self.restore_failures:
+            self.restore_failures -= 1
+            raise OSError("restore failed")
         self.restored.append(original)
+        self.callback = None
 
-    def register_hotkey(self, hwnd, hotkey_id, key):
+    def register_hotkey(self, hwnd, hotkey_id, modifiers, key):
+        self.hotkey_calls.append((hotkey_id, modifiers, key))
+        if hotkey_id == self.escape_id and self.fail_escape_registration:
+            raise OSError("escape occupied")
         self.hotkeys.add(hotkey_id)
 
     def unregister_hotkey(self, hwnd, hotkey_id):
@@ -463,16 +568,26 @@ class FakeHookAPI:
     def cursor_client_position(self, hwnd):
         return self.point
 
-    def left_button_down(self):
-        return self.left_down
+    def key_press_state(self, key):
+        states = self.key_states.get(key, [])
+        return states.pop(0) if states else KeyPressState(False, False)
 
-    def escape_key_down(self):
-        return self.escape_down
+    def set_window_region(self, hwnd, regions):
+        if self.fail_region:
+            raise OSError("region failed")
+        self.regions.append(tuple(regions))
+
+    def clear_window_region(self, hwnd):
+        self.cleared_regions.append(hwnd)
 
     def show_no_activate(self, hwnd):
+        if self.fail_show:
+            raise OSError("show failed")
         self.shown.append(hwnd)
 
     def hide_window(self, hwnd):
+        if self.fail_hide:
+            raise OSError("hide failed")
         self.hidden.append(hwnd)
 
     def call_original(self, original, hwnd, message, wparam, lparam):

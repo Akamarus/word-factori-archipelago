@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 from dataclasses import FrozenInstanceError
+from datetime import datetime
 import json
 import logging
 import os
@@ -202,6 +203,8 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         self.assertEqual(1, len(self.ctx.dispatch_ledger.events))
         self.assertEqual((), self.ctx.pending_overlay_events)
+        self.assertTrue(self.ctx.dispatch_ledger.events[0].historical)
+        self.assertIsNone(self.ctx.dispatch_ledger.events[0].observed_at)
 
         self.ctx.on_package("ReceivedItems", {"index": 0, "items": [first]})
         await asyncio.sleep(0)
@@ -216,6 +219,10 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         self.assertEqual(2, len(self.ctx.dispatch_ledger.events))
         self.assertEqual(1, len(self.ctx.pending_overlay_events))
+        live = self.ctx.dispatch_ledger.events[-1]
+        self.assertFalse(live.historical)
+        self.assertIsNotNone(live.observed_at)
+        self.assertIsNotNone(datetime.fromisoformat(live.observed_at.replace("Z", "+00:00")).tzinfo)
 
     async def test_item_send_records_only_local_source_or_recipient(self):
         local_send = item_send_packet(source=1, receiving=2, location=LOCATIONS[0].code)
@@ -231,6 +238,10 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             [DispatchDirection.SENT],
             [event.direction for event in self.ctx.dispatch_ledger.events],
         )
+        sent = self.ctx.dispatch_ledger.events[0]
+        self.assertFalse(sent.historical)
+        self.assertIsNotNone(sent.observed_at)
+        self.assertIsNotNone(datetime.fromisoformat(sent.observed_at.replace("Z", "+00:00")).tzinfo)
 
     async def test_item_send_serializes_ledger_write_with_dispatch_lock(self):
         lock_states = []
@@ -433,6 +444,7 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(DispatchDirection.SENT, event.direction)
         self.assertEqual(checked, event.location_id)
         self.assertTrue(event.historical)
+        self.assertIsNone(event.observed_at)
         self.assertEqual((), self.ctx.pending_overlay_events)
 
         self.ctx.on_package("LocationInfo", packet)

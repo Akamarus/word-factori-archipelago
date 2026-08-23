@@ -30,7 +30,9 @@ WM_HOTKEY = 0x0312
 VK_F8 = 0x77
 VK_ESCAPE = 0x1B
 VK_LBUTTON = 0x01
+MOD_NOREPEAT = 0x4000
 _HOTKEY_ID = 0x5746
+_ESCAPE_HOTKEY_ID = 0x5747
 _GWL_EXSTYLE = -20
 _GWLP_WNDPROC = -4
 _WS_EX_TOPMOST = 0x00000008
@@ -69,6 +71,19 @@ class Rect:
 
     def contains(self, x: int, y: int) -> bool:
         return self.x <= x < self.right and self.y <= y < self.top
+
+
+def window_relative_regions(regions: tuple[Rect, ...], client_offset: tuple[int, int]) -> tuple[Rect, ...]:
+    if (
+        not isinstance(regions, tuple)
+        or not all(isinstance(region, Rect) for region in regions)
+        or not isinstance(client_offset, tuple)
+        or len(client_offset) != 2
+        or any(type(value) is not int for value in client_offset)
+    ):
+        raise ValueError("window region offset inputs are invalid")
+    offset_x, offset_y = client_offset
+    return tuple(Rect(region.x + offset_x, region.y + offset_y, region.width, region.height) for region in regions)
 
 
 def _fit_rect(x: float, y: float, width: float, height: float, outer_width: int, outer_height: int) -> Rect:
@@ -160,6 +175,9 @@ class OverlayGeometry:
         if self.ledger is not None and self.ledger.contains(x, y):
             return HTCLIENT
         return HTTRANSPARENT
+
+    def interactive_regions(self) -> tuple[Rect, ...]:
+        return (self.mailbox, *self.toasts) + (() if self.ledger is None else (self.ledger,))
 
     @staticmethod
     def encode_action(kind: str, value: str | None = None) -> str:
@@ -308,17 +326,28 @@ class ChildActionWriter:
             pass
 
 
+@dataclass(frozen=True)
+class KeyPressState:
+    pressed_since_last_poll: bool
+    down: bool
+
+    def __post_init__(self) -> None:
+        if type(self.pressed_since_last_poll) is not bool or type(self.down) is not bool:
+            raise ValueError("key press state must contain booleans")
+
+
 class OverlayHookAPI(Protocol):
     def get_extended_style(self, hwnd: int) -> int: ...
     def set_extended_style(self, hwnd: int, style: int) -> None: ...
     def install_window_procedure(self, hwnd: int, callback: Callable[[int, int, int, int], int]) -> object: ...
     def restore_window_procedure(self, hwnd: int, original: object) -> None: ...
-    def register_hotkey(self, hwnd: int, hotkey_id: int, key: int) -> None: ...
+    def register_hotkey(self, hwnd: int, hotkey_id: int, modifiers: int, key: int) -> None: ...
     def unregister_hotkey(self, hwnd: int, hotkey_id: int) -> None: ...
     def client_point_from_lparam(self, hwnd: int, lparam: int) -> tuple[int, int]: ...
     def cursor_client_position(self, hwnd: int) -> tuple[int, int]: ...
-    def left_button_down(self) -> bool: ...
-    def escape_key_down(self) -> bool: ...
+    def key_press_state(self, key: int) -> KeyPressState: ...
+    def set_window_region(self, hwnd: int, regions: tuple[Rect, ...]) -> None: ...
+    def clear_window_region(self, hwnd: int) -> None: ...
     def show_no_activate(self, hwnd: int) -> None: ...
     def hide_window(self, hwnd: int) -> None: ...
     def call_original(self, original: object | None, hwnd: int, message: int, wparam: int, lparam: int) -> int: ...
@@ -345,11 +374,20 @@ class OverlayWindowHook:
         self._ledger_open = False
         self._left_was_down = False
         self._escape_was_down = False
+        self._f8_registered = False
+        self._escape_registered = False
+        self._escape_poll_fallback = False
         self._visible = False
         self._installed = False
+        self._region_signature: tuple[Rect, ...] | None = None
+        self._shutdown_pending = False
+
+    @property
+    def shutdown_pending(self) -> bool:
+        return self._shutdown_pending
 
     def install(self) -> None:
-        if self._original_procedure is not None:
+        if self._installed:
             return
         original_style = self._api.get_extended_style(self._hwnd)
         style = original_style | _WS_EX_LAYERED | _WS_EX_TOPMOST | _WS_EX_NOACTIVATE | _WS_EX_TOOLWINDOW
@@ -368,32 +406,77 @@ class OverlayWindowHook:
             except Exception:
                 pass
             raise
-        try:
-            self._api.register_hotkey(self._hwnd, _HOTKEY_ID, VK_F8)
-        except Exception:
-            # The hit-test hook is essential; a system-wide F8 collision is not.
-            pass
         self._original_style = original_style
         self._original_procedure = original_procedure
         self._installed = True
+        try:
+            self.refresh_region(force=True)
+        except Exception:
+            self.shutdown()
+            raise
+        try:
+            self._api.register_hotkey(self._hwnd, _HOTKEY_ID, MOD_NOREPEAT, VK_F8)
+            self._f8_registered = True
+        except Exception:
+            # Region-based containment remains essential; an occupied F8 is cosmetic.
+            self._f8_registered = False
+
+    def refresh_region(self, *, force: bool = False) -> None:
+        if not self._installed:
+            raise RuntimeError("overlay hook is not installed")
+        geometry = self._geometry()
+        regions = () if geometry is None else geometry.interactive_regions()
+        if not force and regions == self._region_signature:
+            return
+        self._api.set_window_region(self._hwnd, regions)
+        self._region_signature = regions
 
     def set_interaction_state(self, *, game_active: bool, ledger_open: bool) -> None:
         self._game_active = bool(game_active)
         self._ledger_open = bool(ledger_open)
+        wants_escape = self._game_active and self._ledger_open
+        if wants_escape and not self._escape_registered and not self._escape_poll_fallback:
+            try:
+                self._api.register_hotkey(
+                    self._hwnd, _ESCAPE_HOTKEY_ID, MOD_NOREPEAT, VK_ESCAPE,
+                )
+            except Exception:
+                self._escape_poll_fallback = True
+                try:
+                    self._escape_was_down = self._api.key_press_state(VK_ESCAPE).down
+                except Exception:
+                    self._escape_was_down = False
+            else:
+                self._escape_registered = True
+        elif not wants_escape:
+            if self._escape_registered:
+                try:
+                    self._api.unregister_hotkey(self._hwnd, _ESCAPE_HOTKEY_ID)
+                except Exception:
+                    pass
+                else:
+                    self._escape_registered = False
+            self._escape_poll_fallback = False
+            self._escape_was_down = False
+
+    @staticmethod
+    def _new_press(state: KeyPressState, was_down: bool) -> bool:
+        return state.pressed_since_last_poll or (state.down and not was_down)
 
     def poll_pointer(self) -> None:
         try:
-            left_down = bool(self._api.left_button_down())
-            if left_down and not self._left_was_down and self._game_active and self._ledger_open:
+            left = self._api.key_press_state(VK_LBUTTON)
+            if self._new_press(left, self._left_was_down) and self._game_active and self._ledger_open:
                 geometry = self._geometry()
                 point = self._api.cursor_client_position(self._hwnd)
                 if geometry is not None and geometry.hit_test(*point) == HTTRANSPARENT:
                     self._action("close")
-            self._left_was_down = left_down
-            escape_down = bool(self._api.escape_key_down())
-            if escape_down and not self._escape_was_down and self._game_active and self._ledger_open:
-                self._action("close")
-            self._escape_was_down = escape_down
+            self._left_was_down = left.down
+            if self._escape_poll_fallback:
+                escape = self._api.key_press_state(VK_ESCAPE)
+                if self._new_press(escape, self._escape_was_down) and self._game_active and self._ledger_open:
+                    self._action("close")
+                self._escape_was_down = escape.down
         except Exception:
             self._left_was_down = False
             self._escape_was_down = False
@@ -404,6 +487,8 @@ class OverlayWindowHook:
             self._api.hide_window(self._hwnd)
             self._visible = False
             return
+        if visible:
+            self.refresh_region(force=True)
         if visible == self._visible:
             return
         if visible:
@@ -416,6 +501,10 @@ class OverlayWindowHook:
         if message == WM_HOTKEY and int(wparam) == _HOTKEY_ID:
             if self._game_active:
                 self._action("toggle")
+            return 0
+        if message == WM_HOTKEY and int(wparam) == _ESCAPE_HOTKEY_ID:
+            if self._game_active and self._ledger_open:
+                self._action("close")
             return 0
         if message == WM_NCHITTEST:
             try:
@@ -431,30 +520,63 @@ class OverlayWindowHook:
         except Exception:
             return 0
 
-    def shutdown(self) -> None:
-        original_procedure = self._original_procedure
-        original_style = self._original_style
-        self._original_procedure = None
-        self._original_style = None
-        self._installed = False
+    def shutdown(self) -> bool:
+        success = True
+        hidden = True
         try:
-            self.set_visible(False)
+            self._api.hide_window(self._hwnd)
         except Exception:
-            pass
-        try:
-            self._api.unregister_hotkey(self._hwnd, _HOTKEY_ID)
-        except Exception:
-            pass
-        if original_procedure is not None:
+            success = False
+            hidden = False
+        self._visible = False
+        if self._f8_registered:
             try:
-                self._api.restore_window_procedure(self._hwnd, original_procedure)
+                self._api.unregister_hotkey(self._hwnd, _HOTKEY_ID)
             except Exception:
-                pass
-        if original_style is not None:
+                success = False
+            else:
+                self._f8_registered = False
+        if self._escape_registered:
             try:
-                self._api.set_extended_style(self._hwnd, original_style)
+                self._api.unregister_hotkey(self._hwnd, _ESCAPE_HOTKEY_ID)
             except Exception:
-                pass
+                success = False
+            else:
+                self._escape_registered = False
+        region_safe = True
+        if not hidden:
+            try:
+                self._api.set_window_region(self._hwnd, ())
+            except Exception:
+                success = False
+                region_safe = False
+            else:
+                self._region_signature = ()
+        elif self._region_signature is not None:
+            try:
+                self._api.clear_window_region(self._hwnd)
+            except Exception:
+                success = False
+            else:
+                self._region_signature = None
+        if region_safe:
+            if self._original_procedure is not None:
+                try:
+                    self._api.restore_window_procedure(self._hwnd, self._original_procedure)
+                except Exception:
+                    success = False
+                else:
+                    self._original_procedure = None
+                    self._installed = False
+            if self._original_style is not None:
+                try:
+                    self._api.set_extended_style(self._hwnd, self._original_style)
+                except Exception:
+                    success = False
+                else:
+                    self._original_style = None
+        self._shutdown_pending = not success
+        return success
 
 
 class NativeHookBootstrap:
@@ -498,8 +620,10 @@ class NativeHookBootstrap:
             hook = OverlayWindowHook(hwnd=hwnd, geometry=self._geometry, action=self._action, api=api)
             hook.install()
         except Exception:
-            if hook is not None:
-                hook.shutdown()
+            if hook is not None and not hook.shutdown():
+                self.hook = hook
+                self._status = "failed"
+                return self._status
             if self._attempts >= self._max_attempts:
                 self._status = "failed"
             return self._status
@@ -507,15 +631,43 @@ class NativeHookBootstrap:
         self._status = "ready"
         return self._status
 
-    def set_visible(self, visible: bool) -> None:
-        if self.hook is not None:
-            self.hook.set_visible(visible)
-
-    def shutdown(self) -> None:
-        if self.hook is not None:
-            self.hook.shutdown()
-            self.hook = None
+    def _fail_closed(self) -> bool:
         self._status = "failed"
+        if self.hook is not None:
+            try:
+                self.hook.set_visible(False)
+            except Exception:
+                pass
+            if self.hook.shutdown():
+                self.hook = None
+        return False
+
+    def refresh_region(self, *, force: bool = False) -> bool:
+        if self._status != "ready" or self.hook is None:
+            return False
+        try:
+            self.hook.refresh_region(force=force)
+        except Exception:
+            return self._fail_closed()
+        return True
+
+    def set_visible(self, visible: bool) -> bool:
+        if self._status != "ready" or self.hook is None:
+            return not visible
+        try:
+            self.hook.set_visible(visible)
+        except Exception:
+            return self._fail_closed()
+        return True
+
+    def shutdown(self) -> bool:
+        success = True
+        if self.hook is not None:
+            success = self.hook.shutdown()
+            if success:
+                self.hook = None
+        self._status = "failed"
+        return success
 
 
 class CtypesOverlayHookAPI:
@@ -523,6 +675,7 @@ class CtypesOverlayHookAPI:
         if os.name != "nt":
             raise OSError("native overlay hooks are available only on Windows")
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)
+        self._gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
         self._long_type = ctypes.c_ssize_t
         self._wndproc_type = ctypes.WINFUNCTYPE(
             self._long_type, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
@@ -557,6 +710,18 @@ class CtypesOverlayHookAPI:
         self._user32.GetCursorPos.restype = wintypes.BOOL
         self._user32.GetAsyncKeyState.argtypes = (ctypes.c_int,)
         self._user32.GetAsyncKeyState.restype = ctypes.c_short
+        self._user32.GetWindowRect.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.RECT))
+        self._user32.GetWindowRect.restype = wintypes.BOOL
+        self._user32.ClientToScreen.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.POINT))
+        self._user32.ClientToScreen.restype = wintypes.BOOL
+        self._user32.SetWindowRgn.argtypes = (wintypes.HWND, wintypes.HANDLE, wintypes.BOOL)
+        self._user32.SetWindowRgn.restype = ctypes.c_int
+        self._gdi32.CreateRectRgn.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int)
+        self._gdi32.CreateRectRgn.restype = wintypes.HANDLE
+        self._gdi32.CombineRgn.argtypes = (wintypes.HANDLE, wintypes.HANDLE, wintypes.HANDLE, ctypes.c_int)
+        self._gdi32.CombineRgn.restype = ctypes.c_int
+        self._gdi32.DeleteObject.argtypes = (wintypes.HANDLE,)
+        self._gdi32.DeleteObject.restype = wintypes.BOOL
 
     def get_extended_style(self, hwnd: int) -> int:
         return int(self._get_long(hwnd, _GWL_EXSTYLE))
@@ -580,11 +745,14 @@ class CtypesOverlayHookAPI:
         return int(original)
 
     def restore_window_procedure(self, hwnd: int, original: object) -> None:
-        self._set_long(hwnd, _GWLP_WNDPROC, int(original))
+        ctypes.set_last_error(0)
+        result = self._set_long(hwnd, _GWLP_WNDPROC, int(original))
+        if not result and ctypes.get_last_error():
+            raise ctypes.WinError(ctypes.get_last_error())
         self._callbacks.pop(hwnd, None)
 
-    def register_hotkey(self, hwnd: int, hotkey_id: int, key: int) -> None:
-        if not self._user32.RegisterHotKey(hwnd, hotkey_id, 0, key):
+    def register_hotkey(self, hwnd: int, hotkey_id: int, modifiers: int, key: int) -> None:
+        if not self._user32.RegisterHotKey(hwnd, hotkey_id, modifiers, key):
             raise ctypes.WinError(ctypes.get_last_error())
 
     def unregister_hotkey(self, hwnd: int, hotkey_id: int) -> None:
@@ -606,11 +774,47 @@ class CtypesOverlayHookAPI:
             raise ctypes.WinError(ctypes.get_last_error())
         return int(point.x), int(point.y)
 
-    def left_button_down(self) -> bool:
-        return bool(self._user32.GetAsyncKeyState(VK_LBUTTON) & 0x8000)
+    def key_press_state(self, key: int) -> KeyPressState:
+        raw = int(self._user32.GetAsyncKeyState(key)) & 0xFFFF
+        return KeyPressState(bool(raw & 0x0001), bool(raw & 0x8000))
 
-    def escape_key_down(self) -> bool:
-        return bool(self._user32.GetAsyncKeyState(VK_ESCAPE) & 0x8000)
+    def _client_window_offset(self, hwnd: int) -> tuple[int, int]:
+        window = wintypes.RECT()
+        client_origin = wintypes.POINT(0, 0)
+        if not self._user32.GetWindowRect(hwnd, ctypes.byref(window)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if not self._user32.ClientToScreen(hwnd, ctypes.byref(client_origin)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return int(client_origin.x - window.left), int(client_origin.y - window.top)
+
+    def set_window_region(self, hwnd: int, regions: tuple[Rect, ...]) -> None:
+        regions = window_relative_regions(regions, self._client_window_offset(hwnd))
+        combined = self._gdi32.CreateRectRgn(0, 0, 0, 0)
+        if not combined:
+            raise ctypes.WinError(ctypes.get_last_error())
+        transferred = False
+        try:
+            for rectangle in regions:
+                part = self._gdi32.CreateRectRgn(
+                    rectangle.x, rectangle.y, rectangle.right, rectangle.top,
+                )
+                if not part:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                try:
+                    if self._gdi32.CombineRgn(combined, combined, part, 2) == 0:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                finally:
+                    self._gdi32.DeleteObject(part)
+            if not self._user32.SetWindowRgn(hwnd, combined, True):
+                raise ctypes.WinError(ctypes.get_last_error())
+            transferred = True  # Windows owns the combined HRGN after successful SetWindowRgn.
+        finally:
+            if not transferred:
+                self._gdi32.DeleteObject(combined)
+
+    def clear_window_region(self, hwnd: int) -> None:
+        if not self._user32.SetWindowRgn(hwnd, None, True):
+            raise ctypes.WinError(ctypes.get_last_error())
 
     def show_no_activate(self, hwnd: int) -> None:
         self._user32.ShowWindow(hwnd, 4)
@@ -864,6 +1068,10 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 toast_count=len(visible_rows),
                 ledger_open=ledger_open,
             )
+            if self.native.status == "ready" and not self.native.refresh_region(force=True):
+                self.stopping = True
+                self.stop()
+                return
             mailbox = MailboxButton()
             self.place(mailbox, self.geometry.mailbox)
             unread = int(self.snapshot.get("unread_count", 0))
@@ -928,7 +1136,9 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 if self.native.hook is not None:
                     self.native.hook.set_interaction_state(game_active=False, ledger_open=False)
                     self.native.hook.poll_pointer()
-                self.native.set_visible(False)
+                if not self.native.set_visible(False):
+                    self.stopping = True
+                    self.stop()
                 return
             if self.last_focus is None or state.focused != self.last_focus:
                 self.send_action("focus-returned" if state.focused else "focus-lost")
@@ -948,7 +1158,9 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 ledger_open = bool(self.snapshot.get("is_open", False))
                 self.native.hook.set_interaction_state(game_active=game_active, ledger_open=ledger_open)
                 self.native.hook.poll_pointer()
-            self.native.set_visible(shown)
+            if not self.native.set_visible(shown):
+                self.stopping = True
+                self.stop()
 
         def on_stop(self) -> None:
             self.cancel_expiry_events()

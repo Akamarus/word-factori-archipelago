@@ -75,6 +75,8 @@ def reconcile_received(state: DispatchLedger, authoritative: Iterable[DispatchEv
     )
     existing = {event.key for event in retained}
     additions = tuple(event for event in incoming if event.key not in existing)
+    if not state.initialized:
+        additions = tuple(replace(event, observed_at=None, historical=True) for event in additions)
     notify = tuple(
         event for event in additions
         if state.initialized and event.receive_index is not None
