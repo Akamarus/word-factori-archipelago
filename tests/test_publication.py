@@ -41,6 +41,22 @@ class PublicationTests(unittest.TestCase):
         "word_factori/window_tracker.py",
     }
 
+    def test_release_text_formats_have_deterministic_checkout_line_endings(self):
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+
+        self.assertTrue(
+            {
+                "*.py text eol=lf",
+                "*.json text eol=lf",
+                "*.md text eol=lf",
+                "*.yml text eol=lf",
+                "*.yaml text eol=lf",
+                "LICENSE text eol=lf",
+                "*.ps1 text eol=crlf",
+                "*.cmd text eol=crlf",
+            }.issubset(set(attributes))
+        )
+
     def test_public_attribution_matches_the_maintainer_approved_identity(self):
         from word_factori.version import AUTHOR
 
