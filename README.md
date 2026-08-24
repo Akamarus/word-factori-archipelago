@@ -1,12 +1,39 @@
 # Word Factori Archipelago
 
+[![Windows verification](https://github.com/Akamarus/word-factori-archipelago/actions/workflows/verify.yml/badge.svg)](https://github.com/Akamarus/word-factori-archipelago/actions/workflows/verify.yml)
+
 An experimental public beta for playing **Word Factori** with [Archipelago](https://archipelago.gg/). It assembles a curated 30- or 40-level custom campaign, turns completed levels into Archipelago checks, and unlocks factory machinery as items arrive from the multiworld.
 
-![The integrated Archipelago Chat panel running over Word Factori](docs/testing/live-overlay-final-command-response.png)
+![Word Factori with the integrated Archipelago Chat panel open](docs/images/word-factori-archipelago-chat.png)
 
-Version 1.2.0 is packaged for normal players and has passed generation, installer, reconciliation, victory, frozen-client, and Windows 10 live-smoke gates. It remains labeled experimental because the complete display/password-room matrix has not yet been exercised on multiple machines.
+Version 1.2.1 is prepared as a professional experimental public beta. Automated verification covers APWorld and package building, deterministic logic, installation, reconciliation, reconnects, and victory. Recorded Archipelago generation and live acceptance cover the primary Windows 10 path; the remaining display and password-room combinations are listed below rather than implied.
 
 This project uses Word Factori's supported JSON mod format. It does **not** patch `data.win`, redistribute encoded game recipes, or write to Word Factori save files.
+
+## Engineering highlights
+
+- Python Archipelago APWorld and client integration compatible with Archipelago 0.6.7.
+- Supported Word Factori JSON mod integration with stable 30- and 40-location campaign manifests.
+- Deterministic recipe-graph and progression modeling for automated reachability rules.
+- Idempotent item delivery, completed-check, reconnect, and victory reconciliation.
+- Defensive save-slot binding and digest-verified campaign identity without writing game saves.
+- Transactional Windows install, update, and uninstall that preserve neighboring files.
+- Failure-isolated, Word Factori-styled Items/Chat overlay with the regular client as fallback.
+- A reproducible player package, full automated suite, release verifier, and Windows CI workflow.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    AP[Archipelago server] <--> Client[APWorld and Word Factori client]
+    Client --> Bridge[Idempotent state bridge]
+    Bridge --> Mod[Supported JSON mod files]
+    Game[Word Factori] -->|read-only completion state| Bridge
+    Mod -->|curated levels and unlock limits| Game
+    Client --> Overlay[Failure-isolated Items and Chat overlay]
+```
+
+The APWorld defines seed logic and stable IDs. The client reconciles authoritative Archipelago state with read-only game completion data, then rewrites only this integration's supported mod JSON. The optional overlay presents the same client state without becoming part of progression correctness.
 
 ## What the randomizer does
 
@@ -30,7 +57,7 @@ The currently tested Word Factori depot is Steam build **12616577**.
 
 ## Simple installation
 
-1. Download `word-factori-archipelago-hybrid-1.2.0.zip` from the [latest release](https://github.com/Akamarus/word-factori-archipelago/releases/latest).
+1. Download `word-factori-archipelago-1.2.1.zip` from the matching GitHub release once it is published.
 2. Extract the ZIP to a normal folder.
 3. Close Word Factori and Archipelago.
 4. Double-click **Install Word Factori Archipelago.cmd**.
@@ -57,8 +84,8 @@ The installer replaces only these integration-owned paths:
 ## Starting a randomized game
 
 1. Copy one of the example player files into your Archipelago `Players` folder:
-   - `tests/players/WordFactori.yaml` for the normal Campaign Count goal.
-   - `tests/players/WordFactoriTarget.yaml` for the Final Factory goal.
+   - `examples/WordFactori.yaml` for the normal Campaign Count goal.
+   - `examples/WordFactoriTarget.yaml` for the Final Factory goal.
 2. Change the player `name` and any Word Factori options you want. Keep `custom_level_set: discovery_labs` for all 40 levels, or choose `core_campaign` for the focused 30-level set.
 3. Generate and host the room normally with Archipelago.
 4. Launch **Word Factori Client** from the Archipelago Launcher. Connect from the in-game AP panel, through the regular client, or with an `archipelago://` launch link.
@@ -120,6 +147,8 @@ This lets Archipelago's fill algorithm place progression in valid spheres. For e
 
 Discovery Labs use stricter rules: only their declared route is permitted in the generated level. Challenge levels keep their curated quantity limits even after all relevant machine families are unlocked.
 
+![The V Discovery Lab open in Word Factori during live campaign validation](docs/images/word-factori-discovery-lab-v.png)
+
 ## Save safety
 
 Word Factori stores custom-campaign progress separately from its base campaign. The client reads:
@@ -168,8 +197,6 @@ Enter sends text. Shift+Enter inserts a line break. Escape, F8, outside click, g
 
 The overlay is cosmetic and failure-isolated: if it cannot start, the regular client continues working and retains the complete item history. Windowed and borderless modes are supported. Exclusive fullscreen may hide the overlay; use borderless mode or the regular client in that case.
 
-![The integrated Items ledger](docs/testing/live-overlay-items-composite.png)
-
 ## Troubleshooting
 
 ### A machine item arrived but is not visible
@@ -194,7 +221,7 @@ That is Word Factori's native progression. Finish the current page's levels; the
 
 ## Current limitations
 
-- Version 1.2.0 is a release-ready experimental public beta, not an upstream Archipelago release.
+- Version 1.2.1 is a release-ready experimental public beta, not an upstream Archipelago release.
 - Arbitrary Workshop packs are not imported into generated seeds.
 - Discovery Labs are post-campaign because the game sequentially gates custom levels.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.
@@ -205,29 +232,35 @@ That is Word Factori's native progression. Finish the current page's levels; the
 
 The exact next game-behavior probe is to record Word Factori's file reads while returning from a factory to save selection and reselecting the mod slot. If the game rereads `levels.json` at a narrower verified transition, the client can replace today's broad “reselect the slot or restart” instruction with that exact live-reload step. This probe observes supported mod loading only; it does not patch `data.win` or assume an unverified memory/save field.
 
+## Verification evidence
+
+**Automated and rerunnable:** the Windows verification command builds the APWorld and player ZIP, runs the complete unit/integration suite, and runs manifest, parity, recipe, and sensitive-data checks. GitHub Actions runs the same script on Windows with Python 3.12.
+
+**Recorded generation and live acceptance:** the frozen examples were generated with Archipelago 0.6.7, and the primary play path was exercised on Windows 10 at 2560×1440 and 125% scaling with Word Factori Steam build 12616577. The records are available in the repository's [testing evidence](https://github.com/Akamarus/word-factori-archipelago/tree/main/docs/testing).
+
+**Still pending:** password-protected rooms, 100% and 150% scaling, ultrawide, mixed-DPI multi-monitor use, and a second physical machine. Exclusive fullscreen is unsupported; windowed or borderless mode and the regular client fallback are the supported choices.
+
 ## Development and verification
 
-Run the tests with Python 3.12 or newer:
+From a clean checkout on Windows with Python 3.12 or newer, run the same build, test, and verification sequence used by CI:
 
 ```powershell
-python -m unittest discover -s tests -v
+powershell -ExecutionPolicy Bypass -File .\tools\verify.ps1
 ```
 
-Build the APWorld and release ZIP:
+The script performs these commands in order:
 
 ```powershell
-python tools\build_release.py
+py -3 tools\build_release.py
+py -3 -m unittest discover -s tests -v
+py -3 tools\verify_release.py
 ```
 
-Verify archive parity, JSON indices, installed recipe derivation, and proprietary-data exclusions:
+Building first is required because the installer integration tests exercise the generated `word_factori.apworld`. The test suite covers deterministic recipe reachability, progression requirements, goals, duplicate deliveries and checks, reconnect reconciliation, campaign identity, custom-save discovery, save-slot binding, transactional update/uninstall, and release hygiene.
 
-```powershell
-python tools\verify_release.py
-```
+## Project ownership and attribution
 
-The test suite covers deterministic recipe reachability, progression requirements, goals, duplicate deliveries and checks, reconnect reconciliation, campaign identity, custom-save discovery, save-slot binding, and release hygiene.
-
-## License and attribution
+Created and maintained by Jack (@Akamarus). AI tools were used extensively for planning, implementation assistance, documentation, and review. Jack directed the project, made the product and integration decisions, performed live game testing, validated release behavior, and retains responsibility for maintenance and releases.
 
 Code in this repository is available under the [MIT License](LICENSE).
 

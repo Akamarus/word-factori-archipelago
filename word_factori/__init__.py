@@ -17,6 +17,7 @@ else:
     from .campaign import campaign_digest, campaign_for_level_set
     from .options import WordFactoriOptions
     from .requirements import access_rule_for
+    from .version import AUTHOR, VERSION
     from . import Components as components
 
 
@@ -31,7 +32,7 @@ else:
     class WordFactoriWeb(WebWorld):
         game = GAME
         theme = "stone"
-        tutorials = [Tutorial("Multiworld Setup Guide", "Install and play Word Factori Archipelago.", "English", "setup_en.md", "setup/en", ["OpenAI"])]
+        tutorials = [Tutorial("Multiworld Setup Guide", "Install and play Word Factori Archipelago.", "English", "setup_en.md", "setup/en", [AUTHOR])]
 
 
     class WordFactoriWorld(World):
@@ -103,7 +104,7 @@ else:
             manifest = campaign_for_level_set(level_set)
             locations = self.selected_locations()
             return {
-                "implementation_version": "1.2.0",
+                "implementation_version": VERSION,
                 "level_set": level_set,
                 "campaign_id": manifest.campaign_id,
                 "manifest_version": manifest.version,

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib
 import json
+import re
 import sys
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -15,7 +16,9 @@ from tools.build_release import (
     PROHIBITED_RELEASE_BASENAMES,
     RELEASE_ARCHIVE,
     RELEASE_MANIFEST,
+    VERSION,
     WORLD_ARCHIVE,
+    WORLD_SOURCE_FILES,
     include,
 )
 from tools.derive_requirements import derive
@@ -31,16 +34,64 @@ def find_prohibited_release_entries(names: list[str]) -> list[str]:
     prohibited = []
     for name in names:
         parts = tuple(part.casefold() for part in Path(name).parts)
-        if ".superpowers" in parts or (parts and parts[-1] in PROHIBITED_RELEASE_BASENAMES):
+        if (
+            ".superpowers" in parts
+            or parts[:2] == ("docs", "superpowers")
+            or (parts and parts[-1] in PROHIBITED_RELEASE_BASENAMES)
+        ):
             prohibited.append(name)
     return prohibited
+
+
+_DOCUMENTED_INSTALLER = re.compile(
+    r"(?:`|\*\*)([^`\n*]+\.(?:cmd|bat|ps1))(?:`|\*\*)",
+    re.IGNORECASE,
+)
+_MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+_MARKDOWN_LINK = re.compile(r"(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+
+
+def find_missing_documented_installers(document: str, release_files: set[str]) -> list[str]:
+    available = {PurePosixPath(name).name.casefold() for name in release_files}
+    references = {
+        PurePosixPath(match.replace("\\", "/")).name
+        for match in _DOCUMENTED_INSTALLER.findall(document)
+    }
+    return sorted(name for name in references if name.casefold() not in available)
+
+
+def find_missing_local_markdown_images(document: str, release_files: set[str]) -> list[str]:
+    missing = []
+    for reference in _MARKDOWN_IMAGE.findall(document):
+        if reference.casefold().startswith(("http://", "https://", "data:")):
+            continue
+        normalized = PurePosixPath(reference).as_posix()
+        if normalized not in release_files or not (ROOT / normalized).is_file():
+            missing.append(normalized)
+    return sorted(set(missing))
+
+
+def find_missing_local_markdown_links(
+    document: str, release_files: set[str] | None = None
+) -> list[str]:
+    missing = []
+    for reference in _MARKDOWN_LINK.findall(document):
+        if reference.casefold().startswith(("http://", "https://", "mailto:", "#")):
+            continue
+        normalized = PurePosixPath(reference.split("#", 1)[0]).as_posix()
+        if normalized and (
+            not (ROOT / normalized).exists()
+            or (release_files is not None and normalized not in release_files)
+        ):
+            missing.append(normalized)
+    return sorted(set(missing))
 
 
 def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | None = None) -> None:
     with zipfile.ZipFile(archive_path) as archive:
         archived = {name: digest(archive.read(name)) for name in archive.namelist()}
     if roots is None:
-        disk_paths = [path for path in (ROOT / "word_factori").rglob("*") if path.is_file() and include(path)]
+        disk_paths = list(WORLD_SOURCE_FILES)
     else:
         disk_paths = [
             ROOT / name
@@ -102,12 +153,12 @@ def is_runtime_cache(name: str) -> bool:
 
 def main(*, verify_installed: bool = False) -> None:
     verify_headless_modules()
-    if RELEASE_ARCHIVE.name != "word-factori-archipelago-hybrid-1.2.0.zip":
-        raise AssertionError("unexpected hybrid release name")
+    if RELEASE_ARCHIVE.name != f"word-factori-archipelago-{VERSION}.zip":
+        raise AssertionError("unexpected player release name")
     verify_archive_matches_disk(WORLD_ARCHIVE)
     release_archive_present = RELEASE_ARCHIVE.is_file()
     if release_archive_present:
-        verify_archive_matches_disk(RELEASE_ARCHIVE, ("docs", "game_mod", "tests", "tools", "word_factori"))
+        verify_archive_matches_disk(RELEASE_ARCHIVE, ("docs/images", "examples", "game_mod"))
     manifest_files = load_release_manifest()
 
     game_mod = ROOT / "game_mod" / "word factori archipelago"
@@ -181,11 +232,37 @@ def main(*, verify_installed: bool = False) -> None:
         raise AssertionError(f"proprietary/user data entered release: {prohibited}")
     if any(name.startswith("tests/output") or "__pycache__" in name for name in names):
         raise AssertionError("generated output or caches entered release")
+
+    release_files = set(names)
+    for document in (
+        ROOT / "README.md",
+        ROOT / "docs" / "release-notes-v1.2.0-correction.md",
+        ROOT / "docs" / "release-notes-v1.2.1.md",
+    ):
+        missing_installers = find_missing_documented_installers(
+            document.read_text(encoding="utf-8"), release_files
+        )
+        if missing_installers:
+            raise AssertionError(
+                f"{document.relative_to(ROOT).as_posix()} names installers absent from the player package: "
+                f"{missing_installers}"
+            )
+    missing_images = find_missing_local_markdown_images(
+        (ROOT / "README.md").read_text(encoding="utf-8"), release_files
+    )
+    if missing_images:
+        raise AssertionError(f"README images are missing from the player package: {missing_images}")
+    missing_links = find_missing_local_markdown_links(
+        (ROOT / "README.md").read_text(encoding="utf-8"), release_files
+    )
+    if missing_links:
+        raise AssertionError(f"README local links are absent from the player package: {missing_links}")
     for required in (
-        "word_factori/campaign_packs.json",
-        "word_factori/client_messages.py",
-        "word_factori/overlay_renderer.py",
-        "docs/testing/full-ingame-client-acceptance.md",
+        "Install Word Factori Archipelago.cmd",
+        "examples/WordFactori.yaml",
+        "examples/WordFactoriTarget.yaml",
+        "docs/images/word-factori-archipelago-chat.png",
+        "word_factori.apworld",
     ):
         if required not in names:
             raise AssertionError(f"release is missing {required}")

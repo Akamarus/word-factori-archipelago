@@ -1,12 +1,13 @@
 {
   "LeftPage": [
     "# Word Factori Archipelago",
-    "Independent integration prototype",
-    "Uses Word Factori's supported JSON mod format"
+    "Independent community integration",
+    "Created and maintained by Jack (@Akamarus).",
+    "AI tools were used extensively for planning, implementation assistance, documentation, and review."
   ],
   "RightPage": [
-    "# Safety",
-    "No proprietary binaries are redistributed or modified",
-    "Vanilla recipes are loaded by the game through include_vanilla"
+    "# Responsibility",
+    "Jack directed the project, made the product and integration decisions, performed live game testing, validated release behavior, and retains responsibility for maintenance and releases.",
+    "No proprietary binaries are redistributed or modified"
   ]
 }
