@@ -143,7 +143,7 @@ class WordFactoriContext(CommonContext):
         self.state_root = self.factori_root / "archipelago"
         self.slot_data: dict = {}
         self.bridge_state = BridgeState.empty()
-        self.last_render_signature: tuple[str, ...] | None = None
+        self.last_render_signature: tuple[tuple[str, ...], int] | None = None
         self.last_bridge_error: str | None = None
         self.room_seed_name: str | None = None
         self.connected_identity: str | None = None
@@ -778,11 +778,18 @@ class WordFactoriContext(CommonContext):
         self.bridge_state = result.state
         save_state(self.state_path(), self.bridge_state)
         view = inventory_view(ReceivedItem(index, name) for index, name in self.bridge_state.applied.items())
-        signature = tuple(sorted(self.bridge_state.applied.values()))
+        signature = (tuple(sorted(view.owned_machines)), view.world_access)
         if signature != self.last_render_signature:
             levels = render_levels(
                 view.owned_machines, view.world_access, locations=self.active_locations(),
             )
+            try:
+                installed_levels = json.loads(self.levels_path.read_text(encoding="utf-8"))
+            except (OSError, TypeError, ValueError):
+                installed_levels = None
+            if installed_levels == levels:
+                self.last_render_signature = signature
+                return
             write_levels(self.levels_path, levels)
             self.last_render_signature = signature
             logger.info("Word Factori unlocks updated. Reload the AP mod or reselect its save slot in game.")

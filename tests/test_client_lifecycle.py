@@ -209,6 +209,7 @@ from word_factori.data import (
 )
 from word_factori.dispatch import DispatchDirection
 from word_factori.dispatch_store import DispatchLedger, load_ledger, save_ledger
+from word_factori.mod import render_levels
 from word_factori.overlay_model import OverlayAction, OverlayFilter, OverlayState, apply_action
 from word_factori.overlay_preferences import OverlayPreferences
 from word_factori.overlay_protocol import (
@@ -1466,13 +1467,45 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(self.ctx._presentation_generation, buffered_generation)
         self.assertFalse(self.ctx.overlay_state.is_open)
 
-    async def test_unlock_render_sets_reload_required_snapshot(self):
+    async def test_sticker_delivery_preserves_matching_levels_without_reload(self):
+        sticker_id = ITEM_NAME_TO_ID["I Sticker"]
+        self.ctx.item_names.names[sticker_id] = "I Sticker"
         self.ctx.items_received = [make_network_item(
-            item=7001, location=9001, player=2, flags=1,
+            item=sticker_id, location=9001, player=2, flags=1,
+        )]
+        installed = json.dumps(
+            render_levels({"Bender Access"}, 0), separators=(",", ":"),
+        )
+        self.ctx.levels_path.write_text(installed, encoding="utf-8")
+
+        await self.ctx.reconcile_received()
+
+        self.assertEqual(installed, self.ctx.levels_path.read_text(encoding="utf-8"))
+        self.assertFalse(self.ctx.overlay_state.reload_required)
+
+    async def test_reconnect_preserves_matching_levels_without_reload(self):
+        installed = json.dumps(
+            render_levels({"Bender Access"}, 0), separators=(",", ":"),
+        )
+        self.ctx.levels_path.write_text(installed, encoding="utf-8")
+        self.ctx.last_render_signature = None
+
+        await self.ctx.reconcile_received()
+
+        self.assertEqual(installed, self.ctx.levels_path.read_text(encoding="utf-8"))
+        self.assertFalse(self.ctx.overlay_state.reload_required)
+
+    async def test_unlock_render_sets_reload_required_snapshot(self):
+        rotation_id = ITEM_NAME_TO_ID["Rotation Access"]
+        self.ctx.item_names.names[rotation_id] = "Rotation Access"
+        self.ctx.items_received = [make_network_item(
+            item=rotation_id, location=9001, player=2, flags=1,
         )]
 
         await self.ctx.reconcile_received()
 
+        levels = json.loads(self.ctx.levels_path.read_text(encoding="utf-8"))
+        self.assertNotIn("Rotate_cw", levels[0]["module_counts"])
         self.assertTrue(self.ctx.overlay_state.reload_required)
         self.assertTrue(self.overlay.published[-1].reload_required)
 
