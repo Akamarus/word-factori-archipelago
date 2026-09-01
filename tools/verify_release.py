@@ -238,6 +238,7 @@ def main(*, verify_installed: bool = False) -> None:
         ROOT / "README.md",
         ROOT / "docs" / "release-notes-v1.2.0-correction.md",
         ROOT / "docs" / "release-notes-v1.2.1.md",
+        ROOT / "docs" / "release-notes-v1.2.2.md",
     ):
         missing_installers = find_missing_documented_installers(
             document.read_text(encoding="utf-8"), release_files

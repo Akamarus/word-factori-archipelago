@@ -91,7 +91,7 @@ class PublicationTests(unittest.TestCase):
 
         metadata = json.loads((ROOT / "word_factori" / "archipelago.json").read_text(encoding="utf-8"))
 
-        self.assertEqual("1.2.1", VERSION)
+        self.assertEqual("1.2.2", VERSION)
         self.assertEqual(VERSION, metadata["world_version"])
         self.assertEqual(f"word-factori-archipelago-{VERSION}.zip", build_release.RELEASE_ARCHIVE.name)
 
@@ -209,6 +209,7 @@ class PublicationTests(unittest.TestCase):
             ROOT / "README.md",
             ROOT / "docs" / "release-notes-v1.2.0-correction.md",
             ROOT / "docs" / "release-notes-v1.2.1.md",
+            ROOT / "docs" / "release-notes-v1.2.2.md",
         )
         missing = {
             path.relative_to(ROOT).as_posix(): verify_release.find_missing_documented_installers(

@@ -6,7 +6,7 @@ An experimental public beta for playing **Word Factori** with [Archipelago](http
 
 ![Word Factori with the integrated Archipelago Chat panel open](docs/images/word-factori-archipelago-chat.png)
 
-Version 1.2.1 is prepared as a professional experimental public beta. Automated verification covers APWorld and package building, deterministic logic, installation, reconciliation, reconnects, and victory. Recorded Archipelago generation and live acceptance cover the primary Windows 10 path; the remaining display and password-room combinations are listed below rather than implied.
+Version 1.2.2 is prepared as a professional experimental public beta. It prevents sticker deliveries and ordinary reconnects from requesting unnecessary Word Factori reloads while preserving reload guidance for genuine progression changes. Automated verification covers APWorld and package building, deterministic logic, installation, reconciliation, reconnects, and victory.
 
 This project uses Word Factori's supported JSON mod format. It does **not** patch `data.win`, redistribute encoded game recipes, or write to Word Factori save files.
 
@@ -57,7 +57,7 @@ The currently tested Word Factori depot is Steam build **12616577**.
 
 ## Simple installation
 
-1. Download `word-factori-archipelago-1.2.1.zip` from the matching GitHub release once it is published.
+1. Download `word-factori-archipelago-1.2.2.zip` from the matching GitHub release.
 2. Extract the ZIP to a normal folder.
 3. Close Word Factori and Archipelago.
 4. Double-click **Install Word Factori Archipelago.cmd**.
@@ -223,7 +223,7 @@ That is Word Factori's native progression. Finish the current page's levels; the
 
 ## Current limitations
 
-- Version 1.2.1 is a release-ready experimental public beta, not an upstream Archipelago release.
+- Version 1.2.2 is a release-ready experimental public beta, not an upstream Archipelago release.
 - Arbitrary Workshop packs are not imported into generated seeds.
 - Discovery Labs are post-campaign because the game sequentially gates custom levels.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.
