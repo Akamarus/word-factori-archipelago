@@ -144,6 +144,7 @@ class WordFactoriContext(CommonContext):
         self.slot_data: dict = {}
         self.bridge_state = BridgeState.empty()
         self.last_render_signature: tuple[tuple[str, ...], int] | None = None
+        self._prepared_campaign_reload_required = False
         self.last_bridge_error: str | None = None
         self.room_seed_name: str | None = None
         self.connected_identity: str | None = None
@@ -273,6 +274,7 @@ class WordFactoriContext(CommonContext):
         elif cmd == "Connected":
             connection_generation = self._advance_connection_generation()
             self.slot_data = dict(args.get("slot_data") or {})
+            self.last_render_signature = None
             self.prepare_selected_campaign()
             self.connected_identity = self.current_identity()
             try:
@@ -288,6 +290,7 @@ class WordFactoriContext(CommonContext):
                 unread_count=len(baseline_ledger.unread_keys),
                 max_visible=self.overlay_preferences.max_visible,
                 connection_status="connected",
+                reload_required=self._prepared_campaign_reload_required,
                 accepted_notification_keys=frozenset(
                     event.key for event in baseline_ledger.events
                 ),
@@ -304,7 +307,6 @@ class WordFactoriContext(CommonContext):
                 return
             self.bridge_state = acknowledge_checks(self.bridge_state, self.checked_locations)
             save_state(self.state_path(), self.bridge_state)
-            self.last_render_signature = None
             asyncio.create_task(self._connected_reconcile(
                 self.connected_identity, self._snapshot_dispatch_items(self.items_received),
                 frozenset(self.checked_locations), connection_generation,
@@ -770,6 +772,25 @@ class WordFactoriContext(CommonContext):
             received.append(ReceivedItem(index, self.item_names.lookup_in_game(item.item)))
         return received
 
+    def update_rendered_levels(
+        self, owned_machines: set[str], world_access: int,
+        locations: tuple[LocationData, ...],
+    ) -> bool:
+        signature = (tuple(sorted(owned_machines)), world_access)
+        if signature == self.last_render_signature:
+            return False
+        levels = render_levels(owned_machines, world_access, locations=locations)
+        try:
+            installed_levels = json.loads(self.levels_path.read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError):
+            installed_levels = None
+        if installed_levels == levels:
+            self.last_render_signature = signature
+            return False
+        write_levels(self.levels_path, levels)
+        self.last_render_signature = signature
+        return True
+
     async def reconcile_received(self) -> None:
         if not self.compatible_campaign():
             self._bridge_warning(CAMPAIGN_MISMATCH)
@@ -778,20 +799,9 @@ class WordFactoriContext(CommonContext):
         self.bridge_state = result.state
         save_state(self.state_path(), self.bridge_state)
         view = inventory_view(ReceivedItem(index, name) for index, name in self.bridge_state.applied.items())
-        signature = (tuple(sorted(view.owned_machines)), view.world_access)
-        if signature != self.last_render_signature:
-            levels = render_levels(
-                view.owned_machines, view.world_access, locations=self.active_locations(),
-            )
-            try:
-                installed_levels = json.loads(self.levels_path.read_text(encoding="utf-8"))
-            except (OSError, TypeError, ValueError):
-                installed_levels = None
-            if installed_levels == levels:
-                self.last_render_signature = signature
-                return
-            write_levels(self.levels_path, levels)
-            self.last_render_signature = signature
+        if self.update_rendered_levels(
+            view.owned_machines, view.world_access, self.active_locations(),
+        ):
             logger.info("Word Factori unlocks updated. Reload the AP mod or reselect its save slot in game.")
             self.overlay_state = apply_action(
                 self.overlay_state, OverlayAction("reload-required", "true"),
@@ -835,21 +845,20 @@ class WordFactoriContext(CommonContext):
 
     def prepare_selected_campaign(self) -> bool:
         """Install only a bundled, digest-matched curated level set for this slot."""
+        self._prepared_campaign_reload_required = False
         manifest = self.selected_campaign()
         if manifest is None:
             return False
         locations = self.active_locations()
         try:
             view = inventory_view(self.network_items())
-            levels = render_levels(
-                view.owned_machines, view.world_access, locations=locations,
+            self._prepared_campaign_reload_required = self.update_rendered_levels(
+                view.owned_machines, view.world_access, locations,
             )
-            write_levels(self.levels_path, levels)
             write_campaign_identity(self.campaign_path, manifest)
         except (OSError, TypeError, ValueError) as error:
             self._bridge_warning(f"Curated campaign installation failed: {error}")
             return False
-        self.last_render_signature = None
         return True
 
     def compatible_campaign(self) -> bool:

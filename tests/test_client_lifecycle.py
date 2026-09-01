@@ -1488,12 +1488,26 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             render_levels({"Bender Access"}, 0), separators=(",", ":"),
         )
         self.ctx.levels_path.write_text(installed, encoding="utf-8")
-        self.ctx.last_render_signature = None
+        self.ctx.connected_identity = None
 
-        await self.ctx.reconcile_received()
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
 
         self.assertEqual(installed, self.ctx.levels_path.read_text(encoding="utf-8"))
         self.assertFalse(self.ctx.overlay_state.reload_required)
+
+    async def test_connected_repair_of_corrupt_levels_requires_reload(self):
+        self.ctx.levels_path.write_text("{not-json", encoding="utf-8")
+        self.ctx.connected_identity = None
+
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        levels = json.loads(self.ctx.levels_path.read_text(encoding="utf-8"))
+        self.assertEqual("I", levels[0]["text"])
+        self.assertTrue(self.ctx.overlay_state.reload_required)
 
     async def test_unlock_render_sets_reload_required_snapshot(self):
         rotation_id = ITEM_NAME_TO_ID["Rotation Access"]
