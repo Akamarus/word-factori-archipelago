@@ -197,11 +197,13 @@ Enter sends text. Shift+Enter inserts a line break. Escape, F8, outside click, g
 
 The overlay is cosmetic and failure-isolated: if it cannot start, the regular client continues working and retains the complete item history. Windowed and borderless modes are supported. Exclusive fullscreen may hide the overlay; use borderless mode or the regular client in that case.
 
+Sticker deliveries and reconnecting to the same room do not require reloading Word Factori. The client only replaces the generated campaign when a received machine or Progressive World Access item changes what the game should expose.
+
 ## Troubleshooting
 
-### A machine item arrived but is not visible
+### A machine or World Access item arrived but is not visible
 
-Return to Word Factori's save selection and reselect the mod slot. If that does not reload the palette, restart Word Factori. The current game build does not expose a verified live-reload hook.
+Return to Word Factori's save selection and reselect the mod slot. If that does not reload the palette or newly available level input, restart Word Factori. Sticker items and ordinary reconnects never need this step. The current game build does not expose a verified live-reload hook for real progression changes.
 
 ### A level is visible but cannot be completed
 
