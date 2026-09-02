@@ -6,6 +6,7 @@ import importlib
 import json
 import logging
 import os
+import random
 import sys
 import tempfile
 import types
@@ -205,11 +206,12 @@ from word_factori.client_messages import ClientMessageKind
 from word_factori.campaign import campaign_digest, campaign_for_level_set
 from word_factori.data import (
     CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, ITEM_NAME_TO_ID, LOCATIONS,
-    locations_for_level_set,
+    locations_for_layout, locations_for_level_set,
 )
 from word_factori.dispatch import DispatchDirection
 from word_factori.dispatch_store import DispatchLedger, load_ledger, save_ledger
-from word_factori.mod import render_levels
+from word_factori.layout import layout_slot_data, shuffled_layout
+from word_factori.mod import render_levels, write_campaign_identity
 from word_factori.overlay_model import OverlayAction, OverlayFilter, OverlayState, apply_action
 from word_factori.overlay_preferences import OverlayPreferences
 from word_factori.overlay_protocol import (
@@ -273,6 +275,7 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             "campaign_id": CAMPAIGN_ID,
             "manifest_version": CAMPAIGN_VERSION,
             "manifest_digest": CAMPAIGN_DIGEST,
+            "level_count": len(LOCATIONS),
         }
         self.ctx.connected_identity = self.ctx.current_identity()
         self.ctx.dispatch_ledger = DispatchLedger.empty(self.ctx.connected_identity)
@@ -303,12 +306,112 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             }
         }), encoding="utf-8")
 
+    def install_shuffled_room(self, seed=9173):
+        manifest = campaign_for_level_set("discovery_labs")
+        layout = shuffled_layout(
+            manifest, "discovery_labs", random.Random(seed),
+        )
+        locations = locations_for_layout(manifest, layout)
+        self.ctx.slot_data = {
+            **self.ctx.slot_data,
+            **layout_slot_data(layout),
+            "level_set": "discovery_labs",
+            "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version,
+            "manifest_digest": layout.digest,
+            "level_count": len(locations),
+        }
+        write_campaign_identity(self.ctx.campaign_path, manifest, layout)
+        return manifest, layout, locations
+
     def capture_scheduled_task(self, callback):
         before = asyncio.all_tasks()
         callback()
         created = asyncio.all_tasks() - before
         self.assertEqual(1, len(created))
         return created.pop()
+
+    async def test_shuffled_native_slot_submits_stable_code_once_across_reconnect(self):
+        _, _, locations = self.install_shuffled_room()
+        expected_code = locations[7].code
+        self.ctx.missing_locations = {expected_code}
+
+        await self.ctx.report_indices({7})
+        await self.ctx.report_indices({7})
+        self.ctx.checked_locations = {expected_code}
+        self.ctx.connected_identity = None
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        checks = [
+            message for message in self.ctx.sent_messages
+            if message["cmd"] == "LocationChecks"
+        ]
+        self.assertEqual(1, len(checks))
+        self.assertEqual((expected_code,), checks[0]["locations"])
+        self.assertNotIn(expected_code, self.ctx.bridge_state.pending_checks)
+
+    async def test_shuffled_room_preparation_writes_slot_order_and_layout_identity(self):
+        _, layout, locations = self.install_shuffled_room()
+        self.ctx.campaign_path.unlink()
+
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+
+        levels = json.loads(self.ctx.levels_path.read_text(encoding="utf-8"))
+        identity = json.loads(self.ctx.campaign_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [location.target for location in locations],
+            [level["text"] for level in levels],
+        )
+        self.assertEqual(layout.digest, identity["manifest_digest"])
+        self.assertEqual(layout.digest, identity["layout_digest"])
+        self.assertEqual(layout.progression_model, identity["progression_model"])
+
+    async def test_layout_digest_mismatch_blocks_level_rewrite_and_checks(self):
+        _, _, locations = self.install_shuffled_room()
+        original_levels = '[{"sentinel": true}]\n'
+        self.ctx.levels_path.write_text(original_levels, encoding="utf-8")
+        self.ctx.slot_data["layout_digest"] = "0" * 64
+        self.ctx.missing_locations = {locations[7].code}
+
+        self.assertFalse(self.ctx.prepare_selected_campaign())
+        await self.ctx.report_indices({7})
+
+        self.assertEqual(
+            original_levels, self.ctx.levels_path.read_text(encoding="utf-8"),
+        )
+        self.assertFalse(any(
+            message["cmd"] == "LocationChecks" for message in self.ctx.sent_messages
+        ))
+
+    async def test_legacy_room_keeps_canonical_native_slots(self):
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.assertEqual(LOCATIONS, self.ctx.active_locations())
+        self.assertEqual(7, self.ctx.resolve_location(LOCATIONS[7].name))
+        levels = json.loads(self.ctx.levels_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [location.target for location in LOCATIONS],
+            [level["text"] for level in levels],
+        )
+
+    async def test_manual_canonical_name_reports_shuffled_page_and_slot(self):
+        _, _, locations = self.install_shuffled_room()
+        location = next(
+            entry for entry in locations if entry.canonical_index == 7
+        )
+        processor = WordFactoriCommandProcessor(self.ctx)
+
+        task = self.capture_scheduled_task(
+            lambda: processor._cmd_wf_complete(location.name),
+        )
+        await task
+
+        self.assertEqual(location.slot_index, self.ctx.resolve_location(location.name))
+        diagnostic = processor.outputs[-1]
+        self.assertIn(location.name, diagnostic)
+        self.assertIn(f"page {location.page_index + 1}", diagnostic)
+        self.assertIn(f"slot {(location.slot_index % 6) + 1}", diagnostic)
 
     async def test_overlay_connect_uses_common_context_connection_path(self):
         intent = ConnectIntent(

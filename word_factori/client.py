@@ -31,12 +31,15 @@ from .bridge import (
     save_state,
 )
 from .client_core import (
+    ResolvedCampaign,
     campaign_compatible,
     goal_reached,
     inventory_view,
+    location_codes_for_native_slots,
     mod_is_selected,
     parse_connection_url,
     resolve_game_slot_binding,
+    resolve_room_campaign,
     state_identity,
     utc_observed_at,
 )
@@ -48,8 +51,7 @@ from .client_messages import (
     make_client_message,
     normalize_print_json,
 )
-from .campaign import CampaignManifest, campaign_digest, campaign_for_level_set
-from .data import DEFAULT_LEVEL_SET, GAME, ITEM_NAME_TO_ID, LOCATIONS, LocationData, locations_for_level_set
+from .data import GAME, ITEM_NAME_TO_ID, LocationData
 from .dispatch import DispatchDirection, DispatchEvent, received_event, sent_event
 from .dispatch_store import (
     DispatchLedger, ledger_path, load_ledger, mark_all_read, reconcile_received, record_event,
@@ -100,9 +102,17 @@ class WordFactoriCommandProcessor(ClientCommandProcessor):
         """Manually report a completed level by 1-based number, target word, or location name."""
         try:
             index = self.ctx.resolve_location(identifier)
+            location = next(
+                entry for entry in self.ctx.active_locations()
+                if entry.slot_index == index
+            )
         except ValueError as error:
             self.output(str(error))
             return
+        self.output(
+            f"Reporting {location.name} "
+            f"(page {location.page_index + 1}, slot {(location.slot_index % 6) + 1})."
+        )
         asyncio.create_task(self.ctx.report_indices({index}))
 
     def _cmd_wf_scan(self) -> None:
@@ -822,47 +832,40 @@ class WordFactoriContext(CommonContext):
             return {}
         return payload if isinstance(payload, dict) else {}
 
-    def selected_campaign(self) -> CampaignManifest | None:
-        level_set = self.slot_data.get("level_set", DEFAULT_LEVEL_SET)
+    def selected_campaign(self) -> ResolvedCampaign | None:
         try:
-            manifest = campaign_for_level_set(level_set)
+            return resolve_room_campaign(self.slot_data)
         except (TypeError, ValueError):
             return None
-        if (
-            self.slot_data.get("campaign_id") != manifest.campaign_id
-            or self.slot_data.get("manifest_version") != manifest.version
-            or self.slot_data.get("manifest_digest") != campaign_digest(manifest)
-            or self.slot_data.get("level_count", len(manifest.levels)) != len(manifest.levels)
-        ):
-            return None
-        return manifest
 
     def active_locations(self) -> tuple[LocationData, ...]:
-        manifest = self.selected_campaign()
-        if manifest is None:
-            return ()
-        return locations_for_level_set(str(self.slot_data.get("level_set", DEFAULT_LEVEL_SET)))
+        campaign = self.selected_campaign()
+        return () if campaign is None else campaign.locations
 
     def prepare_selected_campaign(self) -> bool:
         """Install only a bundled, digest-matched curated level set for this slot."""
         self._prepared_campaign_reload_required = False
-        manifest = self.selected_campaign()
-        if manifest is None:
+        campaign = self.selected_campaign()
+        if campaign is None:
             return False
-        locations = self.active_locations()
         try:
             view = inventory_view(self.network_items())
             self._prepared_campaign_reload_required = self.update_rendered_levels(
-                view.owned_machines, view.world_access, locations,
+                view.owned_machines, view.world_access, campaign.locations,
             )
-            write_campaign_identity(self.campaign_path, manifest)
+            write_campaign_identity(
+                self.campaign_path, campaign.manifest, campaign.layout,
+            )
         except (OSError, TypeError, ValueError) as error:
             self._bridge_warning(f"Curated campaign installation failed: {error}")
             return False
         return True
 
     def compatible_campaign(self) -> bool:
-        return campaign_compatible(self.slot_data, self.installed_campaign())
+        return (
+            self.selected_campaign() is not None
+            and campaign_compatible(self.slot_data, self.installed_campaign())
+        )
 
     def ensure_game_slot_binding(self) -> ActiveSlot | None:
         try:
@@ -906,23 +909,24 @@ class WordFactoriContext(CommonContext):
         if self.ensure_game_slot_binding() is None:
             return
         locations = self.active_locations()
-        valid = {index for index in indices if 0 <= index < len(locations)}
-        server_indices = {
-            location.slot_index for location in locations if location.code in self.checked_locations
+        observed_codes = location_codes_for_native_slots(indices, locations)
+        server_codes = frozenset(self.checked_locations) & {
+            location.code for location in locations
         }
-        result = reconcile(self.bridge_state, [], valid, server_indices)
+        result = reconcile(self.bridge_state, [], observed_codes, server_codes)
         if result.new_checks:
-            location_ids = {
-                locations[index].code for index in result.new_checks
-            } - self.bridge_state.pending_checks
+            location_ids = set(result.new_checks) - self.bridge_state.pending_checks
             if location_ids:
                 self.bridge_state = queue_checks(self.bridge_state, location_ids)
                 save_state(self.state_path(), self.bridge_state)
                 await self.check_locations(location_ids)
-        combined = server_indices | valid
+        combined = server_codes | observed_codes
         goal = int(self.slot_data.get("goal", 0))
         target = int(self.slot_data.get("campaign_count", 25))
-        if goal_reached(goal, target, combined) and self.goal_identity != self.connected_identity:
+        if (
+            goal_reached(goal, target, combined, locations)
+            and self.goal_identity != self.connected_identity
+        ):
             self.goal_identity = self.connected_identity
             await self._send_goal()
 
@@ -938,9 +942,13 @@ class WordFactoriContext(CommonContext):
         locations = self.active_locations()
         value = identifier.strip()
         if value.isdigit():
-            index = int(value) - 1
-            if 0 <= index < len(locations):
-                return index
+            displayed_slot = int(value) - 1
+            matches = [
+                location.slot_index for location in locations
+                if location.slot_index == displayed_slot
+            ]
+            if len(matches) == 1:
+                return matches[0]
         folded = value.casefold()
         matches = [location.slot_index for location in locations if folded in {location.target.casefold(), location.name.casefold()}]
         if len(matches) == 1:

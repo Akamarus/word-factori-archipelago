@@ -1,12 +1,26 @@
 import json
+import random
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from word_factori.bridge import BridgeState, ReceivedItem, bind_game_slot, load_state, reconcile, save_state
-from word_factori.client_core import campaign_compatible, game_font_path, goal_reached, inventory_view, mod_is_selected, parse_connection_url, resolve_game_slot_binding, state_identity
+from word_factori.client_core import (
+    campaign_compatible,
+    game_font_path,
+    goal_reached,
+    inventory_view,
+    location_codes_for_native_slots,
+    mod_is_selected,
+    native_slots_for_location_codes,
+    parse_connection_url,
+    resolve_game_slot_binding,
+    resolve_room_campaign,
+    state_identity,
+)
 from word_factori.data import CAMPAIGN_DIGEST, ITEM_POOL, LOCATIONS, MACHINE_ITEMS
-from word_factori.layout import fixed_layout
+from word_factori.layout import fixed_layout, layout_slot_data, shuffled_layout
 from word_factori.mod import render_levels, write_campaign_identity
 from word_factori.campaign import campaign_digest, campaign_for_level_set, load_campaign
 from word_factori.data import locations_for_level_set
@@ -250,6 +264,104 @@ class BridgeTests(unittest.TestCase):
 
 
 class ClientCoreTests(unittest.TestCase):
+    def shuffled_slot_data(self):
+        manifest = campaign_for_level_set("discovery_labs")
+        layout = shuffled_layout(manifest, "discovery_labs", random.Random(9173))
+        return {
+            **layout_slot_data(layout),
+            "level_set": "discovery_labs",
+            "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version,
+            "manifest_digest": layout.digest,
+            "level_count": len(manifest.levels),
+        }
+
+    def test_shuffled_room_reconstructs_slot_order_and_translates_save_indices(self):
+        resolved = resolve_room_campaign(self.shuffled_slot_data())
+        expected = frozenset({resolved.locations[0].code, resolved.locations[7].code})
+
+        self.assertFalse(resolved.legacy)
+        self.assertEqual(
+            expected,
+            location_codes_for_native_slots({0, 7, 400}, resolved.locations),
+        )
+        self.assertEqual(
+            frozenset({0, 7}),
+            native_slots_for_location_codes(expected, resolved.locations),
+        )
+
+    def test_translation_rejects_duplicate_native_slots_and_location_codes(self):
+        resolved = resolve_room_campaign(self.shuffled_slot_data())
+        duplicate_slot = replace(
+            resolved.locations[1], slot_index=resolved.locations[0].slot_index,
+        )
+        duplicate_code = replace(
+            resolved.locations[1], canonical_index=resolved.locations[0].canonical_index,
+        )
+
+        with self.assertRaisesRegex(ValueError, "duplicate native slot"):
+            location_codes_for_native_slots(
+                {0}, (resolved.locations[0], duplicate_slot),
+            )
+        with self.assertRaisesRegex(ValueError, "duplicate location code"):
+            native_slots_for_location_codes(
+                {resolved.locations[0].code}, (resolved.locations[0], duplicate_code),
+            )
+
+    def test_goals_use_canonical_non_discovery_and_final_location_codes(self):
+        resolved = resolve_room_campaign(self.shuffled_slot_data())
+        campaign_codes = {
+            location.code for location in resolved.locations
+            if location.kind != "discovery"
+        }
+        first_twenty = set(sorted(campaign_codes)[:20])
+        discovery_code = next(
+            location.code for location in resolved.locations
+            if location.kind == "discovery"
+        )
+        final_code = next(
+            location.code for location in resolved.locations
+            if location.stable_key == "pitchfork-final"
+        )
+
+        self.assertTrue(goal_reached(0, 20, first_twenty, resolved.locations))
+        self.assertFalse(goal_reached(
+            0, 20, set(sorted(first_twenty)[:19]) | {discovery_code}, resolved.locations,
+        ))
+        self.assertTrue(goal_reached(1, 20, {final_code}, resolved.locations))
+        self.assertFalse(goal_reached(
+            1, 20, {resolved.locations[29].code} - {final_code}, resolved.locations,
+        ))
+
+    def test_room_resolution_rejects_duplicate_layout_keys_and_digest_mismatch(self):
+        duplicate = self.shuffled_slot_data()
+        duplicate["level_order"][1] = duplicate["level_order"][0]
+        with self.assertRaisesRegex(ValueError, "complete and unique"):
+            resolve_room_campaign(duplicate)
+
+        mismatch = self.shuffled_slot_data()
+        mismatch["manifest_digest"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "manifest digest"):
+            resolve_room_campaign(mismatch)
+
+    def test_legacy_room_uses_canonical_order(self):
+        manifest = campaign_for_level_set("discovery_labs")
+        resolved = resolve_room_campaign({
+            "implementation_version": "1.2.2",
+            "level_set": "discovery_labs",
+            "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version,
+            "manifest_digest": campaign_digest(manifest),
+            "level_count": len(manifest.levels),
+        })
+
+        self.assertTrue(resolved.legacy)
+        self.assertIsNone(resolved.layout)
+        self.assertEqual(
+            list(range(len(manifest.levels))),
+            [location.slot_index for location in resolved.locations],
+        )
+
     def test_game_font_is_resolved_only_when_neighboring_file_exists(self):
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / "word factori.exe"
@@ -292,10 +404,11 @@ class ClientCoreTests(unittest.TestCase):
         self.assertEqual(2, view.world_access)
 
     def test_campaign_count_and_final_factory_goals(self):
-        self.assertTrue(goal_reached(0, 25, set(range(25)) | set(range(30, 40))))
-        self.assertFalse(goal_reached(0, 25, set(range(24)) | set(range(30, 40))))
-        self.assertTrue(goal_reached(1, 25, {29}))
-        self.assertFalse(goal_reached(1, 25, set(range(29))))
+        checked = {location.code for location in LOCATIONS[:25]}
+        self.assertTrue(goal_reached(0, 25, checked, LOCATIONS))
+        self.assertFalse(goal_reached(0, 25, checked - {LOCATIONS[24].code}, LOCATIONS))
+        self.assertTrue(goal_reached(1, 25, {LOCATIONS[29].code}, LOCATIONS))
+        self.assertFalse(goal_reached(1, 25, checked, LOCATIONS))
 
     def test_mod_selection_guard_accepts_only_owned_folder(self):
         expected = r"C:\Users\Player\AppData\Local\factori\mods\word factori archipelago"
@@ -319,6 +432,31 @@ class ClientCoreTests(unittest.TestCase):
         self.assertFalse(campaign_compatible(slot, installed))
         installed["manifest_digest"] = slot["manifest_digest"]
         self.assertTrue(campaign_compatible(slot, installed))
+
+    def test_layout_compatibility_compares_every_installed_identity_field(self):
+        slot = self.shuffled_slot_data()
+        manifest = campaign_for_level_set("discovery_labs")
+        layout = shuffled_layout(
+            manifest, "discovery_labs", random.Random(9173),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "archipelago_campaign.json"
+            write_campaign_identity(path, manifest, layout)
+            installed = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertTrue(campaign_compatible(slot, installed))
+        for field in (
+            "progression_model",
+            "layout_algorithm",
+            "page_size",
+            "page_unlock_count",
+            "base_manifest_digest",
+            "layout_digest",
+        ):
+            with self.subTest(field=field):
+                mismatched = dict(installed)
+                mismatched[field] = "wrong"
+                self.assertFalse(campaign_compatible(slot, mismatched))
 
     def test_connection_url_separates_credentials_from_server_address(self):
         self.assertEqual(
