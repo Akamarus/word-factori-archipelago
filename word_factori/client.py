@@ -908,7 +908,7 @@ class WordFactoriContext(CommonContext):
         locations = self.active_locations()
         valid = {index for index in indices if 0 <= index < len(locations)}
         server_indices = {
-            location.index for location in locations if location.code in self.checked_locations
+            location.slot_index for location in locations if location.code in self.checked_locations
         }
         result = reconcile(self.bridge_state, [], valid, server_indices)
         if result.new_checks:
@@ -942,7 +942,7 @@ class WordFactoriContext(CommonContext):
             if 0 <= index < len(locations):
                 return index
         folded = value.casefold()
-        matches = [location.index for location in locations if folded in {location.target.casefold(), location.name.casefold()}]
+        matches = [location.slot_index for location in locations if folded in {location.target.casefold(), location.name.casefold()}]
         if len(matches) == 1:
             return matches[0]
         raise ValueError("Use a unique 1-based level number, target word, or full location name.")

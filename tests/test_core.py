@@ -6,8 +6,9 @@ from pathlib import Path
 from word_factori.bridge import BridgeState, ReceivedItem, bind_game_slot, load_state, reconcile, save_state
 from word_factori.client_core import campaign_compatible, game_font_path, goal_reached, inventory_view, mod_is_selected, parse_connection_url, resolve_game_slot_binding, state_identity
 from word_factori.data import CAMPAIGN_DIGEST, ITEM_POOL, LOCATIONS, MACHINE_ITEMS
+from word_factori.layout import fixed_layout
 from word_factori.mod import render_levels, write_campaign_identity
-from word_factori.campaign import campaign_for_level_set, load_campaign
+from word_factori.campaign import campaign_digest, campaign_for_level_set, load_campaign
 from word_factori.data import locations_for_level_set
 from word_factori.capabilities import requirements_for_record, unavoidable_nonbootstrap_machines
 from word_factori.requirements import WORD_REQUIREMENT_OPTIONS, access_rule_for
@@ -33,7 +34,9 @@ class CapabilityTests(unittest.TestCase):
 
 class DataTests(unittest.TestCase):
     def test_world_has_forty_stable_indices_and_pool_items(self):
-        self.assertEqual(list(range(40)), [location.index for location in LOCATIONS])
+        self.assertEqual(list(range(40)), [location.canonical_index for location in LOCATIONS])
+        self.assertEqual(list(range(40)), [location.slot_index for location in LOCATIONS])
+        self.assertEqual([index // 6 for index in range(40)], [location.page_index for location in LOCATIONS])
         self.assertEqual(40, len({location.name for location in LOCATIONS}))
         self.assertEqual(40, len(ITEM_POOL))
         self.assertEqual(5, ITEM_POOL.count("Progressive World Access"))
@@ -117,6 +120,24 @@ class ModTests(unittest.TestCase):
             payload = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual("word-factori-core", payload["campaign_id"])
         self.assertEqual(30, payload["level_count"])
+
+    def test_campaign_identity_for_layout_includes_full_progression_identity(self):
+        manifest = campaign_for_level_set("core_campaign")
+        layout = fixed_layout(manifest, "core_campaign")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "archipelago_campaign.json"
+            write_campaign_identity(path, manifest, layout)
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(layout.digest, payload["manifest_digest"])
+        self.assertEqual(layout.digest, payload["layout_digest"])
+        self.assertEqual(campaign_for_level_set("core_campaign").campaign_id, payload["campaign_id"])
+        self.assertEqual(manifest.version, payload["manifest_version"])
+        self.assertEqual(campaign_digest(manifest), payload["base_manifest_digest"])
+        self.assertEqual(layout.progression_model, payload["progression_model"])
+        self.assertEqual(layout.algorithm, payload["layout_algorithm"])
+        self.assertEqual(layout.page_size, payload["page_size"])
+        self.assertEqual(layout.page_unlock_count, payload["page_unlock_count"])
+        self.assertEqual(len(manifest.levels), payload["level_count"])
 
 
 class SaveTests(unittest.TestCase):

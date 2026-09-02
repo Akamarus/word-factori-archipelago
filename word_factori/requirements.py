@@ -15,7 +15,7 @@ def requirements_for(location: LocationData) -> tuple[frozenset[str], ...]:
 
 def access_rule_for(location: LocationData, player: int):
     requirements = requirements_for(location)
-    predecessor = LOCATIONS[location.index - 1].name if location.index else None
+    predecessor = LOCATIONS[location.slot_index - 1].name if location.slot_index else None
 
     def rule(state) -> bool:
         if predecessor is not None and not state.can_reach_location(predecessor, player):

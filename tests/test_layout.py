@@ -4,10 +4,12 @@ import unittest
 
 from word_factori.campaign import campaign_digest, campaign_for_level_set
 from word_factori.capabilities import FULL, unavoidable_nonbootstrap_machines
+from word_factori.data import BASE_ID, locations_for_layout
 from word_factori.layout import (
     FIXED_ALGORITHM, PROGRESSION_MODEL, build_layout, fixed_layout, layout_entries,
     layout_from_slot_data, layout_slot_data, shuffled_layout, validate_layout,
 )
+from word_factori.mod import render_levels
 
 
 class FixedLayoutTests(unittest.TestCase):
@@ -88,3 +90,16 @@ class ShuffledLayoutTests(unittest.TestCase):
                         for machine in FULL - {"Bender Access", "Merger2 Access"}:
                             count = sum(machine in unavoidable_nonbootstrap_machines(records[key]) for key in page)
                             self.assertLess(count, 4)
+
+
+class LayoutProjectionTests(unittest.TestCase):
+    def test_shuffling_changes_slots_without_changing_ap_codes(self):
+        manifest = campaign_for_level_set("core_campaign")
+        layout = shuffled_layout(manifest, "core_campaign", random.Random(72))
+        locations = locations_for_layout(manifest, layout)
+        by_key = {location.stable_key: location for location in locations}
+        self.assertEqual(BASE_ID + 1000, by_key["complete-i"].code)
+        self.assertEqual(BASE_ID + 1029, by_key["pitchfork-final"].code)
+        self.assertEqual(list(range(30)), [location.slot_index for location in locations])
+        rendered = render_levels({"Bender Access"}, 0, locations=locations)
+        self.assertEqual([x.target for x in locations], [level["text"] for level in rendered])

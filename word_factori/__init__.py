@@ -112,7 +112,7 @@ else:
                 "level_count": len(locations),
                 "goal": int(self.options.goal.value),
                 "campaign_count": int(self.options.campaign_count.value),
-                "locations": [{"index": x.index, "name": x.name, "id": x.code, "kind": x.kind} for x in locations],
+                "locations": [{"index": x.canonical_index, "name": x.name, "id": x.code, "kind": x.kind} for x in locations],
                 "mod_folder": "word factori archipelago",
                 "reload_required_for_items": True,
             }
