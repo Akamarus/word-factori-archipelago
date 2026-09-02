@@ -7,10 +7,28 @@ from word_factori.bridge import BridgeState, ReceivedItem, bind_game_slot, load_
 from word_factori.client_core import campaign_compatible, game_font_path, goal_reached, inventory_view, mod_is_selected, parse_connection_url, resolve_game_slot_binding, state_identity
 from word_factori.data import CAMPAIGN_DIGEST, ITEM_POOL, LOCATIONS, MACHINE_ITEMS
 from word_factori.mod import render_levels, write_campaign_identity
-from word_factori.campaign import campaign_for_level_set
+from word_factori.campaign import campaign_for_level_set, load_campaign
 from word_factori.data import locations_for_level_set
+from word_factori.capabilities import requirements_for_record, unavoidable_nonbootstrap_machines
 from word_factori.requirements import WORD_REQUIREMENT_OPTIONS, access_rule_for
 from word_factori.save import ActiveSlot, parse_active_slot, parse_save
+
+
+class CapabilityTests(unittest.TestCase):
+    def test_challenges_are_keyed_by_stable_identity(self):
+        records = {record.stable_key: record for record in load_campaign().levels}
+        cat = requirements_for_record(records["challenge-cat-compact"])
+        phone = requirements_for_record(records["challenge-phone-no-waste"])
+        self.assertEqual(4, len(cat[0]))
+        self.assertIn("Merger4 Access", phone[0])
+
+    def test_unavoidable_profile_intersects_every_valid_route(self):
+        record = next(x for x in load_campaign().levels if x.stable_key == "complete-v")
+        expected = set.intersection(*map(set, requirements_for_record(record)))
+        expected.discard("Bender Access")
+        self.assertEqual(
+            frozenset(expected), unavoidable_nonbootstrap_machines(record),
+        )
 
 
 class DataTests(unittest.TestCase):

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from .data import LOCATIONS, LocationData
-
-FULL = frozenset({"Bender Access", "Rotation Access", "Reflection Access", "Merger2 Access", "Merger3 Access", "Merger4 Access"})
+from .capabilities import requirements_for_record
 
 WORD_REQUIREMENT_OPTIONS = {
     location.target: location.requirement_options
@@ -10,21 +9,8 @@ WORD_REQUIREMENT_OPTIONS = {
     if location.kind in {"word", "final"}
 }
 
-# These three levels also impose machine-count limits. The requirements below
-# are backed by layouts observed in the installed game's own save schema.
-CHALLENGE_REQUIREMENTS = {
-    26: (frozenset({"Bender Access", "Rotation Access", "Reflection Access", "Merger2 Access"}),),
-    27: (frozenset({"Bender Access", "Rotation Access", "Reflection Access", "Merger2 Access", "Merger3 Access"}),),
-    28: (FULL,),
-}
-
-
 def requirements_for(location: LocationData) -> tuple[frozenset[str], ...]:
-    if location.kind == "discovery":
-        return (location.required_route,)
-    if location.kind == "challenge":
-        return CHALLENGE_REQUIREMENTS[location.index]
-    return location.requirement_options
+    return requirements_for_record(location)
 
 
 def access_rule_for(location: LocationData, player: int):
