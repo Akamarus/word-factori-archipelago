@@ -65,6 +65,8 @@ else:
                 self._manifest, self._level_set, layout_mode, self.random,
             )
             self._locations = locations_for_layout(self._manifest, self._layout)
+            self.multiworld.local_early_items[self.player]["Merger2 Access"] = 1
+            self.multiworld.local_early_items[self.player]["Rotation Access"] = 1
             self.multiworld.push_precollected(self.create_item("Bender Access"))
 
         def create_regions(self) -> None:

@@ -117,6 +117,10 @@ class PublicationTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8").casefold()
 
         self.assertIn("four of the six", readme)
+        self.assertIn("canonical starter workshop", readme)
+        self.assertIn("local-early merger2 access", readme)
+        self.assertIn("local-early rotation access", readme)
+        self.assertIn("one later core campaign page", readme)
 
     def test_readme_write_summary_names_every_supported_destination(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8").casefold()

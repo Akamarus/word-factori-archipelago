@@ -125,6 +125,7 @@ class _MultiWorld:
         self.itempool = []
         self.completion_condition = {}
         self.precollected = []
+        self.local_early_items = {1: {}}
 
     def push_precollected(self, item):
         self.precollected.append(item)
@@ -207,6 +208,14 @@ class WorldLayoutTests(unittest.TestCase):
             world.random.random()
         self.assertIs(locations, world.selected_locations())
         self.assertEqual(first, world.fill_slot_data())
+
+    def test_generate_early_requests_two_local_early_starter_rewards(self):
+        world = self.make_world(31339)
+
+        self.assertEqual(
+            {"Merger2 Access": 1, "Rotation Access": 1},
+            world.multiworld.local_early_items[world.player],
+        )
 
     def test_fixed_layout_option_preserves_canonical_level_order(self):
         slot_data = self.make_world(7, campaign_layout=0).fill_slot_data()

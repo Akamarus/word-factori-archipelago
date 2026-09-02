@@ -71,13 +71,15 @@ def fixed_layout(manifest: CampaignManifest, level_set: str) -> CampaignLayout:
 def _balanced_page(
     page: list[str] | tuple[str, ...],
     machine_profiles: dict[str, frozenset[str]],
+    *,
+    allow_four_rotation: bool = False,
 ) -> bool:
     profiles = {machine_profiles[stable_key] for stable_key in page}
     return len(profiles) >= 3 and all(
         sum(
             machine in machine_profiles[stable_key]
             for stable_key in page
-        ) < 4
+        ) < (5 if allow_four_rotation and machine == "Rotation Access" else 4)
         for machine in _CAPPED_MACHINES
     )
 
@@ -86,7 +88,14 @@ def shuffled_layout(
     manifest: CampaignManifest, level_set: str, random_source: Any
 ) -> CampaignLayout:
     records = {record.stable_key: record for record in manifest.levels}
-    anchors = {"complete-i", "complete-c", "pitchfork-final"}
+    starter_page = tuple(
+        record.stable_key
+        for record in manifest.levels
+        if record.region == "Starter Workshop" and record.kind != "discovery"
+    )
+    if len(starter_page) != PAGE_SIZE:
+        raise ValueError("balanced_pages_v1 requires six canonical starter levels")
+    anchors = {*starter_page, "pitchfork-final"}
     if not anchors <= set(records):
         raise ValueError("balanced_pages_v1 could not satisfy page constraints")
 
@@ -104,7 +113,7 @@ def shuffled_layout(
     pages: list[tuple[str, ...]] = [tuple() for _ in range(page_count)]
     attempts = 0
     failed_states: set[
-        tuple[int, tuple[tuple[str, tuple[str, ...], int], ...]]
+        tuple[int, int, tuple[tuple[str, tuple[str, ...], int], ...]]
     ] = set()
 
     def candidate_allowed(stable_key: str, page_index: int) -> bool:
@@ -123,13 +132,12 @@ def shuffled_layout(
         target_size = min(PAGE_SIZE, len(records) - page_index * PAGE_SIZE)
         if len(page) == target_size:
             if target_size == PAGE_SIZE and not _balanced_page(
-                page, machine_profiles
+                page,
+                machine_profiles,
+                allow_four_rotation=(
+                    level_set == "core_campaign" and page_index > 0
+                ),
             ):
-                return False
-            if page_index == 0 and sum(
-                "Merger2 Access" not in machine_profiles[stable_key]
-                for stable_key in page
-            ) < 4:
                 return False
             ordered_page = tuple(
                 sorted(page, key=lambda stable_key: (priorities[stable_key], stable_key))
@@ -138,7 +146,9 @@ def shuffled_layout(
             return build_next_page(page_index + 1, remaining)
 
         positions = range(start_position, len(candidate_order))
-        if 2 <= page_index < page_count - 1 and not page:
+        # The penultimate page is not interchangeable with the final page,
+        # which has the fixed Pitchfork anchor.
+        if 2 <= page_index < page_count - 2 and not page:
             first_remaining_position = next(
                 (
                     position
@@ -174,7 +184,13 @@ def shuffled_layout(
                 sum(
                     machine in machine_profiles[key]
                     for key in candidate_page
-                ) >= 4
+                ) >= (
+                    5
+                    if level_set == "core_campaign"
+                    and page_index > 0
+                    and machine == "Rotation Access"
+                    else 4
+                )
                 for machine in _CAPPED_MACHINES
             ):
                 continue
@@ -189,7 +205,14 @@ def shuffled_layout(
 
     def build_next_page(page_index: int, remaining: frozenset[str]) -> bool:
         if page_index == page_count:
-            return not remaining
+            return not remaining and sum(
+                sum(
+                    "Rotation Access" in machine_profiles[stable_key]
+                    for stable_key in page
+                ) == 4
+                for page in pages[1:]
+                if len(page) == PAGE_SIZE
+            ) <= (1 if level_set == "core_campaign" else 0)
         signature_counts = Counter(
             (
                 records[stable_key].kind,
@@ -197,8 +220,17 @@ def shuffled_layout(
             )
             for stable_key in remaining
         )
+        completed_four_rotation_pages = sum(
+            sum(
+                "Rotation Access" in machine_profiles[stable_key]
+                for stable_key in page
+            ) == 4
+            for page in pages[1:page_index]
+            if len(page) == PAGE_SIZE
+        )
         state = (
             page_index,
+            completed_four_rotation_pages,
             tuple(
                 sorted(
                     (kind, profile, count)
@@ -210,7 +242,7 @@ def shuffled_layout(
             return False
         page: list[str] = []
         if page_index == 0:
-            page.extend(("complete-i", "complete-c"))
+            page.extend(starter_page)
         if page_index == page_count - 1:
             page.append("pitchfork-final")
         if build_page(page_index, page, remaining, 0):
@@ -275,8 +307,13 @@ def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
             layout_keys[start:start + layout.page_size]
             for start in range(0, len(layout_keys), layout.page_size)
         )
-        if not {"complete-i", "complete-c"} <= set(pages[0]):
-            raise ValueError("balanced layout has invalid first-page anchors")
+        starter_page = {
+            record.stable_key
+            for record in manifest.levels
+            if record.region == "Starter Workshop" and record.kind != "discovery"
+        }
+        if len(starter_page) != PAGE_SIZE or set(pages[0]) != starter_page:
+            raise ValueError("balanced layout has invalid canonical starter page")
         if "pitchfork-final" not in pages[-1]:
             raise ValueError("balanced layout has invalid final-page anchor")
         for page_index, page in enumerate(pages):
@@ -287,6 +324,29 @@ def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
                 raise ValueError("balanced layout has invalid challenge anchor")
             if page_index == 0 and "discovery" in kinds:
                 raise ValueError("balanced layout has invalid discovery anchor")
+            if len(page) == PAGE_SIZE and not _balanced_page(
+                page,
+                {
+                    key: unavoidable_nonbootstrap_machines(record)
+                    for key, record in records.items()
+                },
+                allow_four_rotation=(
+                    layout.level_set == "core_campaign" and page_index > 0
+                ),
+            ):
+                raise ValueError("balanced layout has invalid page balance")
+        later_pages_with_four_rotation = sum(
+            sum(
+                "Rotation Access" in unavoidable_nonbootstrap_machines(records[key])
+                for key in page
+            ) == 4
+            for page in pages[1:]
+            if len(page) == PAGE_SIZE
+        )
+        if later_pages_with_four_rotation > (
+            1 if layout.level_set == "core_campaign" else 0
+        ):
+            raise ValueError("balanced layout has too many four-Rotation pages")
     if layout.digest != _layout_digest(layout):
         raise ValueError("layout digest does not match")
 

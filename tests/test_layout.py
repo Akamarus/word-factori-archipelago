@@ -68,20 +68,20 @@ class ShuffledLayoutTests(unittest.TestCase):
         for level_set in ("core_campaign", "discovery_labs"):
             manifest = campaign_for_level_set(level_set)
             records = {record.stable_key: record for record in manifest.levels}
+            starter_keys = {
+                record.stable_key
+                for record in manifest.levels
+                if record.region == "Starter Workshop"
+                and record.kind != "discovery"
+            }
+            self.assertEqual(6, len(starter_keys))
             for seed in range(200):
                 layout = shuffled_layout(manifest, level_set, random.Random(seed))
                 pages = [layout.ordered_stable_keys[i:i + 6] for i in range(0, len(layout.ordered_stable_keys), 6)]
-                self.assertTrue({"complete-i", "complete-c"} <= set(pages[0]))
+                self.assertEqual(starter_keys, set(pages[0]))
                 self.assertIn("pitchfork-final", pages[-1])
                 self.assertFalse(any(records[key].kind in {"challenge", "discovery", "final"} for key in pages[0]))
-                self.assertGreaterEqual(
-                    sum(
-                        "Merger2 Access"
-                        not in unavoidable_nonbootstrap_machines(records[key])
-                        for key in pages[0]
-                    ),
-                    4,
-                )
+                later_pages_with_four_rotation = 0
                 for page_index, page in enumerate(pages):
                     self.assertFalse(page_index < 2 and any(records[key].kind == "challenge" for key in page))
                     if len(page) == 6:
@@ -89,7 +89,28 @@ class ShuffledLayoutTests(unittest.TestCase):
                         self.assertGreaterEqual(len(profiles), 3)
                         for machine in FULL - {"Bender Access", "Merger2 Access"}:
                             count = sum(machine in unavoidable_nonbootstrap_machines(records[key]) for key in page)
-                            self.assertLess(count, 4)
+                            if machine == "Rotation Access":
+                                self.assertLessEqual(count, 4)
+                                if page_index > 0 and count == 4:
+                                    later_pages_with_four_rotation += 1
+                            else:
+                                self.assertLess(count, 4)
+                self.assertLessEqual(later_pages_with_four_rotation, 1)
+
+    def test_page_one_slot_order_and_later_page_membership_still_vary(self):
+        manifest = campaign_for_level_set("discovery_labs")
+        layouts = [
+            shuffled_layout(manifest, "discovery_labs", random.Random(seed))
+            for seed in range(20)
+        ]
+
+        self.assertGreater(
+            len({layout.ordered_stable_keys[:6] for layout in layouts}), 1
+        )
+        self.assertGreater(
+            len({frozenset(layout.ordered_stable_keys[6:12]) for layout in layouts}),
+            1,
+        )
 
 
 class LayoutProjectionTests(unittest.TestCase):
