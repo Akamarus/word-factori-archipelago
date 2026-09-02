@@ -201,7 +201,7 @@ net_utils.ClientStatus = types.SimpleNamespace(CLIENT_GOAL=30)
 sys.modules.setdefault("NetUtils", net_utils)
 
 from word_factori.client import WordFactoriCommandProcessor, WordFactoriContext
-from word_factori.bridge import BridgeState, load_state
+from word_factori.bridge import BridgeState, load_state, save_state
 from word_factori.client_messages import ClientMessageKind
 from word_factori.campaign import campaign_digest, campaign_for_level_set
 from word_factori.data import (
@@ -221,6 +221,7 @@ from word_factori.overlay_protocol import (
     SubmitTextIntent,
 )
 from word_factori.overlay_supervisor import OverlayConfig
+from word_factori.save import read_active_slot
 
 
 class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
@@ -1734,6 +1735,58 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         self.assertFalse(any(message["cmd"] == "LocationChecks" for message in self.ctx.sent_messages))
 
+    async def test_pending_resend_scheduled_for_old_contract_cannot_send_to_new_contract(self):
+        room_a_location = LOCATIONS[0].code
+        room_b_location = LOCATIONS[1].code
+        self.ctx.bridge_state = BridgeState(
+            pending_checks=frozenset({room_a_location}), game_slot_id="game-slot-A",
+        )
+        save_state(self.ctx.state_path(), self.ctx.bridge_state)
+        room_a = dict(self.ctx.slot_data)
+        room_b = {**room_a, "goal": 0}
+        self.ctx.slot_data = room_b
+        self.ctx.connected_identity = None
+        room_b_path = self.ctx.state_path()
+        save_state(room_b_path, BridgeState(
+            pending_checks=frozenset({room_b_location}), game_slot_id="game-slot-A",
+        ))
+        self.ctx.slot_data = room_a
+        self.ctx.connected_identity = self.ctx.current_identity()
+        self.ctx.missing_locations = {room_a_location, room_b_location}
+
+        self.ctx.on_package("Connected", {"slot_data": room_a})
+        self.ctx.on_package("Connected", {"slot_data": room_b})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        checks = [
+            message for message in self.ctx.sent_messages
+            if message["cmd"] == "LocationChecks"
+        ]
+        self.assertEqual(1, len(checks))
+        self.assertEqual((room_b_location,), checks[0]["locations"])
+
+    async def test_pending_resend_uses_only_latest_identical_contract_reconnect_epoch(self):
+        location_id = LOCATIONS[0].code
+        self.ctx.bridge_state = BridgeState(
+            pending_checks=frozenset({location_id}), game_slot_id="game-slot-A",
+        )
+        save_state(self.ctx.state_path(), self.ctx.bridge_state)
+        self.ctx.missing_locations = {location_id}
+
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await self.ctx.connection_closed()
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        checks = [
+            message for message in self.ctx.sent_messages
+            if message["cmd"] == "LocationChecks"
+        ]
+        self.assertEqual(1, len(checks))
+        self.assertEqual((location_id,), checks[0]["locations"])
+
     async def test_room_contract_scopes_sidecar_binding_pending_checks_and_goal_resend(self):
         self.ctx.slot_data = {**self.ctx.slot_data, "goal": 0, "campaign_count": 1}
         self.ctx.connected_identity = self.ctx.current_identity()
@@ -1790,6 +1843,36 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(same_room_count, new_room_count)
         self.assertNotEqual(first_identity, self.ctx.current_identity())
 
+    async def test_goal_resend_scheduled_for_old_contract_cannot_send_to_new_contract(self):
+        room_a = dict(self.ctx.slot_data)
+        room_a_identity = self.ctx.current_identity()
+        self.ctx.goal_identity = room_a_identity
+        room_b = {**room_a, "goal": 0}
+
+        self.ctx.on_package("Connected", {"slot_data": room_a})
+        self.ctx.on_package("Connected", {"slot_data": room_b})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        self.assertFalse(any(
+            message["cmd"] == "StatusUpdate" for message in self.ctx.sent_messages
+        ))
+
+    async def test_goal_resend_uses_only_latest_identical_contract_reconnect_epoch(self):
+        self.ctx.goal_identity = self.ctx.current_identity()
+
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await self.ctx.connection_closed()
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        goals = [
+            message for message in self.ctx.sent_messages
+            if message["cmd"] == "StatusUpdate"
+        ]
+        self.assertEqual(1, len(goals))
+
     async def test_manifest_mismatch_blocks_checks_and_mod_rewrite(self):
         location_id = LOCATIONS[30].code
         self.ctx.bridge_state = BridgeState(pending_checks=frozenset({location_id}))
@@ -1835,6 +1918,59 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], self.ctx.sent_messages)
         self.assertIn("Campaign/save mismatch", self.ctx.status_text())
         self.assertIn("-1", self.ctx.status_text())
+
+    async def test_scan_rejects_mixed_indices_before_binding_an_unbound_save(self):
+        self.write_active_slot("game-slot-A", {0, len(LOCATIONS)})
+        before = self.ctx.bridge_state
+        state_path = self.ctx.state_path()
+        self.assertFalse(state_path.exists())
+
+        await self.ctx.scan_once(ignore_selection_guard=True)
+
+        self.assertEqual(before, self.ctx.bridge_state)
+        self.assertFalse(state_path.exists())
+        self.assertIsNone(self.ctx.goal_identity)
+        self.assertEqual([], self.ctx.sent_messages)
+        self.assertIn("Campaign/save mismatch", self.ctx.last_bridge_error)
+        self.assertIn(str(len(LOCATIONS)), self.ctx.last_bridge_error)
+
+    async def test_scan_rejects_mixed_indices_without_mutating_bound_state_or_goal(self):
+        retained_id = LOCATIONS[5].code
+        self.ctx.bridge_state = BridgeState(
+            pending_checks=frozenset({retained_id}), game_slot_id="game-slot-A",
+        )
+        self.ctx.slot_data = {**self.ctx.slot_data, "goal": 0, "campaign_count": 1}
+        self.ctx.connected_identity = self.ctx.current_identity()
+        self.ctx.goal_identity = None
+        self.ctx.missing_locations = {LOCATIONS[0].code, retained_id}
+        self.write_active_slot("game-slot-A", {0, -1})
+        before = self.ctx.bridge_state
+
+        with patch("word_factori.client.read_active_slot", wraps=read_active_slot) as read:
+            await self.ctx.scan_once(ignore_selection_guard=True)
+
+        self.assertEqual(1, read.call_count)
+        self.assertEqual(before, self.ctx.bridge_state)
+        self.assertIsNone(self.ctx.goal_identity)
+        self.assertEqual([], self.ctx.sent_messages)
+        self.assertIn("Campaign/save mismatch", self.ctx.last_bridge_error)
+        self.assertIn("-1", self.ctx.last_bridge_error)
+
+    async def test_scan_reads_active_save_once_and_reports_the_captured_valid_set(self):
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.ctx.missing_locations = {LOCATIONS[0].code}
+        self.write_active_slot("game-slot-A", {0})
+
+        with patch("word_factori.client.read_active_slot", wraps=read_active_slot) as read:
+            await self.ctx.scan_once(ignore_selection_guard=True)
+
+        self.assertEqual(1, read.call_count)
+        checks = [
+            message for message in self.ctx.sent_messages
+            if message["cmd"] == "LocationChecks"
+        ]
+        self.assertEqual(1, len(checks))
+        self.assertEqual((LOCATIONS[0].code,), checks[0]["locations"])
 
     async def test_discovery_check_is_queued_once_and_acknowledged(self):
         location_id = LOCATIONS[30].code

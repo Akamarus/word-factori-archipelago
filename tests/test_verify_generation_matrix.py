@@ -271,6 +271,12 @@ class IdentityExtractionTests(unittest.TestCase):
                         GenerationIdentity(**base, location_projection=projection), case,
                     )
 
+    def test_canonical_location_projection_reports_malformed_non_iterable_projection(self):
+        identity = types.SimpleNamespace(location_projection=None)
+
+        with self.assertRaisesRegex(AssertionError, "canonical location projection"):
+            matrix_tool.validate_canonical_location_projection(identity, MATRIX_CASES[0])
+
     def test_rejects_multidata_that_requests_arbitrary_python_globals(self):
         # Replacing the restricted decoder with pickle.loads makes this unsafe input load.
         encoded = bytes((3,)) + zlib.compress(pickle.dumps(eval, protocol=4))

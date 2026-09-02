@@ -417,6 +417,7 @@ def validate_canonical_location_projection(
         (location.stable_key, location.name, location.code)
         for location in locations_for_level_set(case.level_set)
     )
+    generated_projection = ()
     try:
         generated_projection = tuple(identity.location_projection)
         matches = (

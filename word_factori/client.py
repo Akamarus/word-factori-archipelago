@@ -337,9 +337,13 @@ class WordFactoriContext(CommonContext):
                 self.connected_identity, self._snapshot_dispatch_items(self.items_received),
                 frozenset(self.checked_locations), connection_generation,
             ))
-            asyncio.create_task(self._resend_pending_checks())
+            asyncio.create_task(self._resend_pending_checks(
+                self.connected_identity, connection_generation,
+            ))
             if self.goal_identity == self.connected_identity:
-                asyncio.create_task(self._send_goal())
+                asyncio.create_task(self._send_goal(
+                    self.connected_identity, connection_generation,
+                ))
         elif cmd == "ReceivedItems":
             asyncio.create_task(self._received_items_reconcile(
                 self.connected_identity, self._snapshot_dispatch_items(self.items_received),
@@ -885,11 +889,12 @@ class WordFactoriContext(CommonContext):
             and campaign_compatible(self.slot_data, self.installed_campaign())
         )
 
-    def ensure_game_slot_binding(self) -> ActiveSlot | None:
+    def ensure_game_slot_binding(self, active: ActiveSlot | None = None) -> ActiveSlot | None:
         try:
-            active = read_active_slot(
-                find_save(self.factori_root.parent, Path("mods") / MOD_FOLDER)
-            )
+            if active is None:
+                active = read_active_slot(
+                    find_save(self.factori_root.parent, Path("mods") / MOD_FOLDER)
+                )
             resolved = resolve_game_slot_binding(self.bridge_state.game_slot_id, active)
         except (OSError, ValueError, KeyError, TypeError) as error:
             self._bridge_warning(f"Word Factori save binding paused: {error}")
@@ -907,20 +912,38 @@ class WordFactoriContext(CommonContext):
         if not ignore_selection_guard and not self.selected_mod():
             self._bridge_warning("Automatic checks paused: the selected Word Factori mod is not the Archipelago mod. Use /wf_scan for an explicit one-time scan.")
             return
-        active = self.ensure_game_slot_binding()
-        if active is None:
+        try:
+            active = read_active_slot(
+                find_save(self.factori_root.parent, Path("mods") / MOD_FOLDER)
+            )
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            self._bridge_warning(f"Word Factori save binding paused: {error}")
             return
         local_checks = set(active.beaten_levels)
+        try:
+            location_codes_for_native_slots(local_checks, self.active_locations())
+        except ValueError as error:
+            self._bridge_warning(
+                "Campaign/save mismatch: "
+                f"{error}. Use the Word Factori save created for this room and campaign."
+            )
+            return
         if not ignore_selection_guard and not self.selected_mod():
             self._bridge_warning("Automatic check discarded because the selected mod changed during the save read.")
             return
+        if self.ensure_game_slot_binding(active) is None:
+            return
         self.last_bridge_error = None
-        await self.report_indices(local_checks)
+        await self.report_indices(local_checks, active_slot=active)
 
-    async def report_indices(self, indices: set[int]) -> None:
+    async def report_indices(
+        self, indices: set[int], *, active_slot: ActiveSlot | None = None,
+    ) -> None:
         if self.connected_identity is None:
             self._bridge_warning("Connect to an Archipelago slot before reporting Word Factori checks.")
             return
+        expected_identity = self.connected_identity
+        expected_generation = self._connection_generation
         if not self.compatible_campaign():
             self._bridge_warning(CAMPAIGN_MISMATCH)
             return
@@ -933,7 +956,7 @@ class WordFactoriContext(CommonContext):
                 f"{error}. Use the Word Factori save created for this room and campaign."
             )
             return
-        if self.ensure_game_slot_binding() is None:
+        if self.ensure_game_slot_binding(active_slot) is None:
             return
         server_codes = frozenset(self.checked_locations) & {
             location.code for location in locations
@@ -950,18 +973,36 @@ class WordFactoriContext(CommonContext):
         target = int(self.slot_data.get("campaign_count", 25))
         if (
             goal_reached(goal, target, combined, locations)
-            and self.goal_identity != self.connected_identity
+            and self.goal_identity != expected_identity
+            and self._connection_epoch_matches(expected_identity, expected_generation)
         ):
-            self.goal_identity = self.connected_identity
-            await self._send_goal()
+            self.goal_identity = expected_identity
+            await self._send_goal(expected_identity, expected_generation)
 
-    async def _resend_pending_checks(self) -> None:
-        if self.compatible_campaign() and self.ensure_game_slot_binding() is not None and self.bridge_state.pending_checks:
-            await self.check_locations(self.bridge_state.pending_checks)
+    async def _resend_pending_checks(
+        self, expected_identity: str, expected_generation: int,
+    ) -> None:
+        if not self._connection_epoch_matches(expected_identity, expected_generation):
+            return
+        if not self.compatible_campaign() or not self.bridge_state.pending_checks:
+            return
+        pending_checks = self.bridge_state.pending_checks
+        if self.ensure_game_slot_binding() is None:
+            return
+        if not self._connection_epoch_matches(expected_identity, expected_generation):
+            return
+        await self.check_locations(pending_checks)
 
-    async def _send_goal(self) -> None:
-        if self.compatible_campaign() and self.ensure_game_slot_binding() is not None:
-            await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
+    async def _send_goal(
+        self, expected_identity: str, expected_generation: int,
+    ) -> None:
+        if not self._connection_epoch_matches(expected_identity, expected_generation):
+            return
+        if not self.compatible_campaign() or self.ensure_game_slot_binding() is None:
+            return
+        if not self._connection_epoch_matches(expected_identity, expected_generation):
+            return
+        await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
 
     def resolve_location(self, identifier: str) -> int:
         locations = self.active_locations()

@@ -32,13 +32,34 @@ C:\Users\Jack\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\py
 
 Result: `Ran 9 tests ... OK`.
 
+### Reviewer follow-up RED/GREEN
+
+The follow-up focused command covered scheduled pending-check and goal races across
+room changes and identical-contract disconnect/reconnect epochs, scan-time invalid
+observations for bound and unbound saves, single-read valid scanning, and malformed
+non-iterable canonical projections:
+
+```powershell
+C:\Users\Jack\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest tests.test_client_lifecycle.ClientLifecycleTests.test_pending_resend_scheduled_for_old_contract_cannot_send_to_new_contract tests.test_client_lifecycle.ClientLifecycleTests.test_pending_resend_uses_only_latest_identical_contract_reconnect_epoch tests.test_client_lifecycle.ClientLifecycleTests.test_goal_resend_scheduled_for_old_contract_cannot_send_to_new_contract tests.test_client_lifecycle.ClientLifecycleTests.test_goal_resend_uses_only_latest_identical_contract_reconnect_epoch tests.test_client_lifecycle.ClientLifecycleTests.test_scan_rejects_mixed_indices_before_binding_an_unbound_save tests.test_client_lifecycle.ClientLifecycleTests.test_scan_rejects_mixed_indices_without_mutating_bound_state_or_goal tests.test_client_lifecycle.ClientLifecycleTests.test_scan_reads_active_save_once_and_reports_the_captured_valid_set tests.test_verify_generation_matrix.IdentityExtractionTests.test_canonical_location_projection_reports_malformed_non_iterable_projection
+```
+
+RED result: `Ran 8 tests ... FAILED (failures=6, errors=1)`. The stale
+scheduled tasks duplicated or crossed sends, unbound scanning attempted binding
+before identifying the campaign/save mismatch, valid scanning read the active save
+twice, and the malformed projection diagnostic raised `UnboundLocalError`.
+
+GREEN result after the minimal changes: `Ran 8 tests ... OK`.
+
 Affected-suite regression command:
 
 ```powershell
 C:\Users\Jack\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m unittest tests.test_core tests.test_client_lifecycle tests.test_verify_generation_matrix
 ```
 
-Result: `Ran 154 tests ... OK`.
+Initial result: `Ran 154 tests ... OK`.
+
+The same affected-suite command after the reviewer follow-up resulted in
+`Ran 162 tests ... OK`.
 
 Final full verification command:
 
@@ -46,10 +67,10 @@ Final full verification command:
 .\tools\verify.ps1 -PythonExecutable C:\Users\Jack\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe
 ```
 
-Result: `Ran 336 tests ... OK`; release verification passed source parity, JSON/index integrity, fresh recipe derivation, and data exclusions.
+Final follow-up result: `Ran 344 tests ... OK`; release verification passed source parity, JSON/index integrity, fresh recipe derivation, and data exclusions.
 
-- Final APWorld SHA-256: `F6CF0D532F02D46E8B1769E3A2EEF398E1DE2413EB27C7B076C9CFE9B2FB781F`
-- Final release SHA-256: `E81F61E7D39F1DC5D8B934F5EA9FF8BB74DFDCF83CFCD6278DCEF1757D34A387`
+- Final APWorld SHA-256: `A06C53B86E1D4AA02017CE393DD8ED1A3FA9B38923586CCCEDF87FFA398CC97B`
+- Final release SHA-256: `6250334FFF51F95AEE676679FFC202F545AE19F757AD85F279FA9D9E33658E75`
 
 ## Implementation result
 
@@ -57,13 +78,15 @@ Result: `Ran 336 tests ... OK`; release verification passed source parity, JSON/
 - Identity construction validates authoritative slot data and fails closed when stable connection identity or authoritative campaign data is unavailable. Invalid connected contracts reset transient presentation state without opening any state or dispatch sidecar.
 - Sidecar path, dispatch identity, `game_slot_id`, pending checks, and goal resend identity therefore cannot cross goal or layout boundaries. Reconnecting the identical contract deterministically reuses the same identity and sidecar.
 - Native save indices are validated as a complete observation before save binding, reconcile, queuing, check submission, or victory submission. Any negative or out-of-range index yields an actionable `Campaign/save mismatch` status/log message while preserving bridge state.
+- Scheduled pending-check and victory resends capture both the immutable room-contract identity and connection epoch. Both values are revalidated immediately before network submission, so an old task cannot send into a newer room or reconnect epoch, even when the room contract is identical.
+- `scan_once` captures one active-save snapshot and one beaten-level set, validates the full set against the authoritative layout before binding or mutation, and passes that same snapshot and set downstream without rereading the save. Direct `report_indices` validation remains as defense in depth.
 - Real-generation extraction retains every raw `(stable_key, name, id)` row. Definitive validation compares the complete projection against the selected canonical campaign with exact cardinality, detecting duplicate rows, wrong keys, names, IDs, omissions, and additions. Every matrix row persists `canonical_identity_validation` explicitly.
 
 ## Definitive 200-case matrix
 
-The installed APWorld was not changed because this task was not authorized to install externally. Its SHA-256 remains `8A1AC5102B841CEDE7575BEC432D253B4E79BFA847C58F7B261F12697E1A1F2E`, which differs from the final build.
+The installed APWorld was not changed because this task was not authorized to install externally. Its SHA-256 remains `8A1AC5102B841CEDE7575BEC432D253B4E79BFA847C58F7B261F12697E1A1F2E`, which differs from the worktree build.
 
-To validate the final bytes without an external install, an isolated copy of the installed AP 0.6.7 runtime was created inside the worktree, its copied Word Factori APWorld was replaced with the freshly built APWorld, and the copied APWorld hash was verified as `F6CF0D532F02D46E8B1769E3A2EEF398E1DE2413EB27C7B076C9CFE9B2FB781F`. The isolated runtime was removed after generation.
+For the definitive matrix, an isolated copy of the installed AP 0.6.7 runtime was created inside the worktree, its copied Word Factori APWorld was replaced with the then-current freshly built APWorld, and the copied APWorld hash was verified as `F6CF0D532F02D46E8B1769E3A2EEF398E1DE2413EB27C7B076C9CFE9B2FB781F`. The isolated runtime was removed after generation.
 
 Matrix command:
 
@@ -81,6 +104,14 @@ Evidence: `.superpowers/sdd/2026-09-02-nonlinear-progression/final-fix-generatio
 - Deterministic identity: `Pass`
 - Same-seed digest: `b3cd5448ff934026163258f8a2087c88863ae3f8a414493e30413f82466210db`
 - Different-seed digest: `c5b48378ad56b76ed01c8f17f9e291d58421879d02745f69329c517e2fbe0d5d`
+
+The reviewer follow-up changed client scheduling/save-scan behavior and made only
+the malformed-projection error diagnostic total; it did not change generation
+semantics, slot data, canonical projection acceptance, or matrix evidence. Per the
+follow-up scope, the 200-case generation matrix was not rerun. Consequently the
+final client-bearing APWorld hash is the verification hash above, while the matrix
+truthfully attests the earlier `F6CF...` build that has identical generation
+semantics.
 
 ## Fresh live room
 
