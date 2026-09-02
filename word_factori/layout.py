@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, replace
 import hashlib
 import json
 from typing import Any
 
 from .campaign import CampaignManifest, CampaignRecord, campaign_digest
+from .capabilities import FULL, unavoidable_nonbootstrap_machines
 
 
 PAGE_SIZE = 6
@@ -13,6 +15,8 @@ PAGE_UNLOCK_COUNT = 4
 PROGRESSION_MODEL = "four_of_six_v1"
 FIXED_ALGORITHM = "fixed_pages_v1"
 SHUFFLED_ALGORITHM = "balanced_pages_v1"
+_SHUFFLE_ATTEMPT_BUDGET = 100_000
+_CAPPED_MACHINES = FULL - {"Bender Access", "Merger2 Access"}
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,187 @@ def fixed_layout(manifest: CampaignManifest, level_set: str) -> CampaignLayout:
     layout = replace(layout, digest=_layout_digest(layout))
     validate_layout(manifest, layout)
     return layout
+
+
+def _balanced_page(
+    page: list[str] | tuple[str, ...],
+    machine_profiles: dict[str, frozenset[str]],
+) -> bool:
+    profiles = {machine_profiles[stable_key] for stable_key in page}
+    return len(profiles) >= 3 and all(
+        sum(
+            machine in machine_profiles[stable_key]
+            for stable_key in page
+        ) < 4
+        for machine in _CAPPED_MACHINES
+    )
+
+
+def shuffled_layout(
+    manifest: CampaignManifest, level_set: str, random_source: Any
+) -> CampaignLayout:
+    records = {record.stable_key: record for record in manifest.levels}
+    anchors = {"complete-i", "complete-c", "pitchfork-final"}
+    if not anchors <= set(records):
+        raise ValueError("balanced_pages_v1 could not satisfy page constraints")
+
+    priorities = {
+        record.stable_key: random_source.random() for record in manifest.levels
+    }
+    machine_profiles = {
+        stable_key: unavoidable_nonbootstrap_machines(record)
+        for stable_key, record in records.items()
+    }
+    candidate_order = tuple(
+        sorted(records, key=lambda stable_key: (priorities[stable_key], stable_key))
+    )
+    page_count = (len(records) + PAGE_SIZE - 1) // PAGE_SIZE
+    pages: list[tuple[str, ...]] = [tuple() for _ in range(page_count)]
+    attempts = 0
+    failed_states: set[
+        tuple[int, tuple[tuple[str, tuple[str, ...], int], ...]]
+    ] = set()
+
+    def candidate_allowed(stable_key: str, page_index: int) -> bool:
+        kind = records[stable_key].kind
+        if page_index == 0 and kind in {"challenge", "discovery", "final"}:
+            return False
+        return not (page_index < 2 and kind == "challenge")
+
+    def build_page(
+        page_index: int,
+        page: list[str],
+        remaining: frozenset[str],
+        start_position: int,
+    ) -> bool:
+        nonlocal attempts
+        target_size = min(PAGE_SIZE, len(records) - page_index * PAGE_SIZE)
+        if len(page) == target_size:
+            if target_size == PAGE_SIZE and not _balanced_page(
+                page, machine_profiles
+            ):
+                return False
+            if page_index == 0 and sum(
+                "Merger2 Access" not in machine_profiles[stable_key]
+                for stable_key in page
+            ) < 4:
+                return False
+            ordered_page = tuple(
+                sorted(page, key=lambda stable_key: (priorities[stable_key], stable_key))
+            )
+            pages[page_index] = ordered_page
+            return build_next_page(page_index + 1, remaining)
+
+        positions = range(start_position, len(candidate_order))
+        if 2 <= page_index < page_count - 1 and not page:
+            first_remaining_position = next(
+                (
+                    position
+                    for position, stable_key in enumerate(candidate_order)
+                    if stable_key in remaining
+                ),
+                None,
+            )
+            if first_remaining_position is None:
+                return False
+            positions = (first_remaining_position,)
+        seen_signatures: set[tuple[str, frozenset[str]]] = set()
+        for position in positions:
+            stable_key = candidate_order[position]
+            if stable_key not in remaining:
+                continue
+            signature = (
+                records[stable_key].kind,
+                machine_profiles[stable_key],
+            )
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            attempts += 1
+            if attempts > _SHUFFLE_ATTEMPT_BUDGET:
+                raise ValueError(
+                    "balanced_pages_v1 could not satisfy page constraints"
+                )
+            if not candidate_allowed(stable_key, page_index):
+                continue
+            candidate_page = [*page, stable_key]
+            if target_size == PAGE_SIZE and any(
+                sum(
+                    machine in machine_profiles[key]
+                    for key in candidate_page
+                ) >= 4
+                for machine in _CAPPED_MACHINES
+            ):
+                continue
+            if build_page(
+                page_index,
+                candidate_page,
+                remaining - {stable_key},
+                position + 1,
+            ):
+                return True
+        return False
+
+    def build_next_page(page_index: int, remaining: frozenset[str]) -> bool:
+        if page_index == page_count:
+            return not remaining
+        signature_counts = Counter(
+            (
+                records[stable_key].kind,
+                tuple(sorted(machine_profiles[stable_key])),
+            )
+            for stable_key in remaining
+        )
+        state = (
+            page_index,
+            tuple(
+                sorted(
+                    (kind, profile, count)
+                    for (kind, profile), count in signature_counts.items()
+                )
+            ),
+        )
+        if state in failed_states:
+            return False
+        page: list[str] = []
+        if page_index == 0:
+            page.extend(("complete-i", "complete-c"))
+        if page_index == page_count - 1:
+            page.append("pitchfork-final")
+        if build_page(page_index, page, remaining, 0):
+            return True
+        failed_states.add(state)
+        return False
+
+    remaining = frozenset(records) - anchors
+    if not build_next_page(0, remaining):
+        raise ValueError("balanced_pages_v1 could not satisfy page constraints")
+
+    first_page = list(pages[0])
+    random_source.shuffle(first_page)
+    pages[0] = tuple(first_page)
+    ordered_stable_keys = tuple(stable_key for page in pages for stable_key in page)
+    layout = CampaignLayout(
+        algorithm=SHUFFLED_ALGORITHM,
+        level_set=level_set,
+        progression_model=PROGRESSION_MODEL,
+        base_manifest_digest=campaign_digest(manifest),
+        ordered_stable_keys=ordered_stable_keys,
+        digest="",
+    )
+    layout = replace(layout, digest=_layout_digest(layout))
+    validate_layout(manifest, layout)
+    return layout
+
+
+def build_layout(
+    manifest: CampaignManifest, level_set: str, mode: str, random_source: Any
+) -> CampaignLayout:
+    if mode == "fixed_pages":
+        return fixed_layout(manifest, level_set)
+    if mode == "shuffled_pages":
+        return shuffled_layout(manifest, level_set, random_source)
+    raise ValueError(f"layout mode is invalid: {mode}")
 
 
 def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:

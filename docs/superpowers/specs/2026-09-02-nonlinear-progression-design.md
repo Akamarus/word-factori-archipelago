@@ -117,9 +117,10 @@ The `balanced_pages_v1` algorithm applies these constraints:
 4. `PITCHFORK — Final Factory` is placed on the final page.
 5. Challenge levels use `page_index >= 2`; they cannot appear before the third displayed page.
 6. In the 40-location level set, Discovery Labs are distributed across pages after the first page rather than reserved for a fixed post-campaign block.
-7. Every complete page contains at least three distinct minimal machine-requirement profiles.
-8. No complete page may contain four locations for which the same non-precollected machine is unavoidable across every valid recipe route.
-9. Ties and candidate order are resolved by the room's deterministic random source.
+7. At least four first-page locations have an unavoidable machine profile that does not contain `Merger2 Access`, so the native four-completion threshold has a bootstrap-safe route.
+8. Every complete page contains at least three distinct minimal machine-requirement profiles.
+9. No complete page may contain four locations for which Rotation, Reflection, Merger3, or Merger4 is unavoidable across every valid recipe route. `Merger2 Access` is exempt from this repetition cap because it is unavoidable for 24 of the 30 Core Campaign records; applying the cap to Merger2 would permit only 15 such records across five full pages and make the layout mathematically infeasible.
+10. Ties and candidate order are resolved by the room's deterministic random source.
 
 Generation uses bounded deterministic search over the small curated set. If no valid layout is found, it raises a generation error naming the failed constraint. It does not weaken constraints based on retry count.
 

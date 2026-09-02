@@ -18,6 +18,7 @@
 - Keep every canonical stable key, AP location name, numeric location ID, item name, and numeric item ID unchanged.
 - Use six native slots per full page and require any four reachable locations on the immediately preceding page.
 - In `shuffled_pages`, keep `Complete I` and `Complete C` on page one, challenges on page three or later, Discovery Labs after page one, and PITCHFORK on the last page.
+- Require at least four page-one records whose unavoidable profile excludes Merger2; exempt Merger2 from the per-page repetition cap while retaining that cap for Rotation, Reflection, Merger3, and Merger4.
 - In `fixed_pages`, preserve historical canonical order, including PITCHFORK before the appended Discovery Labs in the 40-location set.
 - Generate layouts only from the bundled 30- or 40-level manifest selected by the room.
 - New rooms use `progression_model: four_of_six_v1`; rooms without that field retain legacy canonical mapping and rules.
@@ -309,12 +310,20 @@ class ShuffledLayoutTests(unittest.TestCase):
                 self.assertTrue({"complete-i", "complete-c"} <= set(pages[0]))
                 self.assertIn("pitchfork-final", pages[-1])
                 self.assertFalse(any(records[key].kind in {"challenge", "discovery", "final"} for key in pages[0]))
+                self.assertGreaterEqual(
+                    sum(
+                        "Merger2 Access"
+                        not in unavoidable_nonbootstrap_machines(records[key])
+                        for key in pages[0]
+                    ),
+                    4,
+                )
                 for page_index, page in enumerate(pages):
                     self.assertFalse(page_index < 2 and any(records[key].kind == "challenge" for key in page))
                     if len(page) == 6:
                         profiles = {unavoidable_nonbootstrap_machines(records[key]) for key in page}
                         self.assertGreaterEqual(len(profiles), 3)
-                        for machine in FULL - {"Bender Access"}:
+                        for machine in FULL - {"Bender Access", "Merger2 Access"}:
                             count = sum(machine in unavoidable_nonbootstrap_machines(records[key]) for key in page)
                             self.assertLess(count, 4)
 ```
@@ -333,9 +342,11 @@ Assign one priority per record from `random_source.random()` and order candidate
 len({unavoidable_nonbootstrap_machines(records[key]) for key in page}) >= 3
 and all(
     sum(machine in unavoidable_nonbootstrap_machines(records[key]) for key in page) < 4
-    for machine in FULL - {"Bender Access"}
+    for machine in FULL - {"Bender Access", "Merger2 Access"}
 )
 ```
+
+The first page must also contain at least four records whose unavoidable profile does not contain `Merger2 Access`. Merger2 is deliberately exempt from the repetition cap: 24 of 30 Core Campaign records unavoidably require it, so a cap of three per full page would provide only 15 slots and make the 30-level layout infeasible.
 
 Use deterministic candidate order at every search node. Shuffle the completed first page once with the supplied source so I and C do not always occupy the same buttons. On budget exhaustion raise `ValueError("balanced_pages_v1 could not satisfy page constraints")`; never weaken constraints. Calculate the digest and call `validate_layout()` before returning.
 
