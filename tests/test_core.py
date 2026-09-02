@@ -11,7 +11,7 @@ from word_factori.mod import render_levels, write_campaign_identity
 from word_factori.campaign import campaign_digest, campaign_for_level_set, load_campaign
 from word_factori.data import locations_for_level_set
 from word_factori.capabilities import requirements_for_record, unavoidable_nonbootstrap_machines
-from word_factori.requirements import WORD_REQUIREMENT_OPTIONS, access_rule_for
+from word_factori.requirements import WORD_REQUIREMENT_OPTIONS, access_rule_for, previous_page_names
 from word_factori.save import ActiveSlot, parse_active_slot, parse_save
 
 
@@ -30,6 +30,18 @@ class CapabilityTests(unittest.TestCase):
         self.assertEqual(
             frozenset(expected), unavoidable_nonbootstrap_machines(record),
         )
+
+
+class State:
+    def __init__(self, items, reachable):
+        self.items = set(items)
+        self.reachable = set(reachable)
+
+    def has_all(self, names, player):
+        return set(names) <= self.items
+
+    def can_reach_location(self, name, player):
+        return name in self.reachable
 
 
 class DataTests(unittest.TestCase):
@@ -52,22 +64,30 @@ class DataTests(unittest.TestCase):
         levels = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual([location.target for location in LOCATIONS], [level["text"] for level in levels])
 
-    def test_native_sequence_requires_previous_level_and_current_machines(self):
-        class State:
-            def __init__(self, items, reachable):
-                self.items = set(items)
-                self.reachable = set(reachable)
+    def test_first_native_page_has_no_sibling_frontier(self):
+        rule = access_rule_for(LOCATIONS[2], LOCATIONS, player=1)
+        self.assertTrue(rule(State({"Merger2 Access"}, set())))
 
-            def has_all(self, names, player):
-                return set(names) <= self.items
+    def test_later_native_page_requires_four_reachable_predecessor_slots(self):
+        rule = access_rule_for(LOCATIONS[6], LOCATIONS, player=1)
+        all_machines = set(MACHINE_ITEMS)
+        page_one = [location.name for location in LOCATIONS[:6]]
+        self.assertFalse(rule(State(all_machines, page_one[:3])))
+        self.assertTrue(rule(State(all_machines, page_one[:4])))
 
-            def can_reach_location(self, name, player):
-                return name in self.reachable
+    def test_recipe_requirements_remain_closed_when_frontier_is_open(self):
+        rule = access_rule_for(LOCATIONS[6], LOCATIONS, player=1)
+        page_one = [location.name for location in LOCATIONS[:6]]
+        self.assertFalse(rule(State(set(), page_one[:4])))
 
-        rule = access_rule_for(LOCATIONS[2], player=1)
-        self.assertFalse(rule(State({"Merger2 Access"}, set())))
-        self.assertFalse(rule(State(set(), {"Complete C"})))
-        self.assertTrue(rule(State({"Merger2 Access"}, {"Complete C"})))
+    def test_third_native_page_uses_only_immediately_preceding_page(self):
+        rule = access_rule_for(LOCATIONS[12], LOCATIONS, player=1)
+        all_machines = set(MACHINE_ITEMS)
+        page_one = [location.name for location in LOCATIONS[:6]]
+        page_two = [location.name for location in LOCATIONS[6:12]]
+        self.assertEqual(tuple(page_two), previous_page_names(LOCATIONS[12], LOCATIONS))
+        self.assertFalse(rule(State(all_machines, page_one)))
+        self.assertTrue(rule(State(all_machines, page_two[:4])))
 
 
 class ModTests(unittest.TestCase):

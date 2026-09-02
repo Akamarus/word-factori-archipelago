@@ -12,9 +12,10 @@ else:
     from .data import (
         CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, GAME, ITEM_NAME_TO_ID,
         ITEM_NAMES, ITEM_POOL, LOCATIONS, LOCATION_NAME_TO_ID, MACHINE_ITEMS,
-        REGION_REQUIREMENTS, locations_for_level_set,
+        REGION_REQUIREMENTS, locations_for_layout,
     )
-    from .campaign import campaign_digest, campaign_for_level_set
+    from .campaign import campaign_for_level_set
+    from .layout import build_layout, layout_slot_data
     from .options import WordFactoriOptions
     from .requirements import access_rule_for
     from .version import AUTHOR, VERSION
@@ -45,12 +46,25 @@ else:
         location_name_to_id = LOCATION_NAME_TO_ID
 
         def selected_level_set(self) -> str:
+            if hasattr(self, "_level_set"):
+                return self._level_set
             return "core_campaign" if int(self.options.custom_level_set.value) == 0 else "discovery_labs"
 
         def selected_locations(self):
-            return locations_for_level_set(self.selected_level_set())
+            return self._locations
 
         def generate_early(self) -> None:
+            self._level_set = self.selected_level_set()
+            self._manifest = campaign_for_level_set(self._level_set)
+            layout_mode = (
+                "fixed_pages"
+                if int(self.options.campaign_layout.value) == 0
+                else "shuffled_pages"
+            )
+            self._layout = build_layout(
+                self._manifest, self._level_set, layout_mode, self.random,
+            )
+            self._locations = locations_for_layout(self._manifest, self._layout)
             self.multiworld.push_precollected(self.create_item("Bender Access"))
 
         def create_regions(self) -> None:
@@ -68,18 +82,25 @@ else:
             locations = self.selected_locations()
             for data in locations:
                 location = WordFactoriLocation(self.player, data.name, data.code, regions[data.region])
-                set_rule(location, access_rule_for(data, self.player))
+                set_rule(location, access_rule_for(data, locations, self.player))
                 regions[data.region].locations.append(location)
             campaign_goal = int(self.options.goal.value) == 0
             victory_region = menu if campaign_goal else regions["Final Contract"]
             victory = WordFactoriLocation(self.player, "Victory", None, victory_region)
             victory.place_locked_item(WordFactoriItem("Victory", ItemClassification.progression, None, self.player))
             if campaign_goal:
-                campaign = tuple(location.name for location in locations[:30])
+                campaign = tuple(
+                    record.name for record in self._manifest.levels
+                    if record.kind != "discovery"
+                )
                 campaign_count = int(self.options.campaign_count.value)
                 set_rule(victory, lambda state: sum(state.can_reach_location(name, self.player) for name in campaign) >= campaign_count)
             else:
-                set_rule(victory, lambda state: state.can_reach_location("PITCHFORK — Final Factory", self.player))
+                final_name = next(
+                    record.name for record in self._manifest.levels
+                    if record.stable_key == "pitchfork-final"
+                )
+                set_rule(victory, lambda state: state.can_reach_location(final_name, self.player))
             victory_region.locations.append(victory)
             self.multiworld.regions += [menu, *regions.values()]
 
@@ -100,19 +121,27 @@ else:
             self.multiworld.completion_condition[self.player] = lambda state: state.has("Victory", self.player)
 
         def fill_slot_data(self) -> dict:
-            level_set = self.selected_level_set()
-            manifest = campaign_for_level_set(level_set)
             locations = self.selected_locations()
             return {
+                **layout_slot_data(self._layout),
                 "implementation_version": VERSION,
-                "level_set": level_set,
-                "campaign_id": manifest.campaign_id,
-                "manifest_version": manifest.version,
-                "manifest_digest": campaign_digest(manifest),
+                "level_set": self._level_set,
+                "campaign_id": self._manifest.campaign_id,
+                "manifest_version": self._manifest.version,
+                "manifest_digest": self._layout.digest,
                 "level_count": len(locations),
                 "goal": int(self.options.goal.value),
                 "campaign_count": int(self.options.campaign_count.value),
-                "locations": [{"index": x.canonical_index, "name": x.name, "id": x.code, "kind": x.kind} for x in locations],
+                "locations": [
+                    {
+                        "slot_index": location.slot_index,
+                        "stable_key": location.stable_key,
+                        "name": location.name,
+                        "id": location.code,
+                        "kind": location.kind,
+                    }
+                    for location in locations
+                ],
                 "mod_folder": "word factori archipelago",
                 "reload_required_for_items": True,
             }

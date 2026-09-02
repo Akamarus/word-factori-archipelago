@@ -27,8 +27,17 @@ class CustomLevelSet(Choice):
     default = 1
 
 
+class CampaignLayoutOption(Choice):
+    """Choose whether levels retain native pages or shuffle within a balanced campaign."""
+    display_name = "Campaign Layout"
+    option_fixed_pages = 0
+    option_shuffled_pages = 1
+    default = 1
+
+
 @dataclass
 class WordFactoriOptions(PerGameCommonOptions):
     goal: Goal
     campaign_count: CampaignCount
     custom_level_set: CustomLevelSet
+    campaign_layout: CampaignLayoutOption
