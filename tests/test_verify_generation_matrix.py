@@ -566,6 +566,15 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
                         )
 
                     self.assertEqual(rows[0]["status"], "Fail")
+                    self.assertEqual(rows[0].get("identity_validation"), "Fail")
+                    self.assertEqual(rows[0].get("requested_level_set"), "discovery_labs")
+                    self.assertEqual(rows[0].get("requested_goal"), 1)
+                    self.assertEqual(rows[0].get("generated_level_set"), identity.level_set)
+                    self.assertEqual(rows[0].get("generated_goal"), identity.goal)
+                    self.assertEqual(
+                        rows[0].get("generated_level_order_count"),
+                        len(identity.level_order),
+                    )
                     self.assertIn(field, rows[0]["error"])
 
     def test_matrix_rejects_fake_generator_that_ignores_requested_options(self):
@@ -742,6 +751,45 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
 
             self.assertEqual(len(rows), 4)
             self.assertTrue(all(row["status"] == "Pass" for row in rows))
+            self.assertEqual(
+                {
+                    key: rows[0].get(key)
+                    for key in (
+                        "requested_level_set",
+                        "requested_goal",
+                        "requested_campaign_count",
+                        "requested_level_count",
+                        "requested_level_order_count",
+                        "requested_layout_algorithm",
+                        "requested_implementation_version",
+                        "generated_level_set",
+                        "generated_goal",
+                        "generated_campaign_count",
+                        "generated_level_count",
+                        "generated_level_order_count",
+                        "generated_layout_algorithm",
+                        "generated_implementation_version",
+                        "identity_validation",
+                    )
+                },
+                {
+                    "requested_level_set": "core_campaign",
+                    "requested_goal": 0,
+                    "requested_campaign_count": 25,
+                    "requested_level_count": 30,
+                    "requested_level_order_count": 30,
+                    "requested_layout_algorithm": "balanced_pages_v1",
+                    "requested_implementation_version": "1.3.0",
+                    "generated_level_set": "core_campaign",
+                    "generated_goal": 0,
+                    "generated_campaign_count": 25,
+                    "generated_level_count": 30,
+                    "generated_level_order_count": 30,
+                    "generated_layout_algorithm": "balanced_pages_v1",
+                    "generated_implementation_version": "1.3.0",
+                    "identity_validation": "Pass",
+                },
+            )
             self.assertFalse(any(parent.glob("word-factori-ap067-matrix-*")))
 
     def test_matrix_checkpoints_each_row_and_stops_on_first_failure(self):

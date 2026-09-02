@@ -25,7 +25,7 @@ AP 0.6.7 spoiler `Playthrough` lines identify the advancement checks retained by
 
 ## Automated AP 0.6.7 record
 
-On 2026-09-02, seeds 13000–13049 were generated with `C:\ProgramData\Archipelago\ArchipelagoGenerate.exe` as 200 independent one-player rooms: Core Campaign / Campaign Count, Core Campaign / Final Factory, Discovery Labs / Campaign Count, and Discovery Labs / Final Factory. The definitive strict-identity run from 14:45:46 through 15:05:43 EDT took 19 minutes 57 seconds. All 200 exited successfully, matched their requested level set, numeric goal, campaign count, level count, layout algorithm, and implementation version, and passed proportional replay acceptance. Same-seed Discovery Count generation reproduced digest `b3cd5448ff934026163258f8a2087c88863ae3f8a414493e30413f82466210db`; seed 13001 changed it to `c5b48378ad56b76ed01c8f17f9e291d58421879d02745f69329c517e2fbe0d5d` while preserving all 40 stable keys and AP IDs.
+On 2026-09-02, seeds 13000–13049 were generated with `C:\ProgramData\Archipelago\ArchipelagoGenerate.exe` as 200 independent one-player rooms: Core Campaign / Campaign Count, Core Campaign / Final Factory, Discovery Labs / Campaign Count, and Discovery Labs / Final Factory. The definitive audited-identity run from 15:16:46 through 15:35:38 EDT took 18 minutes 52 seconds. All 200 exited successfully, matched their requested level set, numeric goal, campaign count, level count and actual order length, layout algorithm, and implementation version, and passed proportional replay acceptance. Every evidence row stores those requested and generated values separately with `identity_validation: Pass`. Same-seed Discovery Count generation reproduced digest `b3cd5448ff934026163258f8a2087c88863ae3f8a414493e30413f82466210db`; seed 13001 changed it to `c5b48378ad56b76ed01c8f17f9e291d58421879d02745f69329c517e2fbe0d5d` while preserving all 40 stable keys and AP IDs.
 
 ## Live record
 
@@ -34,8 +34,8 @@ No 1.3.0 live acceptance is recorded yet. Do not replace `Pending live test` wit
 The prepared 40-level shuffled Campaign Count room is:
 
 - AP: 0.6.7; seed: 13050; player: `WF_Live_Discovery_Count_13050`
-- archive: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-a2vaz9ac\output\AP_87260292545628931117.zip`
-- YAML: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-a2vaz9ac\players\player.yaml`
+- archive: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-x8e71mum\output\AP_87260292545628931117.zip`
+- YAML: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-x8e71mum\players\player.yaml`
 - layout digest: `d07d55295bd9bb46d44822872e8482f675a465d5bc167869b02f003ff3889dbe`
 - page one, in native slot order: Complete A, Complete C, Complete L, Complete I, Complete O, Complete V
 
@@ -46,5 +46,5 @@ The user must host the prepared archive, launch Word Factori Client, connect as 
 To extract the room identity again without launching the game, run:
 
 ```powershell
-C:\Users\Jack\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\verify_generation_matrix.py --inspect-archive 'C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-a2vaz9ac\output\AP_87260292545628931117.zip'
+C:\Users\Jack\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\verify_generation_matrix.py --inspect-archive 'C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-x8e71mum\output\AP_87260292545628931117.zip'
 ```

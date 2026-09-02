@@ -364,29 +364,43 @@ def extract_generation_identity(archive_path: Path, *, player: int) -> Generatio
     )
 
 
-def validate_generation_identity(
-    identity: GenerationIdentity, case: MatrixCase
-) -> None:
-    expected = {
+def _requested_identity(case: MatrixCase) -> dict:
+    level_count = {"core_campaign": 30, "discovery_labs": 40}[case.level_set]
+    return {
         "level_set": case.level_set,
         "goal": {"campaign_count": 0, "final_factory": 1}[case.goal],
         "campaign_count": 25,
-        "level_count": {"core_campaign": 30, "discovery_labs": 40}[case.level_set],
+        "level_count": level_count,
+        "level_order_count": level_count,
         "layout_algorithm": "balanced_pages_v1",
         "implementation_version": "1.3.0",
     }
+
+
+def _generated_identity(identity: GenerationIdentity) -> dict:
+    return {
+        "level_set": identity.level_set,
+        "goal": identity.goal,
+        "campaign_count": identity.campaign_count,
+        "level_count": identity.level_count,
+        "level_order_count": len(identity.level_order),
+        "layout_algorithm": identity.layout_algorithm,
+        "implementation_version": identity.implementation_version,
+    }
+
+
+def validate_generation_identity(
+    identity: GenerationIdentity, case: MatrixCase
+) -> None:
+    expected = _requested_identity(case)
+    generated = _generated_identity(identity)
     for field, expected_value in expected.items():
-        actual = getattr(identity, field)
+        actual = generated[field]
         if type(actual) is not type(expected_value) or actual != expected_value:
             raise AssertionError(
                 f"generated {field} {actual!r}, expected {expected_value!r} "
                 f"for {case.key}"
             )
-    if len(identity.level_order) != expected["level_count"]:
-        raise AssertionError(
-            f"generated level_order has {len(identity.level_order)} entries, "
-            f"expected {expected['level_count']} for {case.key}"
-        )
 
 
 def run_generation(
@@ -506,26 +520,42 @@ def execute_matrix(
                 completed_count += 1
                 output = matrix_root / case.key / f"output-{seed}"
                 output.mkdir()
+                requested_identity = _requested_identity(case)
                 row = {
                     "case": case.key,
-                    "level_set": case.level_set,
-                    "goal": case.goal,
                     "player": player_name,
                     "seed": seed,
+                    **{
+                        f"requested_{field}": value
+                        for field, value in requested_identity.items()
+                    },
+                    "identity_validation": "Not run",
                 }
                 try:
                     result = run_generation(generator_command, players, seed, output)
+                    row.update(
+                        {
+                            f"generated_{field}": value
+                            for field, value in _generated_identity(
+                                result.identity
+                            ).items()
+                        }
+                    )
+                    try:
+                        validate_generation_identity(result.identity, case)
+                    except Exception:
+                        row["identity_validation"] = "Fail"
+                        raise
+                    row["identity_validation"] = "Pass"
                     if result.ap_version != "0.6.7":
                         raise AssertionError(
                             f"expected AP 0.6.7, spoiler reports {result.ap_version}"
                         )
-                    validate_generation_identity(result.identity, case)
                     spheres = sphere_evaluator(result.playthrough, result.identity)
                     required_broad_states = validate_progression_choices(spheres)
                     row.update(
                         status="Pass",
                         ap_version=result.ap_version,
-                        word_factori_version=result.identity.implementation_version,
                         layout_digest=result.identity.layout_digest,
                         total_pre_goal_states=spheres.total_pre_goal_spheres,
                         broad_pre_goal_states=(
