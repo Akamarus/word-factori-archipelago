@@ -4,10 +4,14 @@ import json
 import pickle
 import sys
 import tempfile
+import types
 import unittest
 import zipfile
 import zlib
 from pathlib import Path
+from unittest import mock
+
+from tools import verify_generation_matrix as matrix_tool
 
 from tools.verify_generation_matrix import (
     MATRIX_CASES,
@@ -185,10 +189,15 @@ class IdentityExtractionTests(unittest.TestCase):
     def test_extracts_layout_order_digest_and_canonical_sets(self):
         # Omitting locations or confusing slot order with canonical identity breaks this.
         slot_data = {
-            "level_order": ["owl-second", "cat-first"],
+            # AP 0.6.7 materializes this sequence as a tuple in real multidata.
+            "level_order": ("owl-second", "cat-first"),
             "layout_digest": "a" * 64,
             "implementation_version": "1.3.0",
             "level_set": "core_campaign",
+            "goal": 0,
+            "campaign_count": 25,
+            "level_count": 2,
+            "layout_algorithm": "balanced_pages_v1",
             "locations": [
                 {"slot_index": 0, "stable_key": "owl-second", "name": "OWL — Second", "id": 975301002},
                 {"slot_index": 1, "stable_key": "cat-first", "name": "CAT — First", "id": 975301001},
@@ -210,6 +219,10 @@ class IdentityExtractionTests(unittest.TestCase):
         self.assertEqual(identity.ap_ids, frozenset({975301001, 975301002}))
         self.assertEqual(identity.implementation_version, "1.3.0")
         self.assertEqual(identity.level_set, "core_campaign")
+        self.assertEqual(getattr(identity, "goal", None), 0)
+        self.assertEqual(getattr(identity, "campaign_count", None), 25)
+        self.assertEqual(getattr(identity, "level_count", None), 2)
+        self.assertEqual(getattr(identity, "layout_algorithm", None), "balanced_pages_v1")
         self.assertEqual(identity.location_names, ("OWL — Second", "CAT — First"))
 
     def test_rejects_multidata_that_requests_arbitrary_python_globals(self):
@@ -222,6 +235,63 @@ class IdentityExtractionTests(unittest.TestCase):
 
             with self.assertRaisesRegex(pickle.UnpicklingError, "forbidden"):
                 extract_generation_identity(archive_path, player=1)
+
+    def test_rejects_oversized_multidata_zip_member_before_reading_it(self):
+        slot_data = {
+            "level_order": ["cat-first"],
+            "layout_digest": "a" * 64,
+            "implementation_version": "1.3.0",
+            "level_set": "core_campaign",
+            "goal": 0,
+            "campaign_count": 25,
+            "level_count": 1,
+            "layout_algorithm": "balanced_pages_v1",
+            "locations": [
+                {"stable_key": "cat-first", "name": "CAT — First", "id": 1},
+            ],
+        }
+        encoded = bytes((3,)) + zlib.compress(
+            pickle.dumps({"slot_data": {1: slot_data}}, protocol=4)
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "AP_oversized.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("AP_oversized.archipelago", encoded)
+
+            with mock.patch.object(
+                matrix_tool, "MAX_MULTIDATA_MEMBER_BYTES", len(encoded) - 1,
+                create=True,
+            ):
+                with self.assertRaisesRegex(ValueError, "multidata.*too large"):
+                    extract_generation_identity(archive_path, player=1)
+
+    def test_rejects_multidata_whose_nested_zlib_payload_exceeds_limit(self):
+        slot_data = {
+            "level_order": ["cat-first"],
+            "layout_digest": "a" * 64,
+            "implementation_version": "1.3.0",
+            "level_set": "core_campaign",
+            "goal": 0,
+            "campaign_count": 25,
+            "level_count": 1,
+            "layout_algorithm": "balanced_pages_v1",
+            "locations": [
+                {"stable_key": "cat-first", "name": "CAT — First", "id": 1},
+            ],
+        }
+        encoded = bytes((3,)) + zlib.compress(
+            pickle.dumps({"slot_data": {1: slot_data}}, protocol=4)
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "AP_nested.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("AP_nested.archipelago", encoded)
+
+            with mock.patch.object(
+                matrix_tool, "MAX_MULTIDATA_PAYLOAD_BYTES", 64, create=True,
+            ):
+                with self.assertRaisesRegex(ValueError, "decompressed multidata.*too large"):
+                    extract_generation_identity(archive_path, player=1)
 
     def test_comparison_requires_repeat_identity_and_cross_seed_canonical_sets(self):
         # Accepting a same-seed drift or a cross-seed canonical-ID drift breaks this.
@@ -289,11 +359,19 @@ p.add_argument("--outputpath", required=True)
 p.add_argument("--spoiler", required=True)
 p.add_argument("--skip_prog_balancing", action="store_true")
 a = p.parse_args()
-order = ["cat", "owl"] if a.seed != 13001 else ["owl", "cat"]
-names = {"cat": "CAT — First", "owl": "OWL — Second"}
-ids = {"cat": 1, "owl": 2}
+yaml = next(Path(a.player_files_path).glob("*.yaml")).read_text(encoding="utf-8")
+level_set = "discovery_labs" if "custom_level_set: discovery_labs" in yaml else "core_campaign"
+goal = 1 if "goal: final_factory" in yaml else 0
+level_count = 40 if level_set == "discovery_labs" else 30
+order = ["cat", "owl"] + [f"level-{index}" for index in range(2, level_count)]
+if a.seed == 13001:
+    order[:2] = ["owl", "cat"]
+names = {key: ("CAT — First" if key == "cat" else "OWL — Second" if key == "owl" else key) for key in order}
+ids = {key: index + 1 for index, key in enumerate(sorted(order))}
 slot = {"level_order": order, "layout_digest": ("a" if a.seed != 13001 else "b") * 64,
         "implementation_version": "1.3.0",
+        "level_set": level_set, "goal": goal, "campaign_count": 25,
+        "level_count": level_count, "layout_algorithm": "balanced_pages_v1",
         "locations": [{"stable_key": key, "name": names[key], "id": ids[key]} for key in order]}
 encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
 spoiler = """Archipelago Version 0.6.7  -  Seed: 13000
@@ -337,6 +415,9 @@ a = p.parse_args()
 assert a.spoiler == 3 and a.skip_prog_balancing
 assert list(Path(a.player_files_path).glob("*.yaml"))
 slot = {"level_order": ["cat", "owl"], "layout_digest": "d" * 64,
+        "implementation_version": "1.3.0", "level_set": "core_campaign",
+        "goal": 0, "campaign_count": 25, "level_count": 2,
+        "layout_algorithm": "balanced_pages_v1",
         "locations": [{"stable_key": "cat", "id": 1},
                       {"stable_key": "owl", "id": 2}]}
 encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
@@ -384,6 +465,171 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
         self.assertEqual(len(result.playthrough), 3)
         self.assertEqual(result.ap_version, "0.6.7")
 
+    def test_matrix_rejects_every_requested_slot_option_mismatch(self):
+        case = MATRIX_CASES[3]
+        valid = {
+            "level_order": tuple(f"level-{index}" for index in range(40)),
+            "layout_digest": "a" * 64,
+            "stable_keys": frozenset(f"level-{index}" for index in range(40)),
+            "ap_ids": frozenset(range(40)),
+            "implementation_version": "1.3.0",
+            "level_set": "discovery_labs",
+            "location_names": tuple(f"Level {index}" for index in range(40)),
+            "goal": 1,
+            "campaign_count": 25,
+            "level_count": 40,
+            "layout_algorithm": "balanced_pages_v1",
+        }
+        mismatches = {
+            "level_set": "core_campaign",
+            "goal": 0,
+            "campaign_count": 24,
+            "level_count": 30,
+            "layout_algorithm": "fixed_pages_v1",
+            "implementation_version": "",
+            "level_order": tuple(f"level-{index}" for index in range(39)),
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            for field, wrong_value in mismatches.items():
+                with self.subTest(field=field):
+                    identity_values = dict(valid)
+                    identity_values[field] = wrong_value
+                    identity = types.SimpleNamespace(**identity_values)
+                    generation = matrix_tool.GenerationRun(
+                        archive_path=parent / "unused.zip",
+                        identity=identity,
+                        playthrough=(),
+                        ap_version="0.6.7",
+                    )
+                    with mock.patch.object(
+                        matrix_tool, "run_generation", return_value=generation,
+                    ):
+                        rows = execute_matrix(
+                            ("unused-generator",),
+                            cases=(case,),
+                            seeds=range(13000, 13001),
+                            temporary_parent=parent,
+                            sphere_evaluator=lambda *_: SphereSummary(3, 3, (2, 2, 2)),
+                        )
+
+                    self.assertEqual(rows[0]["status"], "Fail")
+                    self.assertIn(field, rows[0]["error"])
+
+    def test_matrix_rejects_fake_generator_that_ignores_requested_options(self):
+        fake_generator = r'''
+import argparse, pickle, zipfile, zlib
+from pathlib import Path
+p = argparse.ArgumentParser()
+p.add_argument("--player_files_path", required=True)
+p.add_argument("--seed", required=True, type=int)
+p.add_argument("--outputpath", required=True)
+p.add_argument("--spoiler", required=True)
+p.add_argument("--skip_prog_balancing", action="store_true")
+a = p.parse_args()
+order = [f"core-{index}" for index in range(30)]
+slot = {
+    "level_order": order,
+    "layout_digest": "a" * 64,
+    "implementation_version": "1.3.0",
+    "level_set": "core_campaign",
+    "goal": 0,
+    "campaign_count": 25,
+    "level_count": 30,
+    "layout_algorithm": "balanced_pages_v1",
+    "locations": [
+        {"stable_key": key, "name": key, "id": index}
+        for index, key in enumerate(order)
+    ],
+}
+encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
+spoiler = """Archipelago Version 0.6.7  -  Seed: 13000
+
+Playthrough:
+1: {
+  A: Item
+  B: Item
+}
+2: {
+  Victory: Victory
+}
+"""
+out = Path(a.outputpath); out.mkdir(parents=True, exist_ok=True)
+with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
+    z.writestr("AP_fake.archipelago", encoded)
+    z.writestr("AP_fake_Spoiler.txt", spoiler)
+'''
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            script = parent / "ignores_options.py"
+            script.write_text(fake_generator, encoding="utf-8")
+            rows = execute_matrix(
+                (sys.executable, str(script)),
+                cases=(MATRIX_CASES[3],),
+                seeds=range(13000, 13001),
+                temporary_parent=parent,
+                sphere_evaluator=lambda *_: SphereSummary(1, 1, (2,)),
+            )
+
+        self.assertEqual(rows[0]["status"], "Fail")
+        self.assertIn("level_set", rows[0]["error"])
+
+    def test_run_generation_rejects_oversized_spoiler_zip_member(self):
+        fake_generator = r'''
+import argparse, pickle, zipfile, zlib
+from pathlib import Path
+p = argparse.ArgumentParser()
+p.add_argument("--player_files_path", required=True)
+p.add_argument("--seed", required=True, type=int)
+p.add_argument("--outputpath", required=True)
+p.add_argument("--spoiler", required=True)
+p.add_argument("--skip_prog_balancing", action="store_true")
+a = p.parse_args()
+slot = {
+    "level_order": ["cat"],
+    "layout_digest": "a" * 64,
+    "implementation_version": "1.3.0",
+    "level_set": "core_campaign",
+    "goal": 0,
+    "campaign_count": 25,
+    "level_count": 1,
+    "layout_algorithm": "balanced_pages_v1",
+    "locations": [{"stable_key": "cat", "name": "CAT", "id": 1}],
+}
+encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
+spoiler = """Archipelago Version 0.6.7  -  Seed: 13000
+
+Playthrough:
+1: {
+  A: Item
+}
+2: {
+  Victory: Victory
+}
+""" + (" " * 256)
+out = Path(a.outputpath); out.mkdir(parents=True, exist_ok=True)
+with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
+    z.writestr("AP_fake.archipelago", encoded)
+    z.writestr("AP_fake_Spoiler.txt", spoiler)
+'''
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            script = root / "oversized_spoiler.py"
+            script.write_text(fake_generator, encoding="utf-8")
+            players = root / "players"
+            output = root / "output"
+            players.mkdir()
+            output.mkdir()
+            (players / "player.yaml").write_text("name: Test\n", encoding="utf-8")
+
+            with mock.patch.object(
+                matrix_tool, "MAX_SPOILER_MEMBER_BYTES", 128, create=True,
+            ):
+                with self.assertRaisesRegex(ValueError, "spoiler.*too large"):
+                    run_generation(
+                        (sys.executable, str(script)), players, 13000, output
+                    )
+
     def test_matrix_records_each_case_and_seed_then_removes_owned_workspace(self):
         # A leaked matrix workspace or skipped successful row breaks this contract.
         fake_generator = r'''
@@ -396,8 +642,15 @@ p.add_argument("--outputpath", required=True)
 p.add_argument("--spoiler", required=True)
 p.add_argument("--skip_prog_balancing", action="store_true")
 a = p.parse_args()
-slot = {"level_order": ["cat", "owl"], "layout_digest": ("a" if a.seed == 13000 else "b") * 64,
-        "locations": [{"stable_key": "cat", "id": 1}, {"stable_key": "owl", "id": 2}]}
+yaml = next(Path(a.player_files_path).glob("*.yaml")).read_text(encoding="utf-8")
+goal = 1 if "goal: final_factory" in yaml else 0
+order = [f"core-{index}" for index in range(30)]
+slot = {"level_order": order, "layout_digest": ("a" if a.seed == 13000 else "b") * 64,
+        "implementation_version": "1.3.0", "level_set": "core_campaign",
+        "goal": goal, "campaign_count": 25, "level_count": 30,
+        "layout_algorithm": "balanced_pages_v1",
+        "locations": [{"stable_key": key, "name": key, "id": index}
+                      for index, key in enumerate(order)]}
 encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
 spoiler = """Archipelago Version 0.6.7  -  Seed: 13000
 
@@ -480,7 +733,6 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
             )
             live = prepare_live_room(
                 command, MATRIX_CASES[2], seed=13050, temporary_parent=parent,
-                expected_levels=2,
             )
 
             self.assertEqual(deterministic["status"], "Pass")
@@ -488,7 +740,10 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
             live_root = Path(live["room_root"])
             self.assertTrue(Path(live["archive_path"]).is_file())
             self.assertTrue((live_root / "players" / "player.yaml").is_file())
-            self.assertEqual(live["page_one_targets"], ["CAT — First", "OWL — Second"])
+            self.assertEqual(
+                live["page_one_targets"],
+                ["CAT — First", "OWL — Second", "level-2", "level-3", "level-4", "level-5"],
+            )
 
     def test_script_entrypoint_defines_identity_comparison_before_running_main(self):
         # Moving the __main__ block above a function used by main reproduces the real NameError.

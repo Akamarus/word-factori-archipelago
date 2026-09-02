@@ -26,6 +26,10 @@ from word_factori.campaign import campaign_for_level_set
 from word_factori.capabilities import requirements_for_record
 from word_factori.layout import PAGE_SIZE, PAGE_UNLOCK_COUNT
 
+MAX_MULTIDATA_MEMBER_BYTES = 16 * 1024 * 1024
+MAX_MULTIDATA_PAYLOAD_BYTES = 64 * 1024 * 1024
+MAX_SPOILER_MEMBER_BYTES = 16 * 1024 * 1024
+
 
 @dataclass(frozen=True)
 class SphereSummary:
@@ -55,6 +59,10 @@ class GenerationIdentity:
     implementation_version: str = ""
     level_set: str = ""
     location_names: tuple[str, ...] = ()
+    goal: int | None = None
+    campaign_count: int | None = None
+    level_count: int | None = None
+    layout_algorithm: str = ""
 
 
 @dataclass(frozen=True)
@@ -127,10 +135,60 @@ class _RestrictedUnpickler(pickle.Unpickler):
 def _decode_multidata(encoded: bytes) -> dict:
     if not encoded or encoded[0] != 3:
         raise ValueError("unsupported Archipelago multidata format")
-    payload = _RestrictedUnpickler(io.BytesIO(zlib.decompress(encoded[1:]))).load()
+    decompressor = zlib.decompressobj()
+    decoded = decompressor.decompress(
+        encoded[1:], MAX_MULTIDATA_PAYLOAD_BYTES + 1
+    )
+    if len(decoded) > MAX_MULTIDATA_PAYLOAD_BYTES or decompressor.unconsumed_tail:
+        raise ValueError("decompressed multidata payload is too large")
+    decoded += decompressor.flush(MAX_MULTIDATA_PAYLOAD_BYTES + 1 - len(decoded))
+    if len(decoded) > MAX_MULTIDATA_PAYLOAD_BYTES:
+        raise ValueError("decompressed multidata payload is too large")
+    if not decompressor.eof or decompressor.unused_data:
+        raise ValueError("invalid compressed multidata payload")
+    payload = _RestrictedUnpickler(io.BytesIO(decoded)).load()
     if not isinstance(payload, dict):
         raise ValueError("Archipelago multidata root is not a dictionary")
     return payload
+
+
+def _read_zip_member_bounded(
+    archive: zipfile.ZipFile,
+    member: zipfile.ZipInfo,
+    *,
+    limit: int,
+    label: str,
+) -> bytes:
+    if member.file_size > limit:
+        raise ValueError(
+            f"{label} ZIP member is too large: {member.file_size} bytes, limit {limit}"
+        )
+    with archive.open(member) as stream:
+        payload = stream.read(limit + 1)
+    if len(payload) > limit:
+        raise ValueError(f"{label} ZIP member is too large: limit {limit} bytes")
+    return payload
+
+
+def _required_slot_field(slot_data: dict, name: str, expected_type: type):
+    if name not in slot_data:
+        raise ValueError(f"slot data has no {name}")
+    value = slot_data[name]
+    if type(value) is not expected_type:
+        raise ValueError(
+            f"slot data {name} must be {expected_type.__name__}, "
+            f"got {type(value).__name__}"
+        )
+    return value
+
+
+def _required_string_sequence(slot_data: dict, name: str) -> tuple[str, ...]:
+    if name not in slot_data:
+        raise ValueError(f"slot data has no {name}")
+    value = slot_data[name]
+    if type(value) not in (list, tuple) or any(type(item) is not str for item in value):
+        raise ValueError(f"slot data {name} must be a list or tuple of strings")
+    return tuple(value)
 
 
 def parse_progression_playthrough(spoiler: str) -> tuple[ProgressionSphere, ...]:
@@ -274,22 +332,61 @@ def validate_progression_choices(summary: SphereSummary) -> int:
 
 def extract_generation_identity(archive_path: Path, *, player: int) -> GenerationIdentity:
     with zipfile.ZipFile(archive_path) as archive:
-        multidata_names = [name for name in archive.namelist() if name.endswith(".archipelago")]
-        if len(multidata_names) != 1:
+        multidata_members = [
+            member for member in archive.infolist()
+            if member.filename.endswith(".archipelago")
+        ]
+        if len(multidata_members) != 1:
             raise ValueError(f"expected one multidata file in {archive_path}")
-        encoded = archive.read(multidata_names[0])
+        encoded = _read_zip_member_bounded(
+            archive,
+            multidata_members[0],
+            limit=MAX_MULTIDATA_MEMBER_BYTES,
+            label="multidata",
+        )
     payload = _decode_multidata(encoded)
     slot_data = payload["slot_data"][player]
     locations = slot_data["locations"]
     return GenerationIdentity(
-        level_order=tuple(slot_data["level_order"]),
-        layout_digest=slot_data["layout_digest"],
+        level_order=_required_string_sequence(slot_data, "level_order"),
+        layout_digest=_required_slot_field(slot_data, "layout_digest", str),
         stable_keys=frozenset(location["stable_key"] for location in locations),
         ap_ids=frozenset(location["id"] for location in locations),
-        implementation_version=slot_data.get("implementation_version", ""),
-        level_set=slot_data.get("level_set", ""),
+        implementation_version=_required_slot_field(
+            slot_data, "implementation_version", str
+        ),
+        level_set=_required_slot_field(slot_data, "level_set", str),
         location_names=tuple(location.get("name", "") for location in locations),
+        goal=_required_slot_field(slot_data, "goal", int),
+        campaign_count=_required_slot_field(slot_data, "campaign_count", int),
+        level_count=_required_slot_field(slot_data, "level_count", int),
+        layout_algorithm=_required_slot_field(slot_data, "layout_algorithm", str),
     )
+
+
+def validate_generation_identity(
+    identity: GenerationIdentity, case: MatrixCase
+) -> None:
+    expected = {
+        "level_set": case.level_set,
+        "goal": {"campaign_count": 0, "final_factory": 1}[case.goal],
+        "campaign_count": 25,
+        "level_count": {"core_campaign": 30, "discovery_labs": 40}[case.level_set],
+        "layout_algorithm": "balanced_pages_v1",
+        "implementation_version": "1.3.0",
+    }
+    for field, expected_value in expected.items():
+        actual = getattr(identity, field)
+        if type(actual) is not type(expected_value) or actual != expected_value:
+            raise AssertionError(
+                f"generated {field} {actual!r}, expected {expected_value!r} "
+                f"for {case.key}"
+            )
+    if len(identity.level_order) != expected["level_count"]:
+        raise AssertionError(
+            f"generated level_order has {len(identity.level_order)} entries, "
+            f"expected {expected['level_count']} for {case.key}"
+        )
 
 
 def run_generation(
@@ -321,10 +418,18 @@ def run_generation(
         raise RuntimeError(f"expected one output ZIP for seed {seed}, found {len(archives)}")
     archive_path = archives[0]
     with zipfile.ZipFile(archive_path) as archive:
-        spoilers = [name for name in archive.namelist() if name.endswith("_Spoiler.txt")]
+        spoilers = [
+            member for member in archive.infolist()
+            if member.filename.endswith("_Spoiler.txt")
+        ]
         if len(spoilers) != 1:
             raise RuntimeError(f"expected one spoiler in {archive_path}")
-        spoiler = archive.read(spoilers[0]).decode("utf-8-sig")
+        spoiler = _read_zip_member_bounded(
+            archive,
+            spoilers[0],
+            limit=MAX_SPOILER_MEMBER_BYTES,
+            label="spoiler",
+        ).decode("utf-8-sig")
     version_match = _AP_VERSION.search(spoiler)
     if version_match is None:
         raise ValueError("spoiler has no Archipelago version header")
@@ -414,11 +519,7 @@ def execute_matrix(
                         raise AssertionError(
                             f"expected AP 0.6.7, spoiler reports {result.ap_version}"
                         )
-                    if result.identity.implementation_version not in ("", "1.3.0"):
-                        raise AssertionError(
-                            "expected Word Factori 1.3.0, slot data reports "
-                            f"{result.identity.implementation_version}"
-                        )
+                    validate_generation_identity(result.identity, case)
                     spheres = sphere_evaluator(result.playthrough, result.identity)
                     required_broad_states = validate_progression_choices(spheres)
                     row.update(
@@ -473,7 +574,9 @@ def verify_deterministic_identity(
         for label, seed in (("repeat-a", 13000), ("repeat-b", 13000), ("different", 13001)):
             output = identity_root / label
             output.mkdir()
-            runs.append(run_generation(generator_command, players, seed, output))
+            run = run_generation(generator_command, players, seed, output)
+            validate_generation_identity(run.identity, case)
+            runs.append(run)
         compare_generation_identities(
             runs[0].identity,
             runs[1].identity,
@@ -501,7 +604,6 @@ def prepare_live_room(
     *,
     seed: int,
     temporary_parent: Path | None = None,
-    expected_levels: int = 40,
 ) -> dict:
     live_root = Path(
         tempfile.mkdtemp(
@@ -520,15 +622,7 @@ def prepare_live_room(
         result = run_generation(generator_command, players, seed, output)
         if result.ap_version != "0.6.7":
             raise AssertionError(f"live room used AP {result.ap_version}, not 0.6.7")
-        if result.identity.implementation_version != "1.3.0":
-            raise AssertionError(
-                "live room slot data used Word Factori "
-                f"{result.identity.implementation_version!r}, not 1.3.0"
-            )
-        if len(result.identity.level_order) != expected_levels:
-            raise AssertionError(
-                f"live room has {len(result.identity.level_order)} levels, expected {expected_levels}"
-            )
+        validate_generation_identity(result.identity, case)
         return {
             "status": "Prepared; live gameplay pending",
             "seed": seed,
