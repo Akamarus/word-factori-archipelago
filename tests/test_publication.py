@@ -118,6 +118,14 @@ class PublicationTests(unittest.TestCase):
 
         self.assertIn("four of the six", readme)
 
+    def test_readme_write_summary_names_every_supported_destination(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8").casefold()
+
+        self.assertNotIn("rewrites only this mod's `levels.json`", readme)
+        self.assertIn("`levels.json` and `archipelago_campaign.json`", readme)
+        self.assertIn("integration-owned sidecars", readme)
+        self.assertIn("word factori save files remain read-only", readme)
+
     def test_release_build_is_byte_reproducible(self):
         build_release.write_world()
         build_release.write_release()

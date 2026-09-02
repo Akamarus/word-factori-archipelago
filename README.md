@@ -43,7 +43,7 @@ The integration separates **what you build** from **what Archipelago gives you**
 2. Completing a level reports that level as an Archipelago location check.
 3. Archipelago sends the item placed at that location to its recipient.
 4. Received Word Factori items unlock machines or later campaign tiers; complete any four levels on a full page to open the next page.
-5. The client rewrites only this mod's `levels.json`, using zero machine/input limits for things you have not received.
+5. The client writes the supported mod files `levels.json` and `archipelago_campaign.json`, plus integration-owned sidecars; Word Factori save files remain read-only. Unreceived machine and input limits are set to zero in the generated mod JSON.
 
 Letters are always manufactured inside Word Factori. Archipelago never sends individual letters, puzzle layouts, or unverified save values.
 
