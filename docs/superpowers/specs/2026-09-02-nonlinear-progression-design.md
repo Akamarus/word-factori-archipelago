@@ -1,6 +1,10 @@
 # Nonlinear Progression and Shuffled Pages Design
 
-**Status:** Draft for user review; concept approved
+**Status:** Superseded by `2026-09-02-native-open-pages-and-enhanced-patch-design.md`
+
+> Live testing and isolated bytecode inspection disproved this draft's
+> assumption that every first-page slot is independently selectable. Retained
+> for design history only; do not implement or document its progression model.
 
 **Date:** 2026-09-02
 
