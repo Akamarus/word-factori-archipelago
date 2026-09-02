@@ -265,6 +265,25 @@ class IdentityExtractionTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "multidata.*too large"):
                     extract_generation_identity(archive_path, player=1)
 
+    def test_bounded_zip_reader_rejects_declared_size_before_open(self):
+        # Moving the size check after archive.open would trigger the sentinel.
+        opened: list[str] = []
+
+        class InstrumentedArchive:
+            def open(self, member):
+                opened.append(member.filename)
+                raise AssertionError("oversized member was opened")
+
+        member = zipfile.ZipInfo("AP_oversized.archipelago")
+        member.file_size = 65
+
+        with self.assertRaisesRegex(ValueError, "multidata.*too large"):
+            matrix_tool._read_zip_member_bounded(
+                InstrumentedArchive(), member, limit=64, label="multidata"
+            )
+
+        self.assertEqual(opened, [])
+
     def test_rejects_multidata_whose_nested_zlib_payload_exceeds_limit(self):
         slot_data = {
             "level_order": ["cat-first"],
@@ -292,6 +311,39 @@ class IdentityExtractionTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(ValueError, "decompressed multidata.*too large"):
                     extract_generation_identity(archive_path, player=1)
+
+    def test_multidata_decompression_receives_a_bounded_output_limit(self):
+        # Removing max_length would record zero and allow the fake to overproduce.
+        requested_limits: list[int] = []
+        produced_lengths: list[int] = []
+
+        class InstrumentedDecompressor:
+            unconsumed_tail = b"compressed-data-remains"
+            unused_data = b""
+            eof = False
+
+            def decompress(self, _payload, max_length=0):
+                requested_limits.append(max_length)
+                produced = b"x" * (max_length if max_length else 128)
+                produced_lengths.append(len(produced))
+                return produced
+
+            def flush(self, _length):
+                raise AssertionError("oversized output must be rejected before flush")
+
+        with (
+            mock.patch.object(matrix_tool, "MAX_MULTIDATA_PAYLOAD_BYTES", 7),
+            mock.patch.object(
+                matrix_tool.zlib,
+                "decompressobj",
+                return_value=InstrumentedDecompressor(),
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "decompressed multidata.*too large"):
+                matrix_tool._decode_multidata(b"\x03compressed")
+
+        self.assertEqual(requested_limits, [8])
+        self.assertEqual(produced_lengths, [8])
 
     def test_comparison_requires_repeat_identity_and_cross_seed_canonical_sets(self):
         # Accepting a same-seed drift or a cross-seed canonical-ID drift breaks this.
