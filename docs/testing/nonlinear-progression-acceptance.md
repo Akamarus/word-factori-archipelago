@@ -27,6 +27,8 @@ AP 0.6.7 spoiler `Playthrough` lines identify the advancement checks retained by
 
 On 2026-09-02, seeds 13000–13049 were generated with `C:\ProgramData\Archipelago\ArchipelagoGenerate.exe` as 200 independent one-player rooms: Core Campaign / Campaign Count, Core Campaign / Final Factory, Discovery Labs / Campaign Count, and Discovery Labs / Final Factory. The definitive audited-identity run from 15:16:46 through 15:35:38 EDT took 18 minutes 52 seconds. All 200 exited successfully, matched their requested level set, numeric goal, campaign count, level count and actual order length, layout algorithm, and implementation version, and passed proportional replay acceptance. Every evidence row stores those requested and generated values separately with `identity_validation: Pass`. Same-seed Discovery Count generation reproduced digest `b3cd5448ff934026163258f8a2087c88863ae3f8a414493e30413f82466210db`; seed 13001 changed it to `c5b48378ad56b76ed01c8f17f9e291d58421879d02745f69329c517e2fbe0d5d` while preserving all 40 stable keys and AP IDs.
 
+After the final identity hardening, the same 200-case matrix was rerun from 16:07:57 through 16:28:51 EDT against an isolated copy of the installed AP 0.6.7 runtime containing the freshly built worktree APWorld. All 200 rows passed again. Each row additionally records `canonical_identity_validation: Pass`, proving exact cardinality and exact canonical stable-key/name/AP-ID projection rather than relying on sets that could hide duplicate or consistently corrupted rows. Deterministic seed 13000/13001 validation also passed. The installed APWorld was not changed for this rerun; the controller must perform the final installation separately.
+
 ## Live record
 
 No 1.3.0 live acceptance is recorded yet. Do not replace `Pending live test` with a pass until the behavior has been observed in Word Factori and the evidence identifies the AP version, game build, generated room, display environment, exact steps, and outcome.
@@ -34,17 +36,17 @@ No 1.3.0 live acceptance is recorded yet. Do not replace `Pending live test` wit
 The prepared 40-level shuffled Campaign Count room is:
 
 - AP: 0.6.7; seed: 13050; player: `WF_Live_Discovery_Count_13050`
-- archive: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-x8e71mum\output\AP_87260292545628931117.zip`
-- YAML: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-x8e71mum\players\player.yaml`
+- archive: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-_wer3wzd\output\AP_87260292545628931117.zip`
+- YAML: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-_wer3wzd\players\player.yaml`
 - layout digest: `d07d55295bd9bb46d44822872e8482f675a465d5bc167869b02f003ff3889dbe`
 - page one, in native slot order: Complete A, Complete C, Complete L, Complete I, Complete O, Complete V
 
-The controller-authorized final install was completed on 2026-09-02 without touching saves. The installed APWorld and the build that produced this room both have SHA-256 `8A1AC5102B841CEDE7575BEC432D253B4E79BFA847C58F7B261F12697E1A1F2E`.
+The currently installed APWorld remains the earlier SHA-256 `8A1AC5102B841CEDE7575BEC432D253B4E79BFA847C58F7B261F12697E1A1F2E`. The fresh build used to generate this room has SHA-256 `F6CF0D532F02D46E8B1769E3A2EEF398E1DE2413EB27C7B076C9CFE9B2FB781F` and was loaded only in the isolated runtime copy. No save or external installation was touched.
 
 The user must host the prepared archive, launch Word Factori Client, connect as `WF_Live_Discovery_Count_13050`, select the integration mod in Word Factori, and use a clean empty mod save. Record the six page-one targets; confirm the arrow is disabled after three completions and enabled after four; open page two with two unfinished checks; later complete one deferred check after its needed machine arrives; verify native slots report the canonical AP names; reconnect/restart and verify the mapping is unchanged with no duplicate check or item; and record one Campaign Count goal update. Do not mark any live row passed without those observations.
 
 To extract the room identity again without launching the game, run:
 
 ```powershell
-C:\Users\Jack\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\verify_generation_matrix.py --inspect-archive 'C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-x8e71mum\output\AP_87260292545628931117.zip'
+C:\Users\Jack\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\verify_generation_matrix.py --inspect-archive 'C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-_wer3wzd\output\AP_87260292545628931117.zip'
 ```

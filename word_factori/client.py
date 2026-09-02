@@ -286,7 +286,23 @@ class WordFactoriContext(CommonContext):
             self.slot_data = dict(args.get("slot_data") or {})
             self.last_render_signature = None
             self.prepare_selected_campaign()
-            self.connected_identity = self.current_identity()
+            try:
+                self.connected_identity = self.current_identity()
+            except (TypeError, ValueError) as error:
+                logger.warning("Room state identity unavailable: %s", error)
+                self.connected_identity = None
+                self.bridge_state = BridgeState.empty()
+                self.dispatch_ledger = DispatchLedger.empty("disconnected")
+                self.pending_overlay_events = ()
+                self.overlay_state = OverlayState(
+                    max_visible=self.overlay_preferences.max_visible,
+                    connection_status="connected",
+                    reload_required=self._prepared_campaign_reload_required,
+                )
+                self._overlay_identity = None
+                self.publish_overlay()
+                self._bridge_warning(CAMPAIGN_MISMATCH)
+                return
             try:
                 baseline_ledger = load_ledger(
                     self.dispatch_path(self.connected_identity), self.connected_identity,
@@ -390,7 +406,9 @@ class WordFactoriContext(CommonContext):
             )
 
     def current_identity(self) -> str:
-        return state_identity(self.room_seed_name, self.team, self.slot, self.auth)
+        return state_identity(
+            self.room_seed_name, self.team, self.slot, self.auth, self.slot_data,
+        )
 
     def _snapshot_dispatch_item(self, item) -> _DispatchItemSnapshot:
         return _DispatchItemSnapshot(
@@ -906,10 +924,17 @@ class WordFactoriContext(CommonContext):
         if not self.compatible_campaign():
             self._bridge_warning(CAMPAIGN_MISMATCH)
             return
+        locations = self.active_locations()
+        try:
+            observed_codes = location_codes_for_native_slots(indices, locations)
+        except ValueError as error:
+            self._bridge_warning(
+                "Campaign/save mismatch: "
+                f"{error}. Use the Word Factori save created for this room and campaign."
+            )
+            return
         if self.ensure_game_slot_binding() is None:
             return
-        locations = self.active_locations()
-        observed_codes = location_codes_for_native_slots(indices, locations)
         server_codes = frozenset(self.checked_locations) & {
             location.code for location in locations
         }

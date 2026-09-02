@@ -201,7 +201,7 @@ net_utils.ClientStatus = types.SimpleNamespace(CLIENT_GOAL=30)
 sys.modules.setdefault("NetUtils", net_utils)
 
 from word_factori.client import WordFactoriCommandProcessor, WordFactoriContext
-from word_factori.bridge import BridgeState
+from word_factori.bridge import BridgeState, load_state
 from word_factori.client_messages import ClientMessageKind
 from word_factori.campaign import campaign_digest, campaign_for_level_set
 from word_factori.data import (
@@ -1032,7 +1032,7 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             for published in self.overlay.published
         ))
 
-    def test_incompatible_room_switch_immediately_replaces_old_cosmetic_history(self):
+    def test_invalid_room_contract_fails_closed_and_replaces_old_cosmetic_history(self):
         old_event = self.ctx.dispatch_received_event(
             0, make_network_item(item=7001, location=9001, player=2),
         )
@@ -1049,7 +1049,8 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
         self.ctx.on_package("Connected", {"slot_data": incompatible})
 
-        self.assertEqual(self.ctx.current_identity(), self.ctx.dispatch_ledger.identity)
+        self.assertIsNone(self.ctx.connected_identity)
+        self.assertEqual("disconnected", self.ctx.dispatch_ledger.identity)
         self.assertEqual((), self.ctx.dispatch_ledger.events)
         self.assertEqual(frozenset(), self.ctx.overlay_state.accepted_notification_keys)
         self.assertEqual("connected", self.ctx.overlay_state.connection_status)
@@ -1126,8 +1127,8 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
             await old
         self.assertTrue(entered.done())
 
-        incompatible = dict(self.ctx.slot_data, manifest_digest="0" * 64)
-        self.ctx.on_package("Connected", {"slot_data": incompatible})
+        self.ctx.items_received = [first, second]
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
         controlled.proceed.set()
         await old
 
@@ -1137,16 +1138,15 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         ).events))
 
     async def test_stale_child_generation_cannot_open_or_mark_room_read(self):
-        event = self.ctx.dispatch_received_event(
-            0, make_network_item(item=7001, location=9001, player=2),
-        )
+        item = make_network_item(item=7001, location=9001, player=2)
+        event = self.ctx.dispatch_received_event(0, item)
         stored = DispatchLedger(
             self.ctx.connected_identity, (event,), frozenset((event.key,)), True, 0,
         )
         save_ledger(self.ctx.dispatch_path(), stored)
         stale_generation = self.ctx._presentation_generation
-        incompatible = dict(self.ctx.slot_data, manifest_digest="0" * 64)
-        self.ctx.on_package("Connected", {"slot_data": incompatible})
+        self.ctx.items_received = [item]
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
         self.overlay.actions = [OverlayAction("open", generation=stale_generation)]
 
         await self.ctx.process_overlay_actions_once()
@@ -1158,15 +1158,14 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         room_a_generation = self.ctx._presentation_generation
         self.ctx.room_seed_name = "Seed-B"
         room_b_identity = self.ctx.current_identity()
-        room_b_event = self.ctx.dispatch_received_event(
-            0, make_network_item(item=7001, location=9001, player=2), room_b_identity,
-        )
+        room_b_item = make_network_item(item=7001, location=9001, player=2)
+        room_b_event = self.ctx.dispatch_received_event(0, room_b_item, room_b_identity)
         room_b = DispatchLedger(
             room_b_identity, (room_b_event,), frozenset((room_b_event.key,)), True, 0,
         )
         save_ledger(self.ctx.dispatch_path(room_b_identity), room_b)
-        incompatible = dict(self.ctx.slot_data, manifest_digest="0" * 64)
-        self.ctx.on_package("Connected", {"slot_data": incompatible})
+        self.ctx.items_received = [room_b_item]
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
         self.overlay.actions = [OverlayAction("open", generation=room_a_generation)]
 
         await self.ctx.process_overlay_actions_once()
@@ -1176,10 +1175,11 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frozenset((room_b_event.key,)), self.ctx.dispatch_ledger.unread_keys)
 
     async def test_local_open_waiting_on_lock_cannot_mark_new_room_read(self):
-        room_b_identity = self.ctx.current_identity().replace("Seed-A", "Seed-B")
-        room_b_event = self.ctx.dispatch_received_event(
-            0, make_network_item(item=7001, location=9001, player=2), room_b_identity,
-        )
+        self.ctx.room_seed_name = "Seed-B"
+        room_b_identity = self.ctx.current_identity()
+        self.ctx.room_seed_name = "Seed-A"
+        room_b_item = make_network_item(item=7001, location=9001, player=2)
+        room_b_event = self.ctx.dispatch_received_event(0, room_b_item, room_b_identity)
         room_b = DispatchLedger(
             room_b_identity, (room_b_event,), frozenset((room_b_event.key,)), True, 0,
         )
@@ -1194,8 +1194,8 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(entered.done())
 
         self.ctx.room_seed_name = "Seed-B"
-        incompatible = dict(self.ctx.slot_data, manifest_digest="0" * 64)
-        self.ctx.on_package("Connected", {"slot_data": incompatible})
+        self.ctx.items_received = [room_b_item]
+        self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
         controlled.proceed.set()
         await opening
 
@@ -1734,6 +1734,40 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         self.assertFalse(any(message["cmd"] == "LocationChecks" for message in self.ctx.sent_messages))
 
+    async def test_room_contract_scopes_sidecar_binding_pending_checks_and_goal_resend(self):
+        self.ctx.slot_data = {**self.ctx.slot_data, "goal": 0, "campaign_count": 1}
+        self.ctx.connected_identity = self.ctx.current_identity()
+        location_id = LOCATIONS[0].code
+        self.ctx.missing_locations = {location_id}
+
+        await self.ctx.report_indices({0})
+
+        first_identity = self.ctx.connected_identity
+        first_path = self.ctx.state_path()
+        first_state = self.ctx.bridge_state
+        self.assertEqual("game-slot-A", first_state.game_slot_id)
+        self.assertEqual(frozenset({location_id}), first_state.pending_checks)
+        self.assertEqual(first_identity, self.ctx.goal_identity)
+
+        self.ctx.slot_data = {**self.ctx.slot_data, "goal": 1}
+        second_identity = self.ctx.current_identity()
+        self.ctx.connected_identity = second_identity
+        second_path = self.ctx.state_path()
+        second_state = load_state(second_path)
+
+        self.assertNotEqual(first_identity, second_identity)
+        self.assertNotEqual(first_path, second_path)
+        self.assertFalse(second_path.exists())
+        self.assertIsNone(second_state.game_slot_id)
+        self.assertEqual(frozenset(), second_state.pending_checks)
+        self.assertNotEqual(self.ctx.goal_identity, second_identity)
+
+        self.ctx.slot_data = {**self.ctx.slot_data, "goal": 0}
+        self.ctx.connected_identity = self.ctx.current_identity()
+        self.assertEqual(first_identity, self.ctx.connected_identity)
+        self.assertEqual(first_path, self.ctx.state_path())
+        self.assertEqual(first_state, load_state(self.ctx.state_path()))
+
     async def test_goal_resends_only_for_same_seed_team_and_slot(self):
         final_id = LOCATIONS[29].code
         self.ctx.missing_locations = {final_id}
@@ -1769,6 +1803,38 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(message["cmd"] == "LocationChecks" for message in self.ctx.sent_messages))
         self.assertFalse(self.ctx.levels_path.exists())
         self.assertIn("Campaign mismatch", self.ctx.last_bridge_error)
+
+    async def test_mixed_valid_and_invalid_save_indices_submit_nothing_and_preserve_pending_state(self):
+        retained_id = LOCATIONS[5].code
+        self.ctx.bridge_state = BridgeState(
+            pending_checks=frozenset({retained_id}), game_slot_id="game-slot-A",
+        )
+        self.ctx.slot_data = {**self.ctx.slot_data, "goal": 0, "campaign_count": 1}
+        self.ctx.connected_identity = self.ctx.current_identity()
+        self.ctx.missing_locations = {LOCATIONS[0].code, retained_id}
+        before = self.ctx.bridge_state
+
+        await self.ctx.report_indices({0, len(LOCATIONS)})
+
+        self.assertEqual(before, self.ctx.bridge_state)
+        self.assertFalse(any(
+            message["cmd"] in {"LocationChecks", "StatusUpdate"}
+            for message in self.ctx.sent_messages
+        ))
+        self.assertIn("Campaign/save mismatch", self.ctx.last_bridge_error)
+        self.assertIn(str(len(LOCATIONS)), self.ctx.last_bridge_error)
+
+    async def test_mixed_valid_and_negative_save_indices_do_not_escape_client_loop(self):
+        self.ctx.slot_data = {**self.ctx.slot_data, "goal": 0, "campaign_count": 1}
+        self.ctx.connected_identity = self.ctx.current_identity()
+        before = self.ctx.bridge_state
+
+        await self.ctx.report_indices({0, -1})
+
+        self.assertEqual(before, self.ctx.bridge_state)
+        self.assertEqual([], self.ctx.sent_messages)
+        self.assertIn("Campaign/save mismatch", self.ctx.status_text())
+        self.assertIn("-1", self.ctx.status_text())
 
     async def test_discovery_check_is_queued_once_and_acknowledged(self):
         location_id = LOCATIONS[30].code

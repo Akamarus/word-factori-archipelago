@@ -24,6 +24,7 @@ if str(ROOT) not in sys.path:
 
 from word_factori.campaign import campaign_for_level_set
 from word_factori.capabilities import requirements_for_record
+from word_factori.data import locations_for_level_set
 from word_factori.layout import PAGE_SIZE, PAGE_UNLOCK_COUNT
 
 MAX_MULTIDATA_MEMBER_BYTES = 16 * 1024 * 1024
@@ -63,6 +64,7 @@ class GenerationIdentity:
     campaign_count: int | None = None
     level_count: int | None = None
     layout_algorithm: str = ""
+    location_projection: tuple[tuple[str, str, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -347,6 +349,10 @@ def extract_generation_identity(archive_path: Path, *, player: int) -> Generatio
     payload = _decode_multidata(encoded)
     slot_data = payload["slot_data"][player]
     locations = slot_data["locations"]
+    location_projection = tuple(
+        (location["stable_key"], location.get("name", ""), location["id"])
+        for location in locations
+    )
     return GenerationIdentity(
         level_order=_required_string_sequence(slot_data, "level_order"),
         layout_digest=_required_slot_field(slot_data, "layout_digest", str),
@@ -361,6 +367,7 @@ def extract_generation_identity(archive_path: Path, *, player: int) -> Generatio
         campaign_count=_required_slot_field(slot_data, "campaign_count", int),
         level_count=_required_slot_field(slot_data, "level_count", int),
         layout_algorithm=_required_slot_field(slot_data, "layout_algorithm", str),
+        location_projection=location_projection,
     )
 
 
@@ -389,8 +396,8 @@ def _generated_identity(identity: GenerationIdentity) -> dict:
     }
 
 
-def validate_generation_identity(
-    identity: GenerationIdentity, case: MatrixCase
+def _validate_requested_generation_identity(
+    identity: GenerationIdentity, case: MatrixCase,
 ) -> None:
     expected = _requested_identity(case)
     generated = _generated_identity(identity)
@@ -401,6 +408,36 @@ def validate_generation_identity(
                 f"generated {field} {actual!r}, expected {expected_value!r} "
                 f"for {case.key}"
             )
+
+
+def validate_canonical_location_projection(
+    identity: GenerationIdentity, case: MatrixCase,
+) -> None:
+    canonical = tuple(
+        (location.stable_key, location.name, location.code)
+        for location in locations_for_level_set(case.level_set)
+    )
+    try:
+        generated_projection = tuple(identity.location_projection)
+        matches = (
+            len(generated_projection) == len(canonical)
+            and sorted(generated_projection, key=lambda row: row[0])
+            == sorted(canonical, key=lambda row: row[0])
+        )
+    except (IndexError, TypeError, ValueError):
+        matches = False
+    if not matches:
+        raise AssertionError(
+            f"generated canonical location projection does not exactly match "
+            f"{case.level_set} ({len(generated_projection)} rows, expected {len(canonical)})"
+        )
+
+
+def validate_generation_identity(
+    identity: GenerationIdentity, case: MatrixCase
+) -> None:
+    _validate_requested_generation_identity(identity, case)
+    validate_canonical_location_projection(identity, case)
 
 
 def run_generation(
@@ -530,6 +567,7 @@ def execute_matrix(
                         for field, value in requested_identity.items()
                     },
                     "identity_validation": "Not run",
+                    "canonical_identity_validation": "Not run",
                 }
                 try:
                     result = run_generation(generator_command, players, seed, output)
@@ -542,7 +580,14 @@ def execute_matrix(
                         }
                     )
                     try:
-                        validate_generation_identity(result.identity, case)
+                        validate_canonical_location_projection(result.identity, case)
+                    except Exception:
+                        row["identity_validation"] = "Fail"
+                        row["canonical_identity_validation"] = "Fail"
+                        raise
+                    row["canonical_identity_validation"] = "Pass"
+                    try:
+                        _validate_requested_generation_identity(result.identity, case)
                     except Exception:
                         row["identity_validation"] = "Fail"
                         raise

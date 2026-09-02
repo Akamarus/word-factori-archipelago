@@ -264,9 +264,9 @@ class BridgeTests(unittest.TestCase):
 
 
 class ClientCoreTests(unittest.TestCase):
-    def shuffled_slot_data(self):
+    def shuffled_slot_data(self, seed=9173):
         manifest = campaign_for_level_set("discovery_labs")
-        layout = shuffled_layout(manifest, "discovery_labs", random.Random(9173))
+        layout = shuffled_layout(manifest, "discovery_labs", random.Random(seed))
         return {
             **layout_slot_data(layout),
             "level_set": "discovery_labs",
@@ -281,14 +281,21 @@ class ClientCoreTests(unittest.TestCase):
         expected = frozenset({resolved.locations[0].code, resolved.locations[7].code})
 
         self.assertFalse(resolved.legacy)
-        self.assertEqual(
-            expected,
-            location_codes_for_native_slots({0, 7, 400}, resolved.locations),
-        )
+        self.assertEqual(expected, location_codes_for_native_slots({0, 7}, resolved.locations))
         self.assertEqual(
             frozenset({0, 7}),
             native_slots_for_location_codes(expected, resolved.locations),
         )
+
+    def test_native_slot_translation_rejects_the_whole_observation_on_any_invalid_index(self):
+        resolved = resolve_room_campaign(self.shuffled_slot_data())
+
+        for native_slots, invalid in (({0, 7, 400}, 400), ({0, -1}, -1)):
+            with self.subTest(native_slots=native_slots):
+                with self.assertRaisesRegex(
+                    ValueError, rf"native level index.*{invalid}.*outside",
+                ):
+                    location_codes_for_native_slots(native_slots, resolved.locations)
 
     def test_translation_rejects_duplicate_native_slots_and_location_codes(self):
         resolved = resolve_room_campaign(self.shuffled_slot_data())
@@ -464,11 +471,64 @@ class ClientCoreTests(unittest.TestCase):
             parse_connection_url("archipelago://Factory%20Player:secret@archipelago.gg:38281"),
         )
 
-    def test_bridge_identity_is_seed_team_and_slot_scoped(self):
-        first = state_identity("Seed-A", 0, 1, "Factory Player")
-        self.assertNotEqual(first, state_identity("Seed-B", 0, 1, "Factory Player"))
-        self.assertNotEqual(first, state_identity("Seed-A", 1, 1, "Factory Player"))
-        self.assertNotEqual(first, state_identity("Seed-A", 0, 2, "Factory Player"))
+    def test_bridge_identity_is_room_contract_scoped_and_canonical(self):
+        first_slot_data = {
+            **self.shuffled_slot_data(9173),
+            "goal": 0,
+            "campaign_count": 25,
+        }
+        second_layout = {
+            **self.shuffled_slot_data(9174),
+            "goal": 0,
+            "campaign_count": 25,
+        }
+        second_goal = {**first_slot_data, "goal": 1}
+        first = state_identity("Seed-A", 0, 1, "Factory Player", first_slot_data)
+
+        self.assertNotEqual(
+            first,
+            state_identity("Seed-A", 0, 1, "Factory Player", second_layout),
+        )
+        self.assertNotEqual(
+            first,
+            state_identity("Seed-A", 0, 1, "Factory Player", second_goal),
+        )
+        self.assertEqual(
+            first,
+            state_identity(
+                "Seed-A", 0, 1, "Factory Player",
+                dict(reversed(tuple(first_slot_data.items()))),
+            ),
+        )
+        self.assertNotEqual(
+            first,
+            state_identity("Seed-B", 0, 1, "Factory Player", first_slot_data),
+        )
+
+    def test_bridge_identity_fails_closed_without_authoritative_room_data(self):
+        with self.assertRaisesRegex(ValueError, "authoritative room slot data"):
+            state_identity("Seed-A", 0, 1, "Factory Player", {})
+        with self.assertRaisesRegex(ValueError, "stable room identity"):
+            state_identity(None, 0, 1, "Factory Player", self.shuffled_slot_data())
+
+    def test_legacy_bridge_identity_uses_canonical_manifest_and_available_options(self):
+        manifest = campaign_for_level_set("core_campaign")
+        slot_data = {
+            "level_set": "core_campaign",
+            "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version,
+            "manifest_digest": campaign_digest(manifest),
+            "level_count": len(manifest.levels),
+            "goal": 0,
+            "campaign_count": 25,
+        }
+        first = state_identity("Legacy", 0, 1, "Player", slot_data)
+
+        self.assertEqual(first, state_identity("Legacy", 0, 1, "Player", dict(slot_data)))
+        self.assertNotEqual(
+            first,
+            state_identity("Legacy", 0, 1, "Player", {**slot_data, "goal": 1}),
+        )
 
 
 if __name__ == "__main__":

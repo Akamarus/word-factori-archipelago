@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
+import json
 import ntpath
 from typing import Iterable, Mapping
 import urllib.parse
@@ -154,9 +156,18 @@ def location_codes_for_native_slots(
     native_slots: Iterable[int], locations: tuple[LocationData, ...],
 ) -> frozenset[int]:
     slots_to_codes, _ = _location_maps(locations)
-    return frozenset(
-        slots_to_codes[slot] for slot in native_slots if slot in slots_to_codes
+    observed = tuple(native_slots)
+    invalid = tuple(
+        slot for slot in observed
+        if type(slot) is not int or slot not in slots_to_codes
     )
+    if invalid:
+        rendered = ", ".join(sorted((repr(slot) for slot in invalid)))
+        raise ValueError(
+            f"native level index {rendered} is outside the authoritative "
+            f"campaign layout (expected 0 through {len(locations) - 1})"
+        )
+    return frozenset(slots_to_codes[slot] for slot in observed)
 
 
 def native_slots_for_location_codes(
@@ -222,5 +233,74 @@ def parse_connection_url(value: str) -> tuple[str, str | None, str | None]:
     return address, name, password
 
 
-def state_identity(seed_name: str | None, team: int | None, slot: int | None, auth: str | None) -> str:
-    return f"{seed_name or 'unknown-seed'}-team-{team if team is not None else 'unknown'}-slot-{slot if slot is not None else 'unknown'}-{auth or 'unnamed'}"
+def state_identity(
+    seed_name: str | None,
+    team: int | None,
+    slot: int | None,
+    auth: str | None,
+    slot_data: Mapping[str, object],
+) -> str:
+    """Return a stable identity for one validated room and immutable contract."""
+    if (
+        not isinstance(seed_name, str) or not seed_name
+        or type(team) is not int
+        or type(slot) is not int
+        or not isinstance(auth, str) or not auth
+    ):
+        raise ValueError("stable room identity is unavailable before connection completes")
+    if not isinstance(slot_data, Mapping) or not slot_data:
+        raise ValueError("authoritative room slot data is unavailable")
+
+    try:
+        campaign = resolve_room_campaign(slot_data)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"authoritative room slot data is invalid: {error}") from error
+
+    def optional_int(field: str) -> int | None:
+        value = slot_data.get(field)
+        if value is None and field not in slot_data:
+            return None
+        if type(value) is not int:
+            raise ValueError(f"authoritative room slot data {field} is invalid")
+        return value
+
+    contract: dict[str, object] = {
+        "campaign_id": campaign.manifest.campaign_id,
+        "manifest_version": campaign.manifest.version,
+        "level_set": campaign.layout.level_set if campaign.layout else slot_data.get(
+            "level_set", DEFAULT_LEVEL_SET,
+        ),
+        "goal": optional_int("goal"),
+        "campaign_count": optional_int("campaign_count"),
+    }
+    if campaign.layout is None:
+        contract.update(
+            contract_format="legacy-canonical",
+            manifest_digest=campaign_digest(campaign.manifest),
+        )
+    else:
+        if contract["goal"] is None or contract["campaign_count"] is None:
+            raise ValueError(
+                "authoritative room slot data requires goal and campaign_count"
+            )
+        contract.update(
+            contract_format="layout-v1",
+            manifest_digest=slot_data.get("manifest_digest"),
+            layout_digest=campaign.layout.digest,
+            base_manifest_digest=campaign.layout.base_manifest_digest,
+            progression_model=campaign.layout.progression_model,
+            layout_algorithm=campaign.layout.algorithm,
+        )
+
+    room = {
+        "seed_name": seed_name,
+        "team": team,
+        "slot": slot,
+        "auth": auth,
+        "contract": contract,
+    }
+    encoded = json.dumps(
+        room, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode("utf-8")
+    fingerprint = hashlib.sha256(encoded).hexdigest()
+    return f"{seed_name}-team-{team}-slot-{slot}-{auth}-contract-{fingerprint}"

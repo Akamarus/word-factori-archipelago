@@ -25,9 +25,11 @@ from tools.verify_generation_matrix import (
     replay_progression_choices,
     render_player_yaml,
     run_generation,
+    validate_generation_identity,
     validate_progression_choices,
     verify_deterministic_identity,
 )
+from word_factori.data import locations_for_level_set
 
 
 SPOILER = """Archipelago Version 0.6.7  -  Seed: 13000
@@ -224,6 +226,50 @@ class IdentityExtractionTests(unittest.TestCase):
         self.assertEqual(getattr(identity, "level_count", None), 2)
         self.assertEqual(getattr(identity, "layout_algorithm", None), "balanced_pages_v1")
         self.assertEqual(identity.location_names, ("OWL — Second", "CAT — First"))
+        self.assertEqual(
+            identity.location_projection,
+            (
+                ("owl-second", "OWL — Second", 975301002),
+                ("cat-first", "CAT — First", 975301001),
+            ),
+        )
+
+    def test_canonical_location_projection_rejects_every_row_mutation_and_cardinality_change(self):
+        case = MATRIX_CASES[0]
+        canonical_locations = locations_for_level_set(case.level_set)
+        canonical = tuple(
+            (location.stable_key, location.name, location.code)
+            for location in canonical_locations
+        )
+        base = dict(
+            level_order=tuple(location.stable_key for location in canonical_locations),
+            layout_digest="a" * 64,
+            stable_keys=frozenset(location.stable_key for location in canonical_locations),
+            ap_ids=frozenset(location.code for location in canonical_locations),
+            implementation_version="1.3.0",
+            level_set=case.level_set,
+            location_names=tuple(location.name for location in canonical_locations),
+            goal=0,
+            campaign_count=25,
+            level_count=len(canonical_locations),
+            layout_algorithm="balanced_pages_v1",
+        )
+        mutations = {
+            "duplicate and omission": canonical[:-1] + (canonical[0],),
+            "wrong stable key": (("wrong-key", canonical[0][1], canonical[0][2]),) + canonical[1:],
+            "wrong name": ((canonical[0][0], "Wrong Name", canonical[0][2]),) + canonical[1:],
+            "wrong ID": ((canonical[0][0], canonical[0][1], -1),) + canonical[1:],
+            "omission": canonical[:-1],
+            "extra row": canonical + (canonical[0],),
+        }
+
+        validate_generation_identity(GenerationIdentity(**base, location_projection=canonical), case)
+        for label, projection in mutations.items():
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(AssertionError, "canonical location projection"):
+                    validate_generation_identity(
+                        GenerationIdentity(**base, location_projection=projection), case,
+                    )
 
     def test_rejects_multidata_that_requests_arbitrary_python_globals(self):
         # Replacing the restricted decoder with pickle.loads makes this unsafe input load.
@@ -402,8 +448,10 @@ class GeneratorInvocationTests(unittest.TestCase):
     def _write_varying_generator(self, root: Path) -> Path:
         script = root / "varying_generator.py"
         script.write_text(r'''
-import argparse, pickle, zipfile, zlib
+import argparse, pickle, sys, zipfile, zlib
 from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+from word_factori.data import locations_for_level_set
 p = argparse.ArgumentParser()
 p.add_argument("--player_files_path", required=True)
 p.add_argument("--seed", required=True, type=int)
@@ -414,17 +462,17 @@ a = p.parse_args()
 yaml = next(Path(a.player_files_path).glob("*.yaml")).read_text(encoding="utf-8")
 level_set = "discovery_labs" if "custom_level_set: discovery_labs" in yaml else "core_campaign"
 goal = 1 if "goal: final_factory" in yaml else 0
-level_count = 40 if level_set == "discovery_labs" else 30
-order = ["cat", "owl"] + [f"level-{index}" for index in range(2, level_count)]
+canonical = list(locations_for_level_set(level_set))
+level_count = len(canonical)
+order = [location.stable_key for location in canonical]
 if a.seed == 13001:
-    order[:2] = ["owl", "cat"]
-names = {key: ("CAT — First" if key == "cat" else "OWL — Second" if key == "owl" else key) for key in order}
-ids = {key: index + 1 for index, key in enumerate(sorted(order))}
+    order[:2] = list(reversed(order[:2]))
+by_key = {location.stable_key: location for location in canonical}
 slot = {"level_order": order, "layout_digest": ("a" if a.seed != 13001 else "b") * 64,
         "implementation_version": "1.3.0",
         "level_set": level_set, "goal": goal, "campaign_count": 25,
         "level_count": level_count, "layout_algorithm": "balanced_pages_v1",
-        "locations": [{"stable_key": key, "name": names[key], "id": ids[key]} for key in order]}
+        "locations": [{"stable_key": key, "name": by_key[key].name, "id": by_key[key].code} for key in order]}
 encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
 spoiler = """Archipelago Version 0.6.7  -  Seed: 13000
 
@@ -519,18 +567,23 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
 
     def test_matrix_rejects_every_requested_slot_option_mismatch(self):
         case = MATRIX_CASES[3]
+        canonical_locations = locations_for_level_set(case.level_set)
         valid = {
-            "level_order": tuple(f"level-{index}" for index in range(40)),
+            "level_order": tuple(location.stable_key for location in canonical_locations),
             "layout_digest": "a" * 64,
-            "stable_keys": frozenset(f"level-{index}" for index in range(40)),
-            "ap_ids": frozenset(range(40)),
+            "stable_keys": frozenset(location.stable_key for location in canonical_locations),
+            "ap_ids": frozenset(location.code for location in canonical_locations),
             "implementation_version": "1.3.0",
             "level_set": "discovery_labs",
-            "location_names": tuple(f"Level {index}" for index in range(40)),
+            "location_names": tuple(location.name for location in canonical_locations),
             "goal": 1,
             "campaign_count": 25,
             "level_count": 40,
             "layout_algorithm": "balanced_pages_v1",
+            "location_projection": tuple(
+                (location.stable_key, location.name, location.code)
+                for location in canonical_locations
+            ),
         }
         mismatches = {
             "level_set": "core_campaign",
@@ -539,7 +592,7 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
             "level_count": 30,
             "layout_algorithm": "fixed_pages_v1",
             "implementation_version": "",
-            "level_order": tuple(f"level-{index}" for index in range(39)),
+            "level_order": tuple(location.stable_key for location in canonical_locations[:-1]),
         }
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)
@@ -567,6 +620,7 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
 
                     self.assertEqual(rows[0]["status"], "Fail")
                     self.assertEqual(rows[0].get("identity_validation"), "Fail")
+                    self.assertEqual(rows[0].get("canonical_identity_validation"), "Pass")
                     self.assertEqual(rows[0].get("requested_level_set"), "discovery_labs")
                     self.assertEqual(rows[0].get("requested_goal"), 1)
                     self.assertEqual(rows[0].get("generated_level_set"), identity.level_set)
@@ -581,6 +635,7 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
         fake_generator = r'''
 import argparse, pickle, zipfile, zlib
 from pathlib import Path
+from word_factori.data import locations_for_level_set
 p = argparse.ArgumentParser()
 p.add_argument("--player_files_path", required=True)
 p.add_argument("--seed", required=True, type=int)
@@ -694,8 +749,10 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
     def test_matrix_records_each_case_and_seed_then_removes_owned_workspace(self):
         # A leaked matrix workspace or skipped successful row breaks this contract.
         fake_generator = r'''
-import argparse, pickle, zipfile, zlib
+import argparse, pickle, sys, zipfile, zlib
 from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+from word_factori.data import locations_for_level_set
 p = argparse.ArgumentParser()
 p.add_argument("--player_files_path", required=True)
 p.add_argument("--seed", required=True, type=int)
@@ -705,13 +762,14 @@ p.add_argument("--skip_prog_balancing", action="store_true")
 a = p.parse_args()
 yaml = next(Path(a.player_files_path).glob("*.yaml")).read_text(encoding="utf-8")
 goal = 1 if "goal: final_factory" in yaml else 0
-order = [f"core-{index}" for index in range(30)]
+canonical = list(locations_for_level_set("core_campaign"))
+order = [location.stable_key for location in canonical]
 slot = {"level_order": order, "layout_digest": ("a" if a.seed == 13000 else "b") * 64,
         "implementation_version": "1.3.0", "level_set": "core_campaign",
         "goal": goal, "campaign_count": 25, "level_count": 30,
         "layout_algorithm": "balanced_pages_v1",
-        "locations": [{"stable_key": key, "name": key, "id": index}
-                      for index, key in enumerate(order)]}
+        "locations": [{"stable_key": location.stable_key, "name": location.name,
+                       "id": location.code} for location in canonical]}
 encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
 spoiler = """Archipelago Version 0.6.7  -  Seed: 13000
 
@@ -770,6 +828,7 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
                         "generated_layout_algorithm",
                         "generated_implementation_version",
                         "identity_validation",
+                        "canonical_identity_validation",
                     )
                 },
                 {
@@ -788,6 +847,7 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
                     "generated_layout_algorithm": "balanced_pages_v1",
                     "generated_implementation_version": "1.3.0",
                     "identity_validation": "Pass",
+                    "canonical_identity_validation": "Pass",
                 },
             )
             self.assertFalse(any(parent.glob("word-factori-ap067-matrix-*")))
@@ -842,7 +902,10 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
             self.assertTrue((live_root / "players" / "player.yaml").is_file())
             self.assertEqual(
                 live["page_one_targets"],
-                ["CAT — First", "OWL — Second", "level-2", "level-3", "level-4", "level-5"],
+                [
+                    "Complete I", "Complete C", "Complete V",
+                    "Complete L", "Complete O", "Complete A",
+                ],
             )
 
     def test_script_entrypoint_defines_identity_comparison_before_running_main(self):
