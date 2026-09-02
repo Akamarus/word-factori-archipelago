@@ -2,18 +2,18 @@
 
 [![Windows verification](https://github.com/Akamarus/word-factori-archipelago/actions/workflows/verify.yml/badge.svg)](https://github.com/Akamarus/word-factori-archipelago/actions/workflows/verify.yml)
 
-An experimental public beta for playing **Word Factori** with [Archipelago](https://archipelago.gg/). It assembles a curated 30- or 40-level custom campaign, turns completed levels into Archipelago checks, and unlocks factory machinery as items arrive from the multiworld.
+An experimental public beta for playing **Word Factori** with [Archipelago](https://archipelago.gg/). It assembles a curated 30- or 40-level custom campaign into seed-specific six-level pages, turns completed levels into Archipelago checks, and unlocks factory machinery as items arrive from the multiworld.
 
 ![Word Factori with the integrated Archipelago Chat panel open](docs/images/word-factori-archipelago-chat.png)
 
-Version 1.2.2 is prepared as a professional experimental public beta. It prevents sticker deliveries and ordinary reconnects from requesting unnecessary Word Factori reloads while preserving reload guidance for genuine progression changes. Automated verification covers APWorld and package building, deterministic logic, installation, reconciliation, reconnects, and victory.
+Version 1.3.0 adds deterministic shuffled pages and native four-of-six page progression for newly generated rooms. Automated verification covers both campaign sizes, layout identity, stable check mapping, legacy-room compatibility, installation, reconciliation, reconnects, and victory. Live acceptance of the new page behavior is still pending.
 
 This project uses Word Factori's supported JSON mod format. It does **not** patch `data.win`, redistribute encoded game recipes, or write to Word Factori save files.
 
 ## Engineering highlights
 
 - Python Archipelago APWorld and client integration compatible with Archipelago 0.6.7.
-- Supported Word Factori JSON mod integration with stable 30- and 40-location campaign manifests.
+- Supported Word Factori JSON mod integration with stable 30- and 40-location Archipelago identities even when their native game slots move.
 - Deterministic recipe-graph and progression modeling for automated reachability rules.
 - Idempotent item delivery, completed-check, reconnect, and victory reconciliation.
 - Defensive save-slot binding and digest-verified campaign identity without writing game saves.
@@ -39,10 +39,10 @@ The APWorld defines seed logic and stable IDs. The client reconciles authoritati
 
 The integration separates **what you build** from **what Archipelago gives you**:
 
-1. The seed selects a bundled, curated sequence of 30 or 40 word factories.
+1. The seed selects a bundled, curated set of 30 or 40 word factories and normally shuffles them into six-level pages.
 2. Completing a level reports that level as an Archipelago location check.
 3. Archipelago sends the item placed at that location to its recipient.
-4. Received Word Factori items unlock machines or later campaign tiers.
+4. Received Word Factori items unlock machines or later campaign tiers; complete any four levels on a full page to open the next page.
 5. The client rewrites only this mod's `levels.json`, using zero machine/input limits for things you have not received.
 
 Letters are always manufactured inside Word Factori. Archipelago never sends individual letters, puzzle layouts, or unverified save values.
@@ -55,9 +55,11 @@ Letters are always manufactured inside Word Factori. Archipelago never sends ind
 
 The currently tested Word Factori depot is Steam build **12616577**.
 
+Generate new shuffled-page rooms with the 1.3.0 APWorld and client. The 1.3.0 client also recognizes existing 1.2.x room data and keeps those rooms in their original canonical level order; an existing room retains the server logic generated for it rather than being upgraded in place.
+
 ## Simple installation
 
-1. Download `word-factori-archipelago-1.2.2.zip` from the matching GitHub release.
+1. Download `word-factori-archipelago-1.3.0.zip` from the matching GitHub release.
 2. Extract the ZIP to a normal folder.
 3. Close Word Factori and Archipelago.
 4. Double-click **Install Word Factori Archipelago.cmd**.
@@ -86,11 +88,11 @@ The installer replaces only these integration-owned paths:
 1. Copy one of the example player files into your Archipelago `Players` folder:
    - `examples/WordFactori.yaml` for the normal Campaign Count goal.
    - `examples/WordFactoriTarget.yaml` for the Final Factory goal.
-2. Change the player `name` and any Word Factori options you want. Keep `custom_level_set: discovery_labs` for all 40 levels, or choose `core_campaign` for the focused 30-level set.
+2. Change the player `name` and any Word Factori options you want. Keep `custom_level_set: discovery_labs` for all 40 levels, or choose `core_campaign` for the focused 30-level set. The examples select `campaign_layout: shuffled_pages`; choose `fixed_pages` to preserve the canonical bundled order while still using four-of-six page unlocking.
 3. Generate and host the room normally with Archipelago.
 4. Launch **Word Factori Client** from the Archipelago Launcher. Connect from the in-game AP panel, through the regular client, or with an `archipelago://` launch link.
 5. Start Word Factori, select the Archipelago mod, and enter a new empty mod save slot.
-6. Complete available levels. When an unlock arrives, return to save select and reload the mod slot, or restart Word Factori.
+6. Complete any available levels. Four completions on a full page open the next page, so a blocked or inconvenient level can be safely deferred and revisited later. When an item unlock arrives, return to save select and reload the mod slot, or restart Word Factori.
 
 Connect the Archipelago client **before** completing checks. An existing progressed slot is deliberately rejected until it has already been bound to that room.
 
@@ -105,9 +107,9 @@ The selected custom level set determines whether the seed has 30 or 40 stable lo
 | Final factory | 1 | Complete PITCHFORK |
 | Discovery Labs | 10 | Produce C, V, M, W, U, J, X, E, H, or R using the lab's declared machine route |
 
-The first 30 locations form the Core Campaign. `custom_level_set: discovery_labs` appends ten post-campaign Discovery Labs; `core_campaign` ends at PITCHFORK. The client assembles the selected bundled manifest when it connects and asks the player to reload the mod slot. Arbitrary Workshop levels are never silently imported into an AP seed.
+The 30 canonical Core Campaign identities and ten Discovery Lab identities form the 40-level set. With `shuffled_pages`, Labs and campaign factories may move to different eligible pages; with `fixed_pages`, their bundled order is retained. The client assembles the room's selected bundled manifest and exact layout when it connects. Arbitrary Workshop levels are never silently imported into an AP seed.
 
-Location indices never shift when something is locked. A locked level stays in place with its input or unavailable machines set to zero, which keeps save indices and Archipelago location IDs stable.
+The game save records the level's native slot, while Archipelago continues to identify the check by its canonical stable key and location ID. The client translates between those identities, so a level can move in the displayed seed layout without changing the AP check it reports. Locked inputs and unavailable machines are represented through supported JSON limits rather than by renumbering the room's checks.
 
 ## Items and unlocks
 
@@ -128,7 +130,7 @@ Received packets are keyed by Archipelago receive-sequence number. Replayed pack
 
 Two goal modes are available:
 
-- **Campaign Count**: complete a configurable number of the first 30 campaign levels. The default is 25; the supported range is 20–30.
+- **Campaign Count**: complete a configurable number of the 30 canonical non-Discovery campaign locations, wherever they appear in the layout. The default is 25; the supported range is 20–30.
 - **Final Factory**: complete `PITCHFORK — Final Factory`.
 
 Discovery Labs do not count toward Campaign Count.
@@ -141,9 +143,11 @@ Archipelago reachability combines three rules:
 
 1. The player must own at least one valid machine set for the target.
 2. The required Progressive World Access tier must be available.
-3. The previous Word Factori level must be logically reachable, matching the game's native sequential unlocking.
+3. For pages after the first, at least four locations on the immediately preceding six-level page must be logically reachable.
 
-This lets Archipelago's fill algorithm place progression in valid spheres. For example, if V needs Merger2, Merger2 must be obtainable from an earlier reachable check rather than being hidden behind V.
+The first shuffled page guarantees at least four checks whose valid routes are not unavoidably dependent on Merger2 Access. Every full page keeps at least three distinct unavoidable machine profiles and caps unavoidable dependence on Rotation, Reflection, Merger3, or Merger4 below four checks. Later pages may still be Merger2-heavy; Archipelago's fill enforces reachability so the items needed for the four-check frontier remain obtainable. This is the precise feasibility guarantee, not a promise that every page contains four checks independent of Merger2.
+
+Only four page checks are needed for forward progress. The other two remain valid checks and can be deferred, completed after more machinery arrives, or revisited for a goal or item without blocking the next-page arrow.
 
 Discovery Labs use stricter rules: only their declared route is permitted in the generated level. Challenge levels keep their curated quantity limits even after all relevant machine families are unlocked.
 
@@ -219,13 +223,12 @@ Use `/wf_overlay status` in the Word Factori Client. Then try `/wf_overlay resta
 
 ### The next-page arrow is gray
 
-That is Word Factori's native progression. Finish the current page's levels; the APWorld models the same sequence.
+The next page opens after four of the six levels on the immediately preceding full page are complete. If fewer than four are complete, finish another reachable level; you do not need every visible level. If four are complete and the arrow remains gray, reconnect the client, confirm the room/campaign identity with `/wf_status`, then reselect the mod slot or restart Word Factori.
 
 ## Current limitations
 
-- Version 1.2.2 is a release-ready experimental public beta, not an upstream Archipelago release.
+- Version 1.3.0 is a release-ready experimental public beta, not an upstream Archipelago release.
 - Arbitrary Workshop packs are not imported into generated seeds.
-- Discovery Labs are post-campaign because the game sequentially gates custom levels.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.
 - Sticker items are AP filler rather than in-game sticker grants.
 - There is no DeathLink, traps, or randomized factory layouts.
@@ -238,7 +241,7 @@ The exact next game-behavior probe is to record Word Factori's file reads while 
 
 **Automated and rerunnable:** the Windows verification command builds the APWorld and player ZIP, runs the complete unit/integration suite, and runs manifest, parity, recipe, and sensitive-data checks. GitHub Actions runs the same script on Windows with Python 3.12.
 
-**Recorded generation and live acceptance:** the frozen examples were generated with Archipelago 0.6.7, and the primary play path was exercised on Windows 10 at 2560×1440 and 125% scaling with Word Factori Steam build 12616577. The records are available in the repository's [testing evidence](https://github.com/Akamarus/word-factori-archipelago/tree/main/docs/testing).
+**Recorded earlier acceptance:** the pre-1.3 client and overlay path was exercised on Windows 10 at 2560×1440 and 125% scaling with Word Factori Steam build 12616577. That evidence does not establish live acceptance of shuffled pages or four-of-six progression. The 1.3.0 acceptance matrix is in the repository's [testing evidence](https://github.com/Akamarus/word-factori-archipelago/tree/main/docs/testing), with live rows marked pending until they are observed.
 
 **Still pending:** password-protected rooms, 100% and 150% scaling, ultrawide, mixed-DPI multi-monitor use, and a second physical machine. Exclusive fullscreen is unsupported; windowed or borderless mode and the regular client fallback are the supported choices.
 
@@ -258,7 +261,7 @@ py -3 -m unittest discover -s tests -v
 py -3 tools\verify_release.py
 ```
 
-Building first is required because the installer integration tests exercise the generated `word_factori.apworld`. The test suite covers deterministic recipe reachability, progression requirements, goals, duplicate deliveries and checks, reconnect reconciliation, campaign identity, custom-save discovery, save-slot binding, transactional update/uninstall, and release hygiene.
+Building first is required because the installer integration tests exercise the generated `word_factori.apworld`. The test suite covers deterministic 30/40-level layouts, four-of-six progression requirements, stable native-to-canonical mapping, both goals, legacy rooms, duplicate deliveries and checks, reconnect reconciliation, campaign identity and mismatch blocking, save-slot binding, transactional update/uninstall, and release hygiene.
 
 ## Project ownership and attribution
 

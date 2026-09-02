@@ -20,6 +20,7 @@ class PublicationTests(unittest.TestCase):
         "word_factori/campaign.json",
         "word_factori/campaign.py",
         "word_factori/campaign_packs.json",
+        "word_factori/capabilities.py",
         "word_factori/client.py",
         "word_factori/client_core.py",
         "word_factori/client_messages.py",
@@ -27,6 +28,7 @@ class PublicationTests(unittest.TestCase):
         "word_factori/dispatch.py",
         "word_factori/dispatch_store.py",
         "word_factori/docs/setup_en.md",
+        "word_factori/layout.py",
         "word_factori/mod.py",
         "word_factori/options.py",
         "word_factori/overlay_model.py",
@@ -84,6 +86,12 @@ class PublicationTests(unittest.TestCase):
             " ".join(credits["LeftPage"][2:] + credits["RightPage"][1:2]),
         )
         self.assertIn(approved_disclosure, readme)
+        self.assertTrue(readme.startswith("# Word Factori Archipelago"))
+        self.assertTrue(
+            readme[readme.index("Created and maintained"):].startswith(
+                "Created and maintained by Jack (@Akamarus)"
+            )
+        )
         self.assertIn("Copyright (c) 2026 Jack (@Akamarus)", license_text)
 
     def test_release_version_is_shared_by_world_metadata_and_player_archive(self):
@@ -91,9 +99,24 @@ class PublicationTests(unittest.TestCase):
 
         metadata = json.loads((ROOT / "word_factori" / "archipelago.json").read_text(encoding="utf-8"))
 
-        self.assertEqual("1.2.2", VERSION)
+        self.assertEqual("1.3.0", VERSION)
         self.assertEqual(VERSION, metadata["world_version"])
+        self.assertEqual("0.6.7", metadata["minimum_ap_version"])
+        self.assertEqual("0.6.7", metadata["maximum_ap_version"])
+        self.assertEqual(9, metadata["version"])
+        self.assertEqual(7, metadata["compatible_version"])
         self.assertEqual(f"word-factori-archipelago-{VERSION}.zip", build_release.RELEASE_ARCHIVE.name)
+
+    def test_examples_select_seed_specific_shuffled_pages(self):
+        for name in ("WordFactori.yaml", "WordFactoriTarget.yaml"):
+            example = (ROOT / "examples" / name).read_text(encoding="utf-8")
+
+            self.assertIn("campaign_layout: shuffled_pages", example)
+
+    def test_readme_explains_the_any_four_page_unlock(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8").casefold()
+
+        self.assertIn("four of the six", readme)
 
     def test_release_build_is_byte_reproducible(self):
         build_release.write_world()
@@ -210,6 +233,7 @@ class PublicationTests(unittest.TestCase):
             ROOT / "docs" / "release-notes-v1.2.0-correction.md",
             ROOT / "docs" / "release-notes-v1.2.1.md",
             ROOT / "docs" / "release-notes-v1.2.2.md",
+            ROOT / "docs" / "release-notes-v1.3.0.md",
         )
         missing = {
             path.relative_to(ROOT).as_posix(): verify_release.find_missing_documented_installers(
