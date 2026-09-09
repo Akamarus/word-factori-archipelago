@@ -108,12 +108,6 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(7, metadata["compatible_version"])
         self.assertEqual(f"word-factori-archipelago-{VERSION}.zip", build_release.RELEASE_ARCHIVE.name)
 
-    def test_examples_select_seed_specific_shuffled_pages(self):
-        for name in ("WordFactori.yaml", "WordFactoriTarget.yaml"):
-            example = (ROOT / "examples" / name).read_text(encoding="utf-8")
-
-            self.assertIn("campaign_layout: shuffled_pages", example)
-
     def test_readme_write_summary_names_every_supported_destination(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8").casefold()
 
@@ -161,7 +155,7 @@ class PublicationTests(unittest.TestCase):
         with zipfile.ZipFile(build_release.WORLD_ARCHIVE) as archive:
             self.assertEqual(self.EXPECTED_WORLD_ENTRIES, set(archive.namelist()))
 
-    def test_player_release_contains_only_the_supported_player_payload(self):
+    def test_player_release_contains_only_the_unified_player_payload(self):
         build_release.write_world()
         build_release.write_release()
 
@@ -184,6 +178,9 @@ class PublicationTests(unittest.TestCase):
                 "game_mod/word factori archipelago/recipes.json",
                 "game_mod/word factori archipelago/tips.json",
                 "install.ps1",
+                "Restore Original Game.cmd",
+                "tools/install_enhanced.ps1",
+                "tools/enhanced.patch.gz",
                 "release-manifest.json",
                 "word_factori.apworld",
             },

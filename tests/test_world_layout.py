@@ -181,19 +181,13 @@ class WorldLayoutTests(unittest.TestCase):
             if location.name == "Victory"
         )
 
-    def test_campaign_layout_option_defaults_to_shuffled_pages(self):
-        option = world_options.CampaignLayoutOption
-        self.assertEqual(0, option.option_fixed_pages)
-        self.assertEqual(1, option.option_shuffled_pages)
-        self.assertEqual(1, option.default)
-
     def test_slot_data_describes_authoritative_native_layout(self):
         slot_data = self.make_world(104729).fill_slot_data()
 
-        self.assertEqual("machines_tutorial_six_then_four_v1", slot_data["progression_model"])
+        self.assertEqual("machines_enhanced_four_of_six_v1", slot_data["progression_model"])
         self.assertEqual(6, slot_data["page_size"])
-        self.assertEqual("supported", slot_data["integration_mode"])
-        self.assertEqual(6, slot_data["tutorial_page_unlock_count"])
+        self.assertEqual("enhanced", slot_data["integration_mode"])
+        self.assertEqual(4, slot_data["tutorial_page_unlock_count"])
         self.assertEqual(4, slot_data["later_page_unlock_count"])
         self.assertEqual(slot_data["manifest_digest"], slot_data["layout_digest"])
         self.assertEqual(
@@ -234,13 +228,10 @@ class WorldLayoutTests(unittest.TestCase):
             world.multiworld.local_early_items[world.player],
         )
 
-    def test_fixed_layout_option_preserves_canonical_level_order(self):
+    def test_obsolete_option_attributes_cannot_generate_a_second_mode(self):
         slot_data = self.make_world(7, campaign_layout=0).fill_slot_data()
-        manifest = campaign_for_level_set("core_campaign")
-        self.assertEqual(
-            [record.stable_key for record in manifest.levels],
-            slot_data["level_order"],
-        )
+        self.assertEqual("enhanced_balanced_pages_v1", slot_data["layout_algorithm"])
+        self.assertEqual("enhanced", slot_data["integration_mode"])
 
     def test_campaign_count_goal_counts_only_canonical_non_discovery_names(self):
         world = self.make_world(101, level_set=1, goal=0)

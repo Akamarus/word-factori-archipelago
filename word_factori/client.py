@@ -814,7 +814,7 @@ class WordFactoriContext(CommonContext):
         campaign = self.selected_campaign()
         if campaign is not None and campaign.layout is not None and campaign.layout.integration_mode == "enhanced":
             if not patch_ready(self.mod_folder):
-                raise ValueError("Enhanced room requires the verified native patch. Close the game and install the enhanced patch for this game build.")
+                raise ValueError("The integration requires its verified native patch. Close the game and rerun Install Word Factori Archipelago.cmd for this game build.")
             levels = render_levels(owned_machines, world_access, locations=locations)
             room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
             return publish_runtime(self.mod_folder / RUNTIME_NAME, room, campaign.layout.digest, levels)

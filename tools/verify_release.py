@@ -109,6 +109,9 @@ def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | Non
                 "word_factori.apworld",
                 "release-manifest.json",
                 "docs/enhanced-playtest.md",
+                "Restore Original Game.cmd",
+                "tools/install_enhanced.ps1",
+                "tools/enhanced.patch.gz",
             )
         ]
         for root in roots:
@@ -288,6 +291,9 @@ def main(*, verify_installed: bool = False) -> None:
         "examples/WordFactoriTarget.yaml",
         "docs/images/word-factori-archipelago-chat.png",
         "word_factori.apworld",
+        "Restore Original Game.cmd",
+        "tools/install_enhanced.ps1",
+        "tools/enhanced.patch.gz",
     ):
         if required not in names:
             raise AssertionError(f"release is missing {required}")

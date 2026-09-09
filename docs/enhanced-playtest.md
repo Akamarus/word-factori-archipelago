@@ -1,71 +1,41 @@
-# Enhanced first-page playtest
+# Native integration and playtest details
 
-This is a **local development build**, not a new public release. It includes an
-optional, reversible patch for Steam Word Factori build 12616577. The normal
-supported mode still works without modifying the game.
+Version **1.4.0 is an unreleased development candidate**, not a newly published release. The integration always uses enhanced, shuffled, machine-only progression and requires the reversible native patch for the exact verified Steam Word Factori build 12616577. There is one player package and one installation route. This document records technical behavior and acceptance work for that integration.
 
-## What changes
+## Runtime behavior
 
-- First-page membership and positions change with the seed: I and C, two
-  other early-solvable starter levels, and two later targets to revisit.
-- All six buttons on an unlocked page are selectable. Some puzzles may need
-  items you do not have yet. Complete any four to open the next page.
-- The first two local early machine items are Merger2 and Rotation. Together
-  with your starting Bender, these make at least four first-page levels solvable.
-- New 1.4.0 rooms have no World Access items. I stays available in every level;
-  machine ownership, recipe requirements, lab restrictions, and page progress
-  determine what is solvable. Old rooms keep their original tier locks.
-- Received machines apply when you **return to Levels and
-  enter a factory**. You do not need to restart the game, reload the mod, or
-  reselect the save for each item. An already-open factory is not rebuilt.
-- Check IDs, challenge limits, Discovery Lab route restrictions, and victory
-  rules remain tied to the same targets even when their positions change.
+- First-page membership and positions change with the seed: I and C, two other early-solvable starter levels, and two later targets to revisit.
+- All six buttons on an unlocked page are selectable. Some puzzles may need items you do not have yet. Complete any four to open the next page, including on page one.
+- The two local-early machine items are Merger2 and Rotation. Together with your starting Bender, these make at least four first-page levels solvable.
+- There are no World Access items. I stays available in every level; machine ownership, recipe requirements, lab restrictions, and page progress determine what is solvable.
+- Received machines apply when you **return to Levels and enter a factory**. You do not need to restart the game, reload the mod, or reselect the save for each item. An already-open factory is not rebuilt.
+- Check IDs, challenge limits, Discovery Lab route restrictions, and victory rules remain tied to the same targets even when their positions change.
 
-## Install for testing
+This candidate uses the existing compiled native delta. The unified installation and progression contract do not add a new native hook or refresh machinery during an open factory.
 
-1. Close Word Factori and the Archipelago client. Extract the playtest ZIP.
-2. Run **Install or Update Playtest.cmd** to install this build's APWorld and mod.
-3. In the `enhanced` folder, run **Install Enhanced Patch.cmd**. Select
-   `data.win` from your Word Factori installation (Steam → Manage → Browse local files).
-4. Generate a **new** Archipelago room using `Enhanced Player.yaml`, or set
-   `integration_mode: enhanced` and `campaign_layout: shuffled_pages` in your YAML.
-5. Start the updated Word Factori client and connect to that room first. It
-   prepares your shuffled campaign. Then start the game, select the AP mod,
-   and choose an empty mod save. Do not reuse an old room's save.
+## Install and start a playtest
 
-The first load of a new room still needs a fresh campaign load. After that,
-items refresh on factory entry. Keep the AP client connected while playing.
-For the first playtest, confirm I and C are both selectable regardless of
-their button positions; complete one and check the newly received machine
-after returning to Levels and entering another factory.
+1. Extract **word-factori-archipelago-1.4.0.zip** and close Word Factori and Archipelago.
+2. Run the root **Install Word Factori Archipelago.cmd**. It installs the matching APWorld and mod and applies the required native delta patch after verifying and backing up the original game data.
+3. If prompted, select `data.win` from the Word Factori installation (Steam → Manage → Browse local files).
+4. Generate a **new room** using either bundled example YAML. There are no integration-mode or campaign-layout selectors. Old rooms are unsupported by this candidate, including earlier development contracts.
+5. Start the updated Word Factori client and connect first so it prepares the shuffled campaign. Then start the game, select the AP mod, and choose a **fresh empty mod save**.
 
-Only the exact verified original game is accepted. Unknown builds, other
-binary mods, a running game, or a damaged patch are refused. The installer
-keeps `data.wf-ap-original.win` beside the game. It never edits game saves.
-No original game binary, source, recipes, fonts, or music are in this package;
-the small delta requires your own installed game.
+The first load of a new room needs a fresh campaign load. After that, items refresh on factory entry. Keep the AP client connected while playing. During acceptance, confirm I and C are both selectable regardless of their button positions, verify four completions open page two, and check a newly received machine after returning to Levels and entering another factory.
+
+Only the exact verified original game is accepted. Unknown builds, other binary modifications, a running game, or a damaged patch are refused. The installer keeps `data.wf-ap-original.win` beside the game and never edits game saves. No original game binary, source, recipes, fonts, or music are in the package; the delta requires your own installed game.
 
 ## Restore or update
 
-Close the game and run **Restore Original Game.cmd**, selecting the same
-`data.win`. The verified original is restored; saves and backup remain.
-Enhanced rooms need the patch, so use a new supported-mode room after restoring.
-Restore before updating to a different enhanced build. Steam verification can
-also replace patched files; the client detects this and pauses enhanced use.
+Close the game and run the root **Restore Original Game.cmd**, selecting the same `data.win` if prompted. The verified original is restored; saves and backup remain. This restores the game binary and **does not uninstall the integration**. The integration cannot be used without its required patch; run the main installer again before playing after restoration.
 
-## What is verified, and what is not
+For integration updates, close the game and Archipelago and double-click the same main installer again as described in the [README](../README.md#simple-installation). Previous integration files are kept as backups. Steam verification can replace patched files; the client detects a missing or mismatched patch and pauses integration use. Updating does not convert old rooms or saves.
 
-- Automated Python tests cover room logic, first-page variation, duplicate
-  delivery, reconnects, runtime publication, and installed-game verification.
-- The previous tiered build passed 40 real AP 0.6.7 generations. Machine-only
-  generation is verified separately; do not treat old results as new-build evidence.
-- Isolated native-engine tests execute the real button availability method,
-  page threshold function, and factory module-count hook. They check all six
-  first-page buttons, runtime refresh, wrong-room/stale data rejection, caps,
-  and quiet handling of missing/malformed files.
-- This is **not yet a full visual playthrough** with a live AP server and the
-  normal game screens. That remains the release gate. The harness substitutes
-  startup and unrelated UI dependencies and uses a separate save directory.
+## Evidence and remaining acceptance
 
-If something fails, close the game and keep the client log. Do not delete
-your saves. This build is intentionally opt-in until playthrough acceptance.
+- Automated Python checks cover room logic, first-page variation, duplicate delivery, reconnects, runtime publication, and installed-game verification. Results must correspond to the candidate being evaluated.
+- The previous tiered build passed 40 real AP 0.6.7 generations. Those results are historical evidence and do not establish generation or live acceptance of this machine-only candidate.
+- Isolated native-engine tests execute the real button availability method, page threshold function, and factory module-count hook. They check all six first-page buttons, runtime refresh, wrong-room/stale data rejection, caps, and quiet handling of missing/malformed files.
+- A **full visual playthrough with a live AP server and the normal game screens remains pending** and is a public-release gate. The isolated harness substitutes startup and unrelated UI dependencies and uses a separate save directory.
+
+If something fails, close the game and keep the client log. Do not delete your saves. A single packaged installation route does not establish completed live acceptance or publication of this candidate.

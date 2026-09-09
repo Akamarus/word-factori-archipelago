@@ -27,26 +27,8 @@ class CustomLevelSet(Choice):
     default = 1
 
 
-class CampaignLayoutOption(Choice):
-    """Choose whether levels retain native pages or shuffle within a balanced campaign."""
-    display_name = "Campaign Layout"
-    option_fixed_pages = 0
-    option_shuffled_pages = 1
-    default = 1
-
-
-class IntegrationMode(Choice):
-    """Enhanced requires the optional native patch and shuffled pages. Supported leaves the game binary unchanged."""
-    display_name = "Integration Mode"
-    option_supported = 0
-    option_enhanced = 1
-    default = 0
-
-
 @dataclass
 class WordFactoriOptions(PerGameCommonOptions):
     goal: Goal
     campaign_count: CampaignCount
     custom_level_set: CustomLevelSet
-    campaign_layout: CampaignLayoutOption
-    integration_mode: IntegrationMode

@@ -25,7 +25,14 @@ if str(ROOT) not in sys.path:
 from word_factori.campaign import campaign_for_level_set
 from word_factori.capabilities import requirements_for_record
 from word_factori.data import locations_for_level_set
-from word_factori.layout import MACHINE_MODELS, PAGE_SIZE, PAGE_UNLOCK_COUNT, TUTORIAL_PAGE_UNLOCK_COUNT
+from word_factori.layout import (
+    ENHANCED_ALGORITHM,
+    ENHANCED_MACHINE_MODEL,
+    MACHINE_MODELS,
+    PAGE_SIZE,
+    PAGE_UNLOCK_COUNT,
+    TUTORIAL_PAGE_UNLOCK_COUNT,
+)
 from word_factori.version import VERSION
 
 MAX_MULTIDATA_MEMBER_BYTES = 16 * 1024 * 1024
@@ -75,8 +82,6 @@ class MatrixCase:
     key: str
     level_set: str
     goal: str
-    campaign_layout: str = "shuffled_pages"
-    integration_mode: str = "supported"
 
 
 @dataclass(frozen=True)
@@ -111,8 +116,6 @@ Word Factori:
   goal: {case.goal}
   campaign_count: 25
   custom_level_set: {case.level_set}
-  campaign_layout: {case.campaign_layout}
-  integration_mode: {case.integration_mode}
 """
 
 
@@ -392,8 +395,9 @@ def _requested_identity(case: MatrixCase) -> dict:
         "campaign_count": 25,
         "level_count": level_count,
         "level_order_count": level_count,
-        "layout_algorithm": "enhanced_balanced_pages_v1" if case.integration_mode == "enhanced" else ("fixed_pages_v1" if case.campaign_layout == "fixed_pages" else "balanced_pages_v2"),
-        "integration_mode": case.integration_mode,
+        "layout_algorithm": ENHANCED_ALGORITHM,
+        "integration_mode": "enhanced",
+        "progression_model": ENHANCED_MACHINE_MODEL,
         "implementation_version": VERSION,
     }
 
@@ -407,6 +411,7 @@ def _generated_identity(identity: GenerationIdentity) -> dict:
         "level_order_count": len(identity.level_order),
         "layout_algorithm": identity.layout_algorithm,
         "integration_mode": identity.integration_mode,
+        "progression_model": identity.progression_model,
         "implementation_version": identity.implementation_version,
     }
 

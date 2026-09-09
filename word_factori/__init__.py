@@ -56,14 +56,9 @@ else:
         def generate_early(self) -> None:
             self._level_set = self.selected_level_set()
             self._manifest = campaign_for_level_set(self._level_set)
-            layout_mode = (
-                "fixed_pages"
-                if int(self.options.campaign_layout.value) == 0
-                else "shuffled_pages"
-            )
             self._layout = build_layout(
-                self._manifest, self._level_set, layout_mode, self.random,
-                integration_mode="enhanced" if int(self.options.integration_mode.value) == 1 else "supported",
+                self._manifest, self._level_set, "shuffled_pages", self.random,
+                integration_mode="enhanced",
                 machine_only=True,
             )
             self._locations = locations_for_layout(self._manifest, self._layout)
