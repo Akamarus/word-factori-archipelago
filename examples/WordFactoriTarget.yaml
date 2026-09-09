@@ -9,3 +9,4 @@ Word Factori:
   goal: final_factory
   campaign_count: 25
   custom_level_set: core_campaign
+  campaign_layout: shuffled_pages

@@ -1,24 +1,71 @@
 import json
+import random
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from word_factori.bridge import BridgeState, ReceivedItem, bind_game_slot, load_state, reconcile, save_state
-from word_factori.client_core import campaign_compatible, game_font_path, goal_reached, inventory_view, mod_is_selected, parse_connection_url, resolve_game_slot_binding, state_identity
+from word_factori.client_core import (
+    campaign_compatible,
+    game_font_path,
+    goal_reached,
+    inventory_view,
+    location_codes_for_native_slots,
+    mod_is_selected,
+    native_slots_for_location_codes,
+    parse_connection_url,
+    resolve_game_slot_binding,
+    resolve_room_campaign,
+    state_identity,
+)
 from word_factori.data import CAMPAIGN_DIGEST, ITEM_POOL, LOCATIONS, MACHINE_ITEMS
+from word_factori.layout import fixed_layout, layout_slot_data, shuffled_layout
 from word_factori.mod import render_levels, write_campaign_identity
-from word_factori.campaign import campaign_for_level_set
+from word_factori.campaign import campaign_digest, campaign_for_level_set, load_campaign
 from word_factori.data import locations_for_level_set
-from word_factori.requirements import WORD_REQUIREMENT_OPTIONS, access_rule_for
+from word_factori.capabilities import requirements_for_record, unavoidable_nonbootstrap_machines
+from word_factori.requirements import WORD_REQUIREMENT_OPTIONS, access_rule_for, previous_page_names
 from word_factori.save import ActiveSlot, parse_active_slot, parse_save
+
+
+class CapabilityTests(unittest.TestCase):
+    def test_challenges_are_keyed_by_stable_identity(self):
+        records = {record.stable_key: record for record in load_campaign().levels}
+        cat = requirements_for_record(records["challenge-cat-compact"])
+        phone = requirements_for_record(records["challenge-phone-no-waste"])
+        self.assertEqual(4, len(cat[0]))
+        self.assertIn("Merger4 Access", phone[0])
+
+    def test_unavoidable_profile_intersects_every_valid_route(self):
+        record = next(x for x in load_campaign().levels if x.stable_key == "complete-v")
+        expected = set.intersection(*map(set, requirements_for_record(record)))
+        expected.discard("Bender Access")
+        self.assertEqual(
+            frozenset(expected), unavoidable_nonbootstrap_machines(record),
+        )
+
+
+class State:
+    def __init__(self, items, reachable):
+        self.items = set(items)
+        self.reachable = set(reachable)
+
+    def has_all(self, names, player):
+        return set(names) <= self.items
+
+    def can_reach_location(self, name, player):
+        return name in self.reachable
 
 
 class DataTests(unittest.TestCase):
     def test_world_has_forty_stable_indices_and_pool_items(self):
-        self.assertEqual(list(range(40)), [location.index for location in LOCATIONS])
+        self.assertEqual(list(range(40)), [location.canonical_index for location in LOCATIONS])
+        self.assertEqual(list(range(40)), [location.slot_index for location in LOCATIONS])
+        self.assertEqual([index // 6 for index in range(40)], [location.page_index for location in LOCATIONS])
         self.assertEqual(40, len({location.name for location in LOCATIONS}))
         self.assertEqual(40, len(ITEM_POOL))
-        self.assertEqual(5, ITEM_POOL.count("Progressive World Access"))
+        self.assertEqual(0, ITEM_POOL.count("Progressive World Access"))
         self.assertNotIn("Progressive Word Length", ITEM_POOL)
         self.assertFalse(any(name.endswith("Permit") for name in ITEM_POOL))
 
@@ -31,22 +78,31 @@ class DataTests(unittest.TestCase):
         levels = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual([location.target for location in LOCATIONS], [level["text"] for level in levels])
 
-    def test_native_sequence_requires_previous_level_and_current_machines(self):
-        class State:
-            def __init__(self, items, reachable):
-                self.items = set(items)
-                self.reachable = set(reachable)
-
-            def has_all(self, names, player):
-                return set(names) <= self.items
-
-            def can_reach_location(self, name, player):
-                return name in self.reachable
-
-        rule = access_rule_for(LOCATIONS[2], player=1)
+    def test_tutorial_v_requires_its_native_predecessor(self):
+        rule = access_rule_for(LOCATIONS[2], LOCATIONS, player=1)
         self.assertFalse(rule(State({"Merger2 Access"}, set())))
-        self.assertFalse(rule(State(set(), {"Complete C"})))
-        self.assertTrue(rule(State({"Merger2 Access"}, {"Complete C"})))
+        self.assertTrue(rule(State({"Merger2 Access"}, {LOCATIONS[1].name})))
+
+    def test_second_native_page_requires_all_six_tutorial_slots(self):
+        rule = access_rule_for(LOCATIONS[6], LOCATIONS, player=1)
+        all_machines = set(MACHINE_ITEMS)
+        page_one = [location.name for location in LOCATIONS[:6]]
+        self.assertFalse(rule(State(all_machines, page_one[:5])))
+        self.assertTrue(rule(State(all_machines, page_one)))
+
+    def test_recipe_requirements_remain_closed_when_frontier_is_open(self):
+        rule = access_rule_for(LOCATIONS[6], LOCATIONS, player=1)
+        page_one = [location.name for location in LOCATIONS[:6]]
+        self.assertFalse(rule(State(set(), page_one[:4])))
+
+    def test_third_native_page_uses_only_immediately_preceding_page(self):
+        rule = access_rule_for(LOCATIONS[12], LOCATIONS, player=1)
+        all_machines = set(MACHINE_ITEMS)
+        page_one = [location.name for location in LOCATIONS[:6]]
+        page_two = [location.name for location in LOCATIONS[6:12]]
+        self.assertEqual(tuple(page_two), previous_page_names(LOCATIONS[12], LOCATIONS))
+        self.assertFalse(rule(State(all_machines, page_one)))
+        self.assertTrue(rule(State(all_machines, page_two[:4])))
 
 
 class ModTests(unittest.TestCase):
@@ -100,8 +156,57 @@ class ModTests(unittest.TestCase):
         self.assertEqual("word-factori-core", payload["campaign_id"])
         self.assertEqual(30, payload["level_count"])
 
+    def test_campaign_identity_for_layout_includes_full_progression_identity(self):
+        manifest = campaign_for_level_set("core_campaign")
+        layout = fixed_layout(manifest, "core_campaign")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "archipelago_campaign.json"
+            write_campaign_identity(path, manifest, layout)
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(layout.digest, payload["manifest_digest"])
+        self.assertEqual(layout.digest, payload["layout_digest"])
+        self.assertEqual(campaign_for_level_set("core_campaign").campaign_id, payload["campaign_id"])
+        self.assertEqual(manifest.version, payload["manifest_version"])
+        self.assertEqual(campaign_digest(manifest), payload["base_manifest_digest"])
+        self.assertEqual(layout.progression_model, payload["progression_model"])
+        self.assertEqual(layout.algorithm, payload["layout_algorithm"])
+        self.assertEqual(layout.page_size, payload["page_size"])
+        self.assertEqual("supported", payload["integration_mode"])
+        self.assertEqual(6, payload["tutorial_page_unlock_count"])
+        self.assertEqual(4, payload["later_page_unlock_count"])
+        self.assertEqual(len(manifest.levels), payload["level_count"])
+
 
 class SaveTests(unittest.TestCase):
+    def test_slot_zero_previous_save_selects_another_activated_slot(self):
+        payload = {"slots": {
+            "0": {"slot_is_active": 1, "previous_save": 2.0,
+                  "random_id": "old-slot", "beaten_levels": {"29": 1}},
+            "2": {"slot_is_active": 1, "previous_save": -1.0,
+                  "random_id": "selected-slot", "beaten_levels": {"0": 1}},
+        }}
+        selected = parse_active_slot(payload)
+        self.assertEqual("2", selected.key)
+        self.assertEqual("selected-slot", selected.random_id)
+        self.assertEqual(frozenset({0}), selected.beaten_levels)
+
+    def test_save_selection_menu_and_invalid_pointer_never_report_old_progress(self):
+        for previous in (-1, 2, 0.5, True, "0"):
+            payload = {"slots": {
+                "0": {"slot_is_active": 1, "previous_save": previous,
+                      "random_id": "old-slot", "beaten_levels": {"29": 1}},
+            }}
+            with self.subTest(previous=previous), self.assertRaises(ValueError):
+                parse_active_slot(payload)
+
+    def test_other_slots_previous_save_is_not_a_selection_authority(self):
+        payload = {"slots": {
+            "0": {"slot_is_active": 1, "previous_save": -1, "random_id": "zero"},
+            "1": {"slot_is_active": 1, "previous_save": 1, "random_id": "one"},
+        }}
+        with self.assertRaises(ValueError):
+            parse_active_slot(payload)
+
     def test_active_slot_exposes_stable_random_id_and_completion_set(self):
         payload = {"slots": {
             "0": {"slot_is_active": 0, "random_id": "blank-slot", "beaten_levels": {}},
@@ -191,6 +296,119 @@ class BridgeTests(unittest.TestCase):
 
 
 class ClientCoreTests(unittest.TestCase):
+    def shuffled_slot_data(self, seed=9173):
+        manifest = campaign_for_level_set("discovery_labs")
+        layout = shuffled_layout(manifest, "discovery_labs", random.Random(seed))
+        return {
+            **layout_slot_data(layout),
+            "level_set": "discovery_labs",
+            "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version,
+            "manifest_digest": layout.digest,
+            "level_count": len(manifest.levels),
+        }
+
+    def test_shuffled_room_reconstructs_slot_order_and_translates_save_indices(self):
+        resolved = resolve_room_campaign(self.shuffled_slot_data())
+        expected = frozenset({resolved.locations[0].code, resolved.locations[7].code})
+
+        self.assertFalse(resolved.legacy)
+        self.assertEqual(expected, location_codes_for_native_slots({0, 7}, resolved.locations))
+        self.assertEqual(
+            frozenset({0, 7}),
+            native_slots_for_location_codes(expected, resolved.locations),
+        )
+
+    def test_native_slot_translation_rejects_the_whole_observation_on_any_invalid_index(self):
+        resolved = resolve_room_campaign(self.shuffled_slot_data())
+
+        for native_slots, invalid in (({0, 7, 400}, 400), ({0, -1}, -1)):
+            with self.subTest(native_slots=native_slots):
+                with self.assertRaisesRegex(
+                    ValueError, rf"native level index.*{invalid}.*outside",
+                ):
+                    location_codes_for_native_slots(native_slots, resolved.locations)
+
+    def test_translation_rejects_duplicate_native_slots_and_location_codes(self):
+        resolved = resolve_room_campaign(self.shuffled_slot_data())
+        duplicate_slot = replace(
+            resolved.locations[1], slot_index=resolved.locations[0].slot_index,
+        )
+        duplicate_code = replace(
+            resolved.locations[1], canonical_index=resolved.locations[0].canonical_index,
+        )
+
+        with self.assertRaisesRegex(ValueError, "duplicate native slot"):
+            location_codes_for_native_slots(
+                {0}, (resolved.locations[0], duplicate_slot),
+            )
+        with self.assertRaisesRegex(ValueError, "duplicate location code"):
+            native_slots_for_location_codes(
+                {resolved.locations[0].code}, (resolved.locations[0], duplicate_code),
+            )
+
+    def test_goals_use_canonical_non_discovery_and_final_location_codes(self):
+        resolved = resolve_room_campaign(self.shuffled_slot_data())
+        campaign_codes = {
+            location.code for location in resolved.locations
+            if location.kind != "discovery"
+        }
+        first_twenty = set(sorted(campaign_codes)[:20])
+        discovery_code = next(
+            location.code for location in resolved.locations
+            if location.kind == "discovery"
+        )
+        final_code = next(
+            location.code for location in resolved.locations
+            if location.stable_key == "pitchfork-final"
+        )
+
+        self.assertTrue(goal_reached(0, 20, first_twenty, resolved.locations))
+        self.assertFalse(goal_reached(
+            0, 20, set(sorted(first_twenty)[:19]) | {discovery_code}, resolved.locations,
+        ))
+        self.assertTrue(goal_reached(1, 20, {final_code}, resolved.locations))
+        self.assertFalse(goal_reached(
+            1, 20, {resolved.locations[29].code} - {final_code}, resolved.locations,
+        ))
+
+    def test_room_resolution_rejects_duplicate_layout_keys_and_digest_mismatch(self):
+        duplicate = self.shuffled_slot_data()
+        duplicate["level_order"][1] = duplicate["level_order"][0]
+        with self.assertRaisesRegex(ValueError, "complete and unique"):
+            resolve_room_campaign(duplicate)
+
+        mismatch = self.shuffled_slot_data()
+        mismatch["manifest_digest"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "manifest digest"):
+            resolve_room_campaign(mismatch)
+
+    def test_legacy_room_uses_canonical_order(self):
+        manifest = campaign_for_level_set("discovery_labs")
+        resolved = resolve_room_campaign({
+            "implementation_version": "1.2.2",
+            "level_set": "discovery_labs",
+            "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version,
+            "manifest_digest": campaign_digest(manifest),
+            "level_count": len(manifest.levels),
+        })
+
+        self.assertTrue(resolved.legacy)
+        self.assertIsNone(resolved.layout)
+        self.assertEqual(list(range(40)), [location.slot_index for location in resolved.locations])
+
+    def test_partial_modern_contract_cannot_fall_back_to_legacy(self):
+        manifest = campaign_for_level_set("discovery_labs")
+        for field, value in (("integration_mode", "enhanced"), ("layout_digest", "0" * 64),
+                             ("page_unlock_count", 4)):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                resolve_room_campaign({
+                    "campaign_id": manifest.campaign_id, "manifest_version": manifest.version,
+                    "manifest_digest": campaign_digest(manifest), "level_count": 40,
+                    field: value,
+                })
+
     def test_game_font_is_resolved_only_when_neighboring_file_exists(self):
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / "word factori.exe"
@@ -233,10 +451,11 @@ class ClientCoreTests(unittest.TestCase):
         self.assertEqual(2, view.world_access)
 
     def test_campaign_count_and_final_factory_goals(self):
-        self.assertTrue(goal_reached(0, 25, set(range(25)) | set(range(30, 40))))
-        self.assertFalse(goal_reached(0, 25, set(range(24)) | set(range(30, 40))))
-        self.assertTrue(goal_reached(1, 25, {29}))
-        self.assertFalse(goal_reached(1, 25, set(range(29))))
+        checked = {location.code for location in LOCATIONS[:25]}
+        self.assertTrue(goal_reached(0, 25, checked, LOCATIONS))
+        self.assertFalse(goal_reached(0, 25, checked - {LOCATIONS[24].code}, LOCATIONS))
+        self.assertTrue(goal_reached(1, 25, {LOCATIONS[29].code}, LOCATIONS))
+        self.assertFalse(goal_reached(1, 25, checked, LOCATIONS))
 
     def test_mod_selection_guard_accepts_only_owned_folder(self):
         expected = r"C:\Users\Player\AppData\Local\factori\mods\word factori archipelago"
@@ -261,17 +480,97 @@ class ClientCoreTests(unittest.TestCase):
         installed["manifest_digest"] = slot["manifest_digest"]
         self.assertTrue(campaign_compatible(slot, installed))
 
+    def test_layout_compatibility_compares_every_installed_identity_field(self):
+        slot = self.shuffled_slot_data()
+        manifest = campaign_for_level_set("discovery_labs")
+        layout = shuffled_layout(
+            manifest, "discovery_labs", random.Random(9173),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "archipelago_campaign.json"
+            write_campaign_identity(path, manifest, layout)
+            installed = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertTrue(campaign_compatible(slot, installed))
+        for field in (
+            "progression_model",
+            "layout_algorithm",
+            "page_size",
+            "integration_mode",
+            "tutorial_page_unlock_count",
+            "later_page_unlock_count",
+            "base_manifest_digest",
+            "layout_digest",
+        ):
+            with self.subTest(field=field):
+                mismatched = dict(installed)
+                mismatched[field] = "wrong"
+                self.assertFalse(campaign_compatible(slot, mismatched))
+
     def test_connection_url_separates_credentials_from_server_address(self):
         self.assertEqual(
             ("archipelago.gg:38281", "Factory Player", "secret"),
             parse_connection_url("archipelago://Factory%20Player:secret@archipelago.gg:38281"),
         )
 
-    def test_bridge_identity_is_seed_team_and_slot_scoped(self):
-        first = state_identity("Seed-A", 0, 1, "Factory Player")
-        self.assertNotEqual(first, state_identity("Seed-B", 0, 1, "Factory Player"))
-        self.assertNotEqual(first, state_identity("Seed-A", 1, 1, "Factory Player"))
-        self.assertNotEqual(first, state_identity("Seed-A", 0, 2, "Factory Player"))
+    def test_bridge_identity_is_room_contract_scoped_and_canonical(self):
+        first_slot_data = {
+            **self.shuffled_slot_data(9173),
+            "goal": 0,
+            "campaign_count": 25,
+        }
+        second_layout = {
+            **self.shuffled_slot_data(9174),
+            "goal": 0,
+            "campaign_count": 25,
+        }
+        second_goal = {**first_slot_data, "goal": 1}
+        first = state_identity("Seed-A", 0, 1, "Factory Player", first_slot_data)
+
+        self.assertNotEqual(
+            first,
+            state_identity("Seed-A", 0, 1, "Factory Player", second_layout),
+        )
+        self.assertNotEqual(
+            first,
+            state_identity("Seed-A", 0, 1, "Factory Player", second_goal),
+        )
+        self.assertEqual(
+            first,
+            state_identity(
+                "Seed-A", 0, 1, "Factory Player",
+                dict(reversed(tuple(first_slot_data.items()))),
+            ),
+        )
+        self.assertNotEqual(
+            first,
+            state_identity("Seed-B", 0, 1, "Factory Player", first_slot_data),
+        )
+
+    def test_bridge_identity_fails_closed_without_authoritative_room_data(self):
+        with self.assertRaisesRegex(ValueError, "authoritative room slot data"):
+            state_identity("Seed-A", 0, 1, "Factory Player", {})
+        with self.assertRaisesRegex(ValueError, "stable room identity"):
+            state_identity(None, 0, 1, "Factory Player", self.shuffled_slot_data())
+
+    def test_legacy_bridge_identity_uses_canonical_manifest_and_available_options(self):
+        manifest = campaign_for_level_set("core_campaign")
+        slot_data = {
+            "level_set": "core_campaign",
+            "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version,
+            "manifest_digest": campaign_digest(manifest),
+            "level_count": len(manifest.levels),
+            "goal": 0,
+            "campaign_count": 25,
+        }
+        first = state_identity("Legacy", 0, 1, "Player", slot_data)
+
+        self.assertEqual(first, state_identity("Legacy", 0, 1, "Player", dict(slot_data)))
+        self.assertNotEqual(
+            first,
+            state_identity("Legacy", 0, 1, "Player", {**slot_data, "goal": 1}),
+        )
 
 
 if __name__ == "__main__":

@@ -22,8 +22,14 @@ from tools.build_release import (
     include,
 )
 from tools.derive_requirements import derive
-from word_factori.campaign import available_level_sets, campaign_for_level_set, load_campaign
-from word_factori.data import CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, LOCATIONS
+from word_factori.campaign import (
+    available_level_sets,
+    campaign_digest,
+    campaign_for_level_set,
+    load_campaign,
+)
+from word_factori.data import locations_for_layout
+from word_factori.layout import fixed_layout
 
 
 def digest(data: bytes) -> str:
@@ -102,6 +108,7 @@ def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | Non
                 "Install Word Factori Archipelago.cmd",
                 "word_factori.apworld",
                 "release-manifest.json",
+                "docs/enhanced-playtest.md",
             )
         ]
         for root in roots:
@@ -163,18 +170,29 @@ def main(*, verify_installed: bool = False) -> None:
 
     game_mod = ROOT / "game_mod" / "word factori archipelago"
     payloads = {path.name: json.loads(path.read_text(encoding="utf-8")) for path in game_mod.glob("*.json")}
-    if [level["text"] for level in payloads["levels.json"]] != [location.target for location in LOCATIONS]:
+    manifest = campaign_for_level_set("discovery_labs")
+    layout = fixed_layout(manifest, "discovery_labs")
+    locations = locations_for_layout(manifest, layout)
+    if [level["text"] for level in payloads["levels.json"]] != [location.target for location in locations]:
         raise AssertionError("game mod indices do not match AP locations")
     identity = payloads.get("archipelago_campaign.json", {})
     expected_identity = {
-        "campaign_id": CAMPAIGN_ID,
-        "manifest_version": CAMPAIGN_VERSION,
-        "manifest_digest": CAMPAIGN_DIGEST,
-        "level_count": len(LOCATIONS),
+        "campaign_id": manifest.campaign_id,
+        "manifest_version": manifest.version,
+        "manifest_digest": layout.digest,
+        "level_count": len(locations),
+        "layout_digest": layout.digest,
+        "base_manifest_digest": campaign_digest(manifest),
+        "progression_model": layout.progression_model,
+        "layout_algorithm": layout.algorithm,
+        "page_size": layout.page_size,
+        "integration_mode": layout.integration_mode,
+        "tutorial_page_unlock_count": layout.tutorial_page_unlock_count,
+        "later_page_unlock_count": layout.later_page_unlock_count,
     }
     if identity != expected_identity:
         raise AssertionError("game mod campaign identity does not match AP manifest")
-    if len(LOCATIONS) != 40:
+    if len(locations) != 40:
         raise AssertionError("hybrid campaign must contain 40 locations")
     if available_level_sets() != ("core_campaign", "discovery_labs"):
         raise AssertionError("curated level set catalog changed unexpectedly")
@@ -204,6 +222,11 @@ def main(*, verify_installed: bool = False) -> None:
             installed = installed_mod / source.name
             if not installed.is_file() or digest(installed.read_bytes()) != digest(source.read_bytes()):
                 raise AssertionError(f"installed mod differs at {source.name}")
+        installed_identity = json.loads(
+            (installed_mod / "archipelago_campaign.json").read_text(encoding="utf-8")
+        )
+        if installed_identity != expected_identity:
+            raise AssertionError("installed mod layout identity does not match fixed bootstrap layout")
 
     if release_archive_present:
         with zipfile.ZipFile(RELEASE_ARCHIVE) as archive:
@@ -239,6 +262,7 @@ def main(*, verify_installed: bool = False) -> None:
         ROOT / "docs" / "release-notes-v1.2.0-correction.md",
         ROOT / "docs" / "release-notes-v1.2.1.md",
         ROOT / "docs" / "release-notes-v1.2.2.md",
+        ROOT / "docs" / "release-notes-v1.3.0.md",
     ):
         missing_installers = find_missing_documented_installers(
             document.read_text(encoding="utf-8"), release_files

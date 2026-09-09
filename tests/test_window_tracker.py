@@ -1,3 +1,4 @@
+import ast
 import ctypes
 import json
 import tempfile
@@ -5,6 +6,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from word_factori.overlay_protocol import (
     ConnectIntent,
@@ -165,6 +167,34 @@ class WindowTrackerTests(unittest.TestCase):
 
 
 class RendererBoundaryTests(unittest.TestCase):
+    def test_items_tab_returns_chat_focus_without_hiding_the_panel(self):
+        app, api, follow = renderer_follow_fixture()
+
+        follow(app, 0.1)
+
+        self.assertTrue(app.game_shown)
+        self.assertEqual(1, app.root_layout.opacity)
+        self.assertEqual([], app.actions)
+        self.assertEqual([88], api.activated)
+
+    def test_renderer_alt_tab_hides_chat_without_stealing_focus(self):
+        app, api, follow = renderer_follow_fixture(overlay_focused=False)
+
+        follow(app, 0.1)
+
+        self.assertFalse(app.game_shown)
+        self.assertEqual(["focus-lost"], app.actions)
+        self.assertEqual([], api.activated)
+
+    def test_renderer_minimize_hides_even_if_overlay_focus_is_stale(self):
+        app, api, follow = renderer_follow_fixture(game_visible=False)
+
+        follow(app, 0.1)
+
+        self.assertFalse(app.game_shown)
+        self.assertEqual(["focus-lost"], app.actions)
+        self.assertEqual([], api.activated)
+
     def test_overlay_dpi_awareness_uses_per_monitor_v2_before_kivy(self):
         class User32:
             def __init__(self):
@@ -836,6 +866,24 @@ class RendererBoundaryTests(unittest.TestCase):
         self.assertEqual([api.original], api.restored)
         self.assertEqual(set(), api.hotkeys)
 
+    def test_mail_click_is_delivered_without_activating_passive_overlay(self):
+        api = FakeHookAPI()
+        hook = OverlayWindowHook(hwnd=77, geometry=lambda: OverlayGeometry(mailbox=Rect(10, 10, 40, 40)), action=lambda kind: None, api=api)
+        hook.install()
+        hook.set_interaction_state(game_active=True, ledger_open=False)
+        # Win32 WM_MOUSEACTIVATE -> MA_NOACTIVATE: deliver the click without
+        # taking focus from the game (which would hide this passive panel).
+        self.assertEqual(3, api.callback(77, 0x0021, 0, 0))
+        hook.set_interaction_state(game_active=True, ledger_open=True)
+        self.assertEqual(3, api.callback(77, 0x0021, 0, 0))
+
+    def test_chat_click_can_activate_overlay_for_keyboard_input(self):
+        api = FakeHookAPI()
+        hook = OverlayWindowHook(hwnd=77, geometry=lambda: OverlayGeometry(mailbox=Rect(10, 10, 40, 40)), action=lambda kind: None, api=api)
+        hook.install()
+        hook.set_interaction_state(game_active=True, ledger_open=True, accepts_keyboard=True, game_hwnd=123)
+        self.assertEqual(987, api.callback(77, 0x0021, 0, 0))
+
 
 class FakeVisibilityUser32:
     def __init__(self, *, set_position_result=True, apply_visibility=True):
@@ -964,6 +1012,43 @@ class FakeHookAPI:
 
     def call_original(self, original, hwnd, message, wparam, lparam):
         return 987
+
+
+def renderer_follow_fixture(*, overlay_focused=True, game_visible=True):
+    """Run the actual nested renderer tick without opening a Kivy/Win32 window."""
+    import math
+
+    source = Path("word_factori/overlay_renderer.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    method = next(node for node in ast.walk(tree)
+                  if isinstance(node, ast.FunctionDef) and node.name == "follow_game")
+    method.body = [ast.copy_location(ast.Global(names=node.names), node)
+                   if isinstance(node, ast.Nonlocal) else node for node in method.body]
+    namespace = {
+        "math": math,
+        "font_name": "WordFactoriFredoka",
+        "Window": SimpleNamespace(focus=overlay_focused, left=0, top=0, width=800, height=600),
+    }
+    exec(compile(ast.Module(body=[method], type_ignores=[]), "renderer_tick", "exec"), namespace)
+    api = FakeHookAPI()
+    hook = OverlayWindowHook(hwnd=77, geometry=lambda: None, action=lambda kind: None, api=api)
+    hook.install()
+    hook.set_interaction_state(
+        game_active=True, ledger_open=True, accepts_keyboard=True, game_hwnd=88,
+    )
+    # Chat owned focus; the Items snapshot has just disabled keyboard entry.
+    actions = []
+    state = SimpleNamespace(visible=game_visible, focused=False, hwnd=88,
+                            bounds=(0, 0, 800, 600), scale=1.0)
+    app = SimpleNamespace(
+        native=SimpleNamespace(tick=lambda: "ready", hook=hook, set_visible=lambda shown: True),
+        tracker=SimpleNamespace(sample=lambda: state),
+        snapshot={"is_open": True, "accepts_keyboard": False},
+        game_shown=True, root_layout=SimpleNamespace(opacity=1, disabled=False),
+        last_focus=True, display_scale=1.0, geometry=None,
+        cancel_expiry_events=lambda: None, send_action=actions.append, actions=actions,
+    )
+    return app, api, namespace["follow_game"]
 
 
 if __name__ == "__main__":

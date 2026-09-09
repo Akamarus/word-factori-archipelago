@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 from dataclasses import dataclass, replace
 import json
 import os
@@ -31,12 +32,15 @@ from .bridge import (
     save_state,
 )
 from .client_core import (
+    ResolvedCampaign,
     campaign_compatible,
     goal_reached,
     inventory_view,
+    location_codes_for_native_slots,
     mod_is_selected,
     parse_connection_url,
     resolve_game_slot_binding,
+    resolve_room_campaign,
     state_identity,
     utc_observed_at,
 )
@@ -48,14 +52,15 @@ from .client_messages import (
     make_client_message,
     normalize_print_json,
 )
-from .campaign import CampaignManifest, campaign_digest, campaign_for_level_set
-from .data import DEFAULT_LEVEL_SET, GAME, ITEM_NAME_TO_ID, LOCATIONS, LocationData, locations_for_level_set
+from .data import GAME, ITEM_NAME_TO_ID, LocationData
 from .dispatch import DispatchDirection, DispatchEvent, received_event, sent_event
 from .dispatch_store import (
     DispatchLedger, ledger_path, load_ledger, mark_all_read, reconcile_received, record_event,
     save_ledger,
 )
 from .mod import render_levels, write_campaign_identity, write_levels
+from .capabilities import FULL
+from .enhanced_runtime import RUNTIME_NAME, patch_ready, publish_runtime
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
 from .overlay_preferences import load_preferences
 from .overlay_protocol import (
@@ -100,9 +105,17 @@ class WordFactoriCommandProcessor(ClientCommandProcessor):
         """Manually report a completed level by 1-based number, target word, or location name."""
         try:
             index = self.ctx.resolve_location(identifier)
+            location = next(
+                entry for entry in self.ctx.active_locations()
+                if entry.slot_index == index
+            )
         except ValueError as error:
             self.output(str(error))
             return
+        self.output(
+            f"Reporting {location.name} "
+            f"(page {location.page_index + 1}, slot {(location.slot_index % 6) + 1})."
+        )
         asyncio.create_task(self.ctx.report_indices({index}))
 
     def _cmd_wf_scan(self) -> None:
@@ -276,7 +289,23 @@ class WordFactoriContext(CommonContext):
             self.slot_data = dict(args.get("slot_data") or {})
             self.last_render_signature = None
             self.prepare_selected_campaign()
-            self.connected_identity = self.current_identity()
+            try:
+                self.connected_identity = self.current_identity()
+            except (TypeError, ValueError) as error:
+                logger.warning("Room state identity unavailable: %s", error)
+                self.connected_identity = None
+                self.bridge_state = BridgeState.empty()
+                self.dispatch_ledger = DispatchLedger.empty("disconnected")
+                self.pending_overlay_events = ()
+                self.overlay_state = OverlayState(
+                    max_visible=self.overlay_preferences.max_visible,
+                    connection_status="connected",
+                    reload_required=self._prepared_campaign_reload_required,
+                )
+                self._overlay_identity = None
+                self.publish_overlay()
+                self._bridge_warning(CAMPAIGN_MISMATCH)
+                return
             try:
                 baseline_ledger = load_ledger(
                     self.dispatch_path(self.connected_identity), self.connected_identity,
@@ -311,9 +340,13 @@ class WordFactoriContext(CommonContext):
                 self.connected_identity, self._snapshot_dispatch_items(self.items_received),
                 frozenset(self.checked_locations), connection_generation,
             ))
-            asyncio.create_task(self._resend_pending_checks())
+            asyncio.create_task(self._resend_pending_checks(
+                self.connected_identity, connection_generation,
+            ))
             if self.goal_identity == self.connected_identity:
-                asyncio.create_task(self._send_goal())
+                asyncio.create_task(self._send_goal(
+                    self.connected_identity, connection_generation,
+                ))
         elif cmd == "ReceivedItems":
             asyncio.create_task(self._received_items_reconcile(
                 self.connected_identity, self._snapshot_dispatch_items(self.items_received),
@@ -380,7 +413,9 @@ class WordFactoriContext(CommonContext):
             )
 
     def current_identity(self) -> str:
-        return state_identity(self.room_seed_name, self.team, self.slot, self.auth)
+        return state_identity(
+            self.room_seed_name, self.team, self.slot, self.auth, self.slot_data,
+        )
 
     def _snapshot_dispatch_item(self, item) -> _DispatchItemSnapshot:
         return _DispatchItemSnapshot(
@@ -776,6 +811,13 @@ class WordFactoriContext(CommonContext):
         self, owned_machines: set[str], world_access: int,
         locations: tuple[LocationData, ...],
     ) -> bool:
+        campaign = self.selected_campaign()
+        if campaign is not None and campaign.layout is not None and campaign.layout.integration_mode == "enhanced":
+            if not patch_ready(self.mod_folder):
+                raise ValueError("Enhanced room requires the verified native patch. Close the game and install the enhanced patch for this game build.")
+            levels = render_levels(owned_machines, world_access, locations=locations)
+            room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
+            return publish_runtime(self.mod_folder / RUNTIME_NAME, room, campaign.layout.digest, levels)
         signature = (tuple(sorted(owned_machines)), world_access)
         if signature == self.last_render_signature:
             return False
@@ -802,11 +844,24 @@ class WordFactoriContext(CommonContext):
         if self.update_rendered_levels(
             view.owned_machines, view.world_access, self.active_locations(),
         ):
-            logger.info("Word Factori unlocks updated. Reload the AP mod or reselect its save slot in game.")
-            self.overlay_state = apply_action(
-                self.overlay_state, OverlayAction("reload-required", "true"),
-            )
+            if self.slot_data.get("integration_mode") == "enhanced":
+                logger.info("Word Factori unlocks published. Return to Levels and enter a factory to apply them; no save reload is needed.")
+            else:
+                logger.info("Word Factori unlocks updated. Reload the AP mod or reselect its save slot in game.")
+                self.overlay_state = apply_action(
+                    self.overlay_state, OverlayAction("reload-required", "true"),
+                )
             self.publish_overlay(self.connected_identity)
+
+        if self.slot_data.get("integration_mode") == "enhanced" and self.overlay_state.reload_required:
+            try:
+                loaded = json.loads((self.mod_folder / "archipelago_native_status.json").read_text(encoding="utf-8"))
+                expected = {"schema": 1, "mode": "enhanced", "room": hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest(), "layout": self.slot_data["layout_digest"]}
+                if loaded == expected:
+                    self.overlay_state = apply_action(self.overlay_state, OverlayAction("reload-required", "false"))
+                    self.publish_overlay(self.connected_identity)
+            except (OSError, ValueError, TypeError, KeyError):
+                pass
 
     def selected_mod(self) -> bool:
         try:
@@ -822,53 +877,66 @@ class WordFactoriContext(CommonContext):
             return {}
         return payload if isinstance(payload, dict) else {}
 
-    def selected_campaign(self) -> CampaignManifest | None:
-        level_set = self.slot_data.get("level_set", DEFAULT_LEVEL_SET)
+    def selected_campaign(self) -> ResolvedCampaign | None:
         try:
-            manifest = campaign_for_level_set(level_set)
+            return resolve_room_campaign(self.slot_data)
         except (TypeError, ValueError):
             return None
-        if (
-            self.slot_data.get("campaign_id") != manifest.campaign_id
-            or self.slot_data.get("manifest_version") != manifest.version
-            or self.slot_data.get("manifest_digest") != campaign_digest(manifest)
-            or self.slot_data.get("level_count", len(manifest.levels)) != len(manifest.levels)
-        ):
-            return None
-        return manifest
 
     def active_locations(self) -> tuple[LocationData, ...]:
-        manifest = self.selected_campaign()
-        if manifest is None:
-            return ()
-        return locations_for_level_set(str(self.slot_data.get("level_set", DEFAULT_LEVEL_SET)))
+        campaign = self.selected_campaign()
+        return () if campaign is None else campaign.locations
 
     def prepare_selected_campaign(self) -> bool:
         """Install only a bundled, digest-matched curated level set for this slot."""
         self._prepared_campaign_reload_required = False
-        manifest = self.selected_campaign()
-        if manifest is None:
+        campaign = self.selected_campaign()
+        if campaign is None:
             return False
-        locations = self.active_locations()
         try:
             view = inventory_view(self.network_items())
-            self._prepared_campaign_reload_required = self.update_rendered_levels(
-                view.owned_machines, view.world_access, locations,
+            changed = self.update_rendered_levels(
+                view.owned_machines, view.world_access, campaign.locations,
             )
-            write_campaign_identity(self.campaign_path, manifest)
+            if campaign.layout is not None and campaign.layout.integration_mode == "enhanced":
+                room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
+                marker = {"schema": 1, "mode": "enhanced", "room": room, "layout": campaign.layout.digest}
+                try:
+                    installed = json.loads(self.levels_path.read_text(encoding="utf-8"))
+                    same = isinstance(installed, list) and len(installed) == len(campaign.locations) and installed[0].get("wf_ap") == marker
+                except (OSError, ValueError, TypeError, AttributeError, IndexError):
+                    same = False
+                if not same:
+                    levels = render_levels(view.owned_machines, view.world_access, locations=campaign.locations)
+                    caps = render_levels(set(FULL), 5, locations=campaign.locations)
+                    for level, cap in zip(levels, caps):
+                        level["wf_ap_caps"] = cap["module_counts"]
+                    levels[0]["wf_ap"] = marker
+                    write_levels(self.levels_path, levels)
+                self._prepared_campaign_reload_required = not same
+            else:
+                self._prepared_campaign_reload_required = changed
+            write_campaign_identity(
+                self.campaign_path, campaign.manifest, campaign.layout,
+            )
         except (OSError, TypeError, ValueError) as error:
             self._bridge_warning(f"Curated campaign installation failed: {error}")
             return False
         return True
 
     def compatible_campaign(self) -> bool:
-        return campaign_compatible(self.slot_data, self.installed_campaign())
+        return (
+            self.selected_campaign() is not None
+            and campaign_compatible(self.slot_data, self.installed_campaign())
+            and (self.slot_data.get("integration_mode") != "enhanced" or patch_ready(self.mod_folder))
+        )
 
-    def ensure_game_slot_binding(self) -> ActiveSlot | None:
+    def ensure_game_slot_binding(self, active: ActiveSlot | None = None) -> ActiveSlot | None:
         try:
-            active = read_active_slot(
-                find_save(self.factori_root.parent, Path("mods") / MOD_FOLDER)
-            )
+            if active is None:
+                active = read_active_slot(
+                    find_save(self.factori_root.parent, Path("mods") / MOD_FOLDER)
+                )
             resolved = resolve_game_slot_binding(self.bridge_state.game_slot_id, active)
         except (OSError, ValueError, KeyError, TypeError) as error:
             self._bridge_warning(f"Word Factori save binding paused: {error}")
@@ -886,63 +954,111 @@ class WordFactoriContext(CommonContext):
         if not ignore_selection_guard and not self.selected_mod():
             self._bridge_warning("Automatic checks paused: the selected Word Factori mod is not the Archipelago mod. Use /wf_scan for an explicit one-time scan.")
             return
-        active = self.ensure_game_slot_binding()
-        if active is None:
+        try:
+            active = read_active_slot(
+                find_save(self.factori_root.parent, Path("mods") / MOD_FOLDER)
+            )
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            self._bridge_warning(f"Word Factori save binding paused: {error}")
             return
         local_checks = set(active.beaten_levels)
+        try:
+            location_codes_for_native_slots(local_checks, self.active_locations())
+        except ValueError as error:
+            self._bridge_warning(
+                "Campaign/save mismatch: "
+                f"{error}. Use the Word Factori save created for this room and campaign."
+            )
+            return
         if not ignore_selection_guard and not self.selected_mod():
             self._bridge_warning("Automatic check discarded because the selected mod changed during the save read.")
             return
+        if self.ensure_game_slot_binding(active) is None:
+            return
         self.last_bridge_error = None
-        await self.report_indices(local_checks)
+        await self.report_indices(local_checks, active_slot=active)
 
-    async def report_indices(self, indices: set[int]) -> None:
+    async def report_indices(
+        self, indices: set[int], *, active_slot: ActiveSlot | None = None,
+    ) -> None:
         if self.connected_identity is None:
             self._bridge_warning("Connect to an Archipelago slot before reporting Word Factori checks.")
             return
+        expected_identity = self.connected_identity
+        expected_generation = self._connection_generation
         if not self.compatible_campaign():
             self._bridge_warning(CAMPAIGN_MISMATCH)
             return
-        if self.ensure_game_slot_binding() is None:
-            return
         locations = self.active_locations()
-        valid = {index for index in indices if 0 <= index < len(locations)}
-        server_indices = {
-            location.index for location in locations if location.code in self.checked_locations
+        try:
+            observed_codes = location_codes_for_native_slots(indices, locations)
+        except ValueError as error:
+            self._bridge_warning(
+                "Campaign/save mismatch: "
+                f"{error}. Use the Word Factori save created for this room and campaign."
+            )
+            return
+        if self.ensure_game_slot_binding(active_slot) is None:
+            return
+        server_codes = frozenset(self.checked_locations) & {
+            location.code for location in locations
         }
-        result = reconcile(self.bridge_state, [], valid, server_indices)
+        result = reconcile(self.bridge_state, [], observed_codes, server_codes)
         if result.new_checks:
-            location_ids = {
-                locations[index].code for index in result.new_checks
-            } - self.bridge_state.pending_checks
+            location_ids = set(result.new_checks) - self.bridge_state.pending_checks
             if location_ids:
                 self.bridge_state = queue_checks(self.bridge_state, location_ids)
                 save_state(self.state_path(), self.bridge_state)
                 await self.check_locations(location_ids)
-        combined = server_indices | valid
+        combined = server_codes | observed_codes
         goal = int(self.slot_data.get("goal", 0))
         target = int(self.slot_data.get("campaign_count", 25))
-        if goal_reached(goal, target, combined) and self.goal_identity != self.connected_identity:
-            self.goal_identity = self.connected_identity
-            await self._send_goal()
+        if (
+            goal_reached(goal, target, combined, locations)
+            and self.goal_identity != expected_identity
+            and self._connection_epoch_matches(expected_identity, expected_generation)
+        ):
+            self.goal_identity = expected_identity
+            await self._send_goal(expected_identity, expected_generation)
 
-    async def _resend_pending_checks(self) -> None:
-        if self.compatible_campaign() and self.ensure_game_slot_binding() is not None and self.bridge_state.pending_checks:
-            await self.check_locations(self.bridge_state.pending_checks)
+    async def _resend_pending_checks(
+        self, expected_identity: str, expected_generation: int,
+    ) -> None:
+        if not self._connection_epoch_matches(expected_identity, expected_generation):
+            return
+        if not self.compatible_campaign() or not self.bridge_state.pending_checks:
+            return
+        pending_checks = self.bridge_state.pending_checks
+        if self.ensure_game_slot_binding() is None:
+            return
+        if not self._connection_epoch_matches(expected_identity, expected_generation):
+            return
+        await self.check_locations(pending_checks)
 
-    async def _send_goal(self) -> None:
-        if self.compatible_campaign() and self.ensure_game_slot_binding() is not None:
-            await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
+    async def _send_goal(
+        self, expected_identity: str, expected_generation: int,
+    ) -> None:
+        if not self._connection_epoch_matches(expected_identity, expected_generation):
+            return
+        if not self.compatible_campaign() or self.ensure_game_slot_binding() is None:
+            return
+        if not self._connection_epoch_matches(expected_identity, expected_generation):
+            return
+        await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
 
     def resolve_location(self, identifier: str) -> int:
         locations = self.active_locations()
         value = identifier.strip()
         if value.isdigit():
-            index = int(value) - 1
-            if 0 <= index < len(locations):
-                return index
+            displayed_slot = int(value) - 1
+            matches = [
+                location.slot_index for location in locations
+                if location.slot_index == displayed_slot
+            ]
+            if len(matches) == 1:
+                return matches[0]
         folded = value.casefold()
-        matches = [location.index for location in locations if folded in {location.target.casefold(), location.name.casefold()}]
+        matches = [location.slot_index for location in locations if folded in {location.target.casefold(), location.name.casefold()}]
         if len(matches) == 1:
             return matches[0]
         raise ValueError("Use a unique 1-based level number, target word, or full location name.")
