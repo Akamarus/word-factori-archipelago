@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from tests.installer_fixture import InstallerFixture, ORIGINAL, PATCHED
 
@@ -8,7 +9,9 @@ class NativeInstallerTests(InstallerFixture):
         before = self.snapshot()
         result = self.native("-CheckOnly")
         self.assert_success(result)
-        self.assertEqual(str(self.game), result.stdout.strip())
+        resolved_game = Path(result.stdout.strip())
+        self.assertTrue(resolved_game.is_absolute())
+        self.assertTrue(self.game.samefile(resolved_game))
         self.assertEqual(before, self.snapshot())
 
     def test_unknown_game_is_rejected_without_writes_for_install_and_restore(self):

@@ -119,4 +119,8 @@ function Get-Process {
             self.assertEqual(source.read_bytes(), (self.mod_target / source.name).read_bytes())
         self.assertEqual(PATCHED, self.game.read_bytes())
         self.assertEqual(ORIGINAL, self.backup.read_bytes())
-        self.assertEqual(str(self.game), json.loads(self.receipt.read_text())["game_data"])
+        # PowerShell expands Windows 8.3 aliases (for example RUNNER~1).
+        # The receipt must identify the same absolute file, not the same spelling.
+        recorded_game = Path(json.loads(self.receipt.read_text())["game_data"])
+        self.assertTrue(recorded_game.is_absolute())
+        self.assertTrue(self.game.samefile(recorded_game))
