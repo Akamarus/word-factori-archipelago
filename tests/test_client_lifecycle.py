@@ -225,6 +225,88 @@ from word_factori.save import read_active_slot
 
 
 class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    def enhanced_room(self):
+        from word_factori.layout import build_layout
+        manifest = campaign_for_level_set("discovery_labs")
+        layout = build_layout(manifest, "discovery_labs", "shuffled_pages", random.Random(41), integration_mode="enhanced")
+        self.ctx.slot_data.update(**layout_slot_data(layout), manifest_digest=layout.digest, level_set="discovery_labs")
+        self.ctx.connected_identity = self.ctx.current_identity()
+        return layout
+
+    def install_test_patch_receipt(self):
+        import hashlib
+        from word_factori.enhanced_runtime import ORIGINAL_SHA256, PATCH_PROTOCOL, RECEIPT_NAME
+        data = Path(self.directory.name) / "data.win"
+        data.write_bytes(b"authored stand-in for a patched game")
+        pinned_hash = patch("word_factori.enhanced_runtime.PATCHED_SHA256", hashlib.sha256(data.read_bytes()).hexdigest())
+        pinned_hash.start()
+        self.addCleanup(pinned_hash.stop)
+        (self.ctx.mod_folder / RECEIPT_NAME).write_text(json.dumps({
+            "protocol": PATCH_PROTOCOL, "original_sha256": ORIGINAL_SHA256,
+            "patched_sha256": hashlib.sha256(data.read_bytes()).hexdigest(), "game_data": str(data.resolve()),
+        }))
+        return data
+
+    async def test_enhanced_campaign_requires_verified_patch_before_writing_levels(self):
+        self.enhanced_room()
+        self.assertFalse(self.ctx.prepare_selected_campaign())
+        self.assertFalse(self.ctx.levels_path.exists())
+        self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        levels = json.loads(self.ctx.levels_path.read_text())
+        self.assertEqual("enhanced", levels[0]["wf_ap"]["mode"])
+        import hashlib
+        self.assertEqual(hashlib.sha256(self.ctx.current_identity().encode()).hexdigest(), levels[0]["wf_ap"]["room"])
+        self.assertTrue(all("wf_ap_caps" in level for level in levels))
+
+    async def test_enhanced_item_updates_runtime_without_rewriting_loaded_levels_or_reload_notice(self):
+        self.enhanced_room()
+        self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        original = self.ctx.levels_path.read_bytes()
+        runtime_path = self.ctx.mod_folder / "archipelago_runtime.json"
+        before = json.loads(runtime_path.read_text())
+        self.ctx.overlay_state = OverlayState()
+        self.ctx.item_names.names[7002] = "Merger2 Access"
+        self.ctx.items_received = [make_network_item(item=7002, location=9001, player=1)]
+        await self.ctx.reconcile_received()
+        after = json.loads(runtime_path.read_text())
+        self.assertGreater(after["revision"], before["revision"])
+        self.assertNotEqual(before["levels"], after["levels"])
+        self.assertEqual(original, self.ctx.levels_path.read_bytes())
+        self.assertFalse(self.ctx.overlay_state.reload_required)
+        await self.ctx.reconcile_received()
+        self.assertEqual(after, json.loads(runtime_path.read_text()))
+        self.ctx.last_render_signature = None
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.assertFalse(self.ctx._prepared_campaign_reload_required)
+        self.assertEqual(original, self.ctx.levels_path.read_bytes())
+
+    async def test_enhanced_receipt_invalidated_by_game_update_pauses_bridge(self):
+        self.enhanced_room()
+        data = self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.assertTrue(self.ctx.compatible_campaign())
+        before = (self.ctx.mod_folder / "archipelago_runtime.json").read_bytes()
+        data.write_bytes(b"updated native game")
+        self.assertFalse(self.ctx.compatible_campaign())
+        await self.ctx.reconcile_received()
+        self.assertEqual(before, (self.ctx.mod_folder / "archipelago_runtime.json").read_bytes())
+
+    async def test_only_matching_native_loaded_acknowledgement_clears_initial_reload_notice(self):
+        self.enhanced_room()
+        self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.ctx.overlay_state = OverlayState(reload_required=True)
+        marker = json.loads(self.ctx.levels_path.read_text())[0]["wf_ap"]
+        status = self.ctx.mod_folder / "archipelago_native_status.json"
+        status.write_text(json.dumps({**marker, "room": "e" * 64}))
+        await self.ctx.reconcile_received()
+        self.assertTrue(self.ctx.overlay_state.reload_required)
+        status.write_text(json.dumps(marker))
+        await self.ctx.reconcile_received()
+        self.assertFalse(self.ctx.overlay_state.reload_required)
+
     async def test_selected_core_level_set_is_validated_and_installed_before_play(self):
         manifest = campaign_for_level_set("core_campaign")
         locations = locations_for_level_set("core_campaign")

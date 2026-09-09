@@ -37,6 +37,8 @@ from .window_tracker import Win32WindowTracker
 HTCLIENT = 1
 HTTRANSPARENT = -1
 WM_NCHITTEST = 0x0084
+WM_MOUSEACTIVATE = 0x0021
+MA_NOACTIVATE = 3
 WM_HOTKEY = 0x0312
 VK_F8 = 0x77
 VK_ESCAPE = 0x1B
@@ -762,6 +764,11 @@ class OverlayWindowHook:
         self._visible = False
 
     def _window_procedure(self, hwnd: int, message: int, wparam: int, lparam: int) -> int:
+        if message == WM_MOUSEACTIVATE and not self._accepts_keyboard:
+            # Do not let SDL activate a passive items/mail window. Losing
+            # game focus hides it, leaving the click pending until the user
+            # clicks back into the game. Keep the mouse event, not the focus.
+            return MA_NOACTIVATE
         if message == WM_HOTKEY and int(wparam) == _HOTKEY_ID:
             if self._game_active:
                 self._action("toggle")
@@ -1755,8 +1762,11 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                         self.rebuild()
             accepts_keyboard = bool(self.snapshot.get("accepts_keyboard", False))
             overlay_focused = bool(getattr(Window, "focus", False))
+            # Visibility follows the focused window, not the next tab's input
+            # policy. On Chat -> Items the overlay still owns focus until the
+            # hook below returns it to the game. Hiding first loses that handoff.
             game_active = state is not None and state.visible and (
-                state.focused or (accepts_keyboard and overlay_focused)
+                state.focused or overlay_focused
             )
             shown = game_active and native_status == "ready"
             was_shown = self.game_shown

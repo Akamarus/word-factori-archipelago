@@ -1,5 +1,8 @@
 # Enhanced native hooks — development probe
 
+Historical first probe. Subsequent client integration, native execution, and
+installer evidence are recorded in [enhanced acceptance](enhanced-acceptance-20260909.md).
+
 On 2026-09-09 the integration-authored hook transforms compiled successfully
 against an isolated, exact-hash copy of the installed game. The resulting copy
 reopened in UndertaleModTool and decompiled with all three hook calls intact.

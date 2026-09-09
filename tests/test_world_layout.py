@@ -145,7 +145,7 @@ class _ReachabilityState:
 
 
 class WorldLayoutTests(unittest.TestCase):
-    def make_world(self, seed, *, campaign_layout=1, level_set=0, goal=0):
+    def make_world(self, seed, *, campaign_layout=1, level_set=0, goal=0, integration_mode=0):
         multiworld = _MultiWorld(seed)
         world = word_factori.WordFactoriWorld(multiworld, 1)
         world.options = types.SimpleNamespace(
@@ -153,9 +153,24 @@ class WorldLayoutTests(unittest.TestCase):
             custom_level_set=_OptionValue(level_set),
             goal=_OptionValue(goal),
             campaign_count=_OptionValue(25),
+            integration_mode=_OptionValue(integration_mode),
         )
         world.generate_early()
         return world
+
+    def test_enhanced_room_emits_matching_rules_and_contract(self):
+        world = self.make_world(29, integration_mode=1)
+        world.create_regions()
+        slot = world.fill_slot_data()
+        self.assertEqual("enhanced", slot["integration_mode"])
+        self.assertEqual(4, slot["tutorial_page_unlock_count"])
+        self.assertFalse(slot["reload_required_for_items"])
+        class State:
+            def has_all(self, needs, player): return True
+            def can_reach_location(self, name, player): return False
+        by_name = {loc.name: loc for reg in world.multiworld.regions for loc in reg.locations}
+        for data in world.selected_locations()[:6]:
+            self.assertTrue(by_name[data.name].access_rule(State()))
 
     def victory_location(self, world):
         world.create_regions()
@@ -175,7 +190,7 @@ class WorldLayoutTests(unittest.TestCase):
     def test_slot_data_describes_authoritative_native_layout(self):
         slot_data = self.make_world(104729).fill_slot_data()
 
-        self.assertEqual("tutorial_six_then_four_v1", slot_data["progression_model"])
+        self.assertEqual("machines_tutorial_six_then_four_v1", slot_data["progression_model"])
         self.assertEqual(6, slot_data["page_size"])
         self.assertEqual("supported", slot_data["integration_mode"])
         self.assertEqual(6, slot_data["tutorial_page_unlock_count"])

@@ -122,7 +122,8 @@ def resolve_room_campaign(slot_data: Mapping[str, object]) -> ResolvedCampaign:
 
     if slot_data.get("progression_model") == "four_of_six_v1":
         raise ValueError("Unpublished beta room used incorrect native rules. Regenerate the room with the current APWorld.")
-    if slot_data.get("progression_model") != PROGRESSION_MODEL:
+    from .layout import MACHINE_MODELS
+    if slot_data.get("progression_model") not in {PROGRESSION_MODEL, "enhanced_four_of_six_v1", *MACHINE_MODELS}:
         raise ValueError("room progression model is unsupported")
     layout_payload = {
         field: slot_data.get(field) for field in _LAYOUT_SLOT_DATA_FIELDS

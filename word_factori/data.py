@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .campaign import CampaignManifest, CampaignRecord, campaign_digest, campaign_for_level_set
-from .layout import CampaignLayout, PAGE_SIZE, layout_entries
+from .layout import CampaignLayout, MACHINE_MODELS, PAGE_SIZE, layout_entries
 
 GAME = "Word Factori"
 BASE_ID = 975_300_000
@@ -65,10 +65,13 @@ def locations_for_layout(
     manifest: CampaignManifest, layout: CampaignLayout,
 ) -> tuple[LocationData, ...]:
     """Project canonical records into their layout-defined native slot order."""
-    return tuple(
+    locations = tuple(
         _location_for_record(entry.record, entry.slot_index, entry.page_index)
         for entry in layout_entries(manifest, layout)
     )
+    if layout.progression_model in MACHINE_MODELS:
+        return tuple(replace(location, world_tier=0) for location in locations)
+    return locations
 
 
 def locations_for_level_set(level_set: str) -> tuple[LocationData, ...]:
@@ -93,9 +96,9 @@ STICKER_NAMES = (
 NEW_ITEM_NAMES = ("Progressive World Access",) + STICKER_NAMES
 ITEM_NAMES = LEGACY_ITEM_NAMES + NEW_ITEM_NAMES
 ITEM_NAME_TO_ID = {name: BASE_ID + index for index, name in enumerate(ITEM_NAMES, start=1)}
-PROGRESSION_ITEMS = MACHINE_ITEMS[1:] + ("Progressive World Access",) * 5
+PROGRESSION_ITEMS = MACHINE_ITEMS[1:]
 STICKER_ITEMS = tuple(sticker for sticker in STICKER_NAMES for _ in range(5))
-ITEM_POOL = PROGRESSION_ITEMS + STICKER_ITEMS
+ITEM_POOL = PROGRESSION_ITEMS + STICKER_ITEMS + STICKER_NAMES[:5]
 
 REGION_REQUIREMENTS = {
     "Starter Workshop": 0,

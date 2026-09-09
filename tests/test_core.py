@@ -65,7 +65,7 @@ class DataTests(unittest.TestCase):
         self.assertEqual([index // 6 for index in range(40)], [location.page_index for location in LOCATIONS])
         self.assertEqual(40, len({location.name for location in LOCATIONS}))
         self.assertEqual(40, len(ITEM_POOL))
-        self.assertEqual(5, ITEM_POOL.count("Progressive World Access"))
+        self.assertEqual(0, ITEM_POOL.count("Progressive World Access"))
         self.assertNotIn("Progressive Word Length", ITEM_POOL)
         self.assertFalse(any(name.endswith("Permit") for name in ITEM_POOL))
 

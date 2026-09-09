@@ -25,7 +25,8 @@ if str(ROOT) not in sys.path:
 from word_factori.campaign import campaign_for_level_set
 from word_factori.capabilities import requirements_for_record
 from word_factori.data import locations_for_level_set
-from word_factori.layout import PAGE_SIZE, PAGE_UNLOCK_COUNT, TUTORIAL_PAGE_UNLOCK_COUNT
+from word_factori.layout import MACHINE_MODELS, PAGE_SIZE, PAGE_UNLOCK_COUNT, TUTORIAL_PAGE_UNLOCK_COUNT
+from word_factori.version import VERSION
 
 MAX_MULTIDATA_MEMBER_BYTES = 16 * 1024 * 1024
 MAX_MULTIDATA_PAYLOAD_BYTES = 64 * 1024 * 1024
@@ -65,6 +66,8 @@ class GenerationIdentity:
     level_count: int | None = None
     layout_algorithm: str = ""
     location_projection: tuple[tuple[str, str, int], ...] = ()
+    integration_mode: str = "supported"
+    progression_model: str = ""
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,7 @@ class MatrixCase:
     level_set: str
     goal: str
     campaign_layout: str = "shuffled_pages"
+    integration_mode: str = "supported"
 
 
 @dataclass(frozen=True)
@@ -108,6 +112,7 @@ Word Factori:
   campaign_count: 25
   custom_level_set: {case.level_set}
   campaign_layout: {case.campaign_layout}
+  integration_mode: {case.integration_mode}
 """
 
 
@@ -268,14 +273,14 @@ def replay_progression_choices(
         previous_page_reachable = PAGE_UNLOCK_COUNT
         for page_start in range(0, len(ordered), PAGE_SIZE):
             page = ordered[page_start:page_start + PAGE_SIZE]
-            threshold = TUTORIAL_PAGE_UNLOCK_COUNT if page_start == PAGE_SIZE else PAGE_UNLOCK_COUNT
+            threshold = TUTORIAL_PAGE_UNLOCK_COUNT if page_start == PAGE_SIZE and identity.integration_mode == "supported" else PAGE_UNLOCK_COUNT
             if page_start and previous_page_reachable < threshold:
                 previous_page_reachable = 0
                 continue
             page_reachable = 0
             for record in page:
-                if record.world_tier > world_access:
-                    if page_start == 0:
+                if identity.progression_model not in MACHINE_MODELS and record.world_tier > world_access:
+                    if page_start == 0 and identity.integration_mode == "supported":
                         break
                     continue
                 if any(
@@ -284,7 +289,7 @@ def replay_progression_choices(
                 ):
                     reachable.add(record.name)
                     page_reachable += 1
-                elif page_start == 0:
+                elif page_start == 0 and identity.integration_mode == "supported":
                     break
             previous_page_reachable = page_reachable
         return reachable
@@ -374,6 +379,8 @@ def extract_generation_identity(archive_path: Path, *, player: int) -> Generatio
         level_count=_required_slot_field(slot_data, "level_count", int),
         layout_algorithm=_required_slot_field(slot_data, "layout_algorithm", str),
         location_projection=location_projection,
+        integration_mode=slot_data.get("integration_mode", "supported"),
+        progression_model=slot_data.get("progression_model", ""),
     )
 
 
@@ -385,8 +392,9 @@ def _requested_identity(case: MatrixCase) -> dict:
         "campaign_count": 25,
         "level_count": level_count,
         "level_order_count": level_count,
-        "layout_algorithm": "fixed_pages_v1" if case.campaign_layout == "fixed_pages" else "balanced_pages_v2",
-        "implementation_version": "1.3.0",
+        "layout_algorithm": "enhanced_balanced_pages_v1" if case.integration_mode == "enhanced" else ("fixed_pages_v1" if case.campaign_layout == "fixed_pages" else "balanced_pages_v2"),
+        "integration_mode": case.integration_mode,
+        "implementation_version": VERSION,
     }
 
 
@@ -398,6 +406,7 @@ def _generated_identity(identity: GenerationIdentity) -> dict:
         "level_count": identity.level_count,
         "level_order_count": len(identity.level_order),
         "layout_algorithm": identity.layout_algorithm,
+        "integration_mode": identity.integration_mode,
         "implementation_version": identity.implementation_version,
     }
 
@@ -795,7 +804,7 @@ def main() -> int:
         "completed_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "generator": str(args.generator.resolve()),
         "expected_ap_version": "0.6.7",
-        "expected_word_factori_version": "1.3.0",
+        "expected_word_factori_version": VERSION,
         "seed_range": [args.seed_start, args.seed_end],
         "matrix_summary": {
             "cases": len(rows),

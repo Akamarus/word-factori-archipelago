@@ -37,7 +37,7 @@ else:
 
 
     class WordFactoriWorld(World):
-        """Build words from I while Archipelago unlocks machines and campaign worlds."""
+        """Build words from I while Archipelago unlocks production machines."""
         game = GAME
         web = WordFactoriWeb()
         options_dataclass = WordFactoriOptions
@@ -63,6 +63,8 @@ else:
             )
             self._layout = build_layout(
                 self._manifest, self._level_set, layout_mode, self.random,
+                integration_mode="enhanced" if int(self.options.integration_mode.value) == 1 else "supported",
+                machine_only=True,
             )
             self._locations = locations_for_layout(self._manifest, self._layout)
             self.multiworld.local_early_items[self.player]["Merger2 Access"] = 1
@@ -79,12 +81,13 @@ else:
                 starter.connect(
                     regions[region_name],
                     f"Open {region_name}",
-                    lambda state, count=tier: state.has("Progressive World Access", self.player, count),
+                    # New rooms use machine/recipe rules at locations; region
+                    # names organize content, not additional inventory gates.
                 )
             locations = self.selected_locations()
             for data in locations:
                 location = WordFactoriLocation(self.player, data.name, data.code, regions[data.region])
-                set_rule(location, access_rule_for(data, locations, self.player))
+                set_rule(location, access_rule_for(data, locations, self.player, integration_mode=self._layout.integration_mode))
                 regions[data.region].locations.append(location)
             campaign_goal = int(self.options.goal.value) == 0
             victory_region = menu if campaign_goal else regions["Final Contract"]
@@ -145,5 +148,5 @@ else:
                     for location in locations
                 ],
                 "mod_folder": "word factori archipelago",
-                "reload_required_for_items": True,
+                "reload_required_for_items": self._layout.integration_mode != "enhanced",
             }

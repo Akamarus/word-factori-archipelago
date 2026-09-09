@@ -25,11 +25,12 @@ def previous_page_names(
 
 def access_rule_for(
     location: LocationData, locations: tuple[LocationData, ...], player: int,
+    *, integration_mode: str = "supported",
 ):
     requirements = requirements_for(location)
     predecessors = previous_page_names(location, locations)
-    threshold = TUTORIAL_PAGE_UNLOCK_COUNT if location.page_index == 1 else PAGE_UNLOCK_COUNT
-    if 0 < location.slot_index < PAGE_SIZE:
+    threshold = TUTORIAL_PAGE_UNLOCK_COUNT if location.page_index == 1 and integration_mode == "supported" else PAGE_UNLOCK_COUNT
+    if integration_mode == "supported" and 0 < location.slot_index < PAGE_SIZE:
         predecessors = (locations[location.slot_index - 1].name,)
         threshold = 1
 

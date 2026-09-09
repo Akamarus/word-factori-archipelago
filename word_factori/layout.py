@@ -7,7 +7,7 @@ import json
 from typing import Any
 
 from .campaign import CampaignManifest, CampaignRecord, campaign_digest
-from .capabilities import FULL, unavoidable_nonbootstrap_machines
+from .capabilities import FULL, requirements_for_record, unavoidable_nonbootstrap_machines
 
 
 PAGE_SIZE = 6
@@ -16,6 +16,11 @@ TUTORIAL_PAGE_UNLOCK_COUNT = 6
 PROGRESSION_MODEL = "tutorial_six_then_four_v1"
 FIXED_ALGORITHM = "fixed_pages_v1"
 SHUFFLED_ALGORITHM = "balanced_pages_v2"
+ENHANCED_ALGORITHM = "enhanced_balanced_pages_v1"
+ENHANCED_MODEL = "enhanced_four_of_six_v1"
+MACHINE_MODEL = "machines_tutorial_six_then_four_v1"
+ENHANCED_MACHINE_MODEL = "machines_enhanced_four_of_six_v1"
+MACHINE_MODELS = frozenset({MACHINE_MODEL, ENHANCED_MACHINE_MODEL})
 TUTORIAL_KEYS = (
     "complete-i", "complete-c", "complete-v", "complete-l", "complete-o", "complete-a",
 )
@@ -93,7 +98,8 @@ def _balanced_page(
 
 
 def shuffled_layout(
-    manifest: CampaignManifest, level_set: str, random_source: Any
+    manifest: CampaignManifest, level_set: str, random_source: Any,
+    *, enhanced_starter: tuple[str, ...] | None = None,
 ) -> CampaignLayout:
     records = {record.stable_key: record for record in manifest.levels}
     starter_page = tuple(
@@ -103,6 +109,9 @@ def shuffled_layout(
     )
     if starter_page != TUTORIAL_KEYS:
         raise ValueError("balanced_pages_v2 requires the canonical tutorial order")
+    enhanced = enhanced_starter is not None
+    if enhanced:
+        starter_page = enhanced_starter
     anchors = {*starter_page, "pitchfork-final"}
     if not anchors <= set(records):
         raise ValueError("balanced_pages_v2 could not satisfy page constraints")
@@ -126,7 +135,7 @@ def shuffled_layout(
 
     def candidate_allowed(stable_key: str, page_index: int) -> bool:
         kind = records[stable_key].kind
-        if page_index == 0 and kind in {"challenge", "discovery", "final"}:
+        if page_index == 0 and kind in ({"challenge", "final"} if enhanced else {"challenge", "discovery", "final"}):
             return False
         return not (page_index < 2 and kind == "challenge")
 
@@ -147,7 +156,7 @@ def shuffled_layout(
                 ),
             ):
                 return False
-            ordered_page = starter_page if page_index == 0 else tuple(
+            ordered_page = starter_page if page_index == 0 and not enhanced else tuple(
                 sorted(page, key=lambda stable_key: (priorities[stable_key], stable_key))
             )
             pages[page_index] = ordered_page
@@ -263,12 +272,14 @@ def shuffled_layout(
         raise ValueError("balanced_pages_v2 could not satisfy page constraints")
     ordered_stable_keys = tuple(stable_key for page in pages for stable_key in page)
     layout = CampaignLayout(
-        algorithm=SHUFFLED_ALGORITHM,
+        algorithm=ENHANCED_ALGORITHM if enhanced else SHUFFLED_ALGORITHM,
         level_set=level_set,
-        progression_model=PROGRESSION_MODEL,
+        progression_model=ENHANCED_MODEL if enhanced else PROGRESSION_MODEL,
         base_manifest_digest=campaign_digest(manifest),
         ordered_stable_keys=ordered_stable_keys,
         digest="",
+        integration_mode="enhanced" if enhanced else "supported",
+        tutorial_page_unlock_count=4 if enhanced else 6,
     )
     layout = replace(layout, digest=_layout_digest(layout))
     validate_layout(manifest, layout)
@@ -276,8 +287,38 @@ def shuffled_layout(
 
 
 def build_layout(
-    manifest: CampaignManifest, level_set: str, mode: str, random_source: Any
+    manifest: CampaignManifest, level_set: str, mode: str, random_source: Any,
+    *, integration_mode: str = "supported", machine_only: bool = False,
 ) -> CampaignLayout:
+    if machine_only:
+        layout = build_layout(manifest, level_set, mode, random_source, integration_mode=integration_mode)
+        layout = replace(layout, progression_model=(
+            ENHANCED_MACHINE_MODEL if integration_mode == "enhanced" else MACHINE_MODEL
+        ))
+        layout = replace(layout, digest=_layout_digest(layout))
+        validate_layout(manifest, layout)
+        return layout
+    if integration_mode not in {"supported", "enhanced"}:
+        raise ValueError("layout integration mode is unsupported")
+    if integration_mode == "enhanced":
+        if mode != "shuffled_pages":
+            raise ValueError("Enhanced mode requires shuffled_pages")
+        early = {"Bender Access", "Merger2 Access", "Rotation Access"}
+        starters = [r.stable_key for r in manifest.levels
+                    if r.region == "Starter Workshop" and r.stable_key not in {"complete-i", "complete-c"}
+                    and any(route <= early for route in requirements_for_record(r))]
+        later = [r.stable_key for r in manifest.levels
+                 if r.region != "Starter Workshop" and r.kind not in {"challenge", "final"}]
+        if len(starters) < 2 or len(later) < 2:
+            raise ValueError("Enhanced campaign has insufficient early/later candidates")
+        for _ in range(50):
+            first = ("complete-i", "complete-c", *random_source.sample(starters, 2), *random_source.sample(later, 2))
+            try:
+                return shuffled_layout(manifest, level_set, random_source, enhanced_starter=first)
+            except ValueError as error:
+                if "could not satisfy page constraints" not in str(error):
+                    raise
+        raise ValueError("Enhanced campaign could not satisfy page constraints")
     if mode == "fixed_pages":
         return fixed_layout(manifest, level_set)
     if mode == "shuffled_pages":
@@ -288,17 +329,18 @@ def build_layout(
 def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
     if not isinstance(layout, CampaignLayout):
         raise ValueError("layout is invalid")
-    if layout.algorithm not in {FIXED_ALGORITHM, SHUFFLED_ALGORITHM}:
+    enhanced = layout.integration_mode == "enhanced"
+    if layout.algorithm not in ({ENHANCED_ALGORITHM} if enhanced else {FIXED_ALGORITHM, SHUFFLED_ALGORITHM}):
         raise ValueError("layout algorithm is invalid")
-    if layout.progression_model != PROGRESSION_MODEL:
+    if layout.progression_model not in ({ENHANCED_MODEL, ENHANCED_MACHINE_MODEL} if enhanced else {PROGRESSION_MODEL, MACHINE_MODEL}):
         raise ValueError("layout progression model is invalid")
-    if layout.integration_mode != "supported":
+    if layout.integration_mode not in {"supported", "enhanced"}:
         raise ValueError("layout integration mode is unsupported")
     if any(type(value) is not int for value in (
         layout.page_size, layout.tutorial_page_unlock_count, layout.later_page_unlock_count,
     )) or (
         layout.page_size != PAGE_SIZE
-        or layout.tutorial_page_unlock_count != TUTORIAL_PAGE_UNLOCK_COUNT
+        or layout.tutorial_page_unlock_count != (4 if enhanced else TUTORIAL_PAGE_UNLOCK_COUNT)
         or layout.later_page_unlock_count != PAGE_UNLOCK_COUNT
     ):
         raise ValueError("layout page parameters are invalid")
@@ -311,11 +353,11 @@ def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
         raise ValueError("layout stable keys must be complete and unique")
     if set(layout_keys) != set(manifest_keys):
         raise ValueError("layout stable keys do not match the manifest")
-    if layout_keys[:PAGE_SIZE] != TUTORIAL_KEYS:
+    if not enhanced and layout_keys[:PAGE_SIZE] != TUTORIAL_KEYS:
         raise ValueError("layout must preserve canonical tutorial order")
     if layout.algorithm == FIXED_ALGORITHM and layout_keys != manifest_keys:
         raise ValueError("fixed layout must preserve canonical stable key order")
-    if layout.algorithm == SHUFFLED_ALGORITHM:
+    if layout.algorithm in {SHUFFLED_ALGORITHM, ENHANCED_ALGORITHM}:
         records = {record.stable_key: record for record in manifest.levels}
         pages = tuple(
             layout_keys[start:start + layout.page_size]
@@ -326,17 +368,25 @@ def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
             for record in manifest.levels
             if record.region == "Starter Workshop" and record.kind != "discovery"
         }
-        if len(starter_page) != PAGE_SIZE or set(pages[0]) != starter_page:
+        if not enhanced and (len(starter_page) != PAGE_SIZE or set(pages[0]) != starter_page):
             raise ValueError("balanced layout has invalid canonical starter page")
+        if enhanced:
+            first = [records[key] for key in pages[0]]
+            early = {"Bender Access", "Merger2 Access", "Rotation Access"}
+            if not {"complete-i", "complete-c"} <= set(pages[0]) or sum(
+                r.region == "Starter Workshop" and any(route <= early for route in requirements_for_record(r))
+                for r in first
+            ) < 4 or sum(r.region != "Starter Workshop" for r in first) != 2:
+                raise ValueError("Enhanced layout has invalid early-solvable first page")
         if "pitchfork-final" not in pages[-1]:
             raise ValueError("balanced layout has invalid final-page anchor")
         for page_index, page in enumerate(pages):
             kinds = {records[key].kind for key in page}
-            if page_index == 0 and kinds & {"challenge", "discovery", "final"}:
+            if page_index == 0 and kinds & ({"challenge", "final"} if enhanced else {"challenge", "discovery", "final"}):
                 raise ValueError("balanced layout has invalid first-page anchors")
             if page_index < 2 and "challenge" in kinds:
                 raise ValueError("balanced layout has invalid challenge anchor")
-            if page_index == 0 and "discovery" in kinds:
+            if not enhanced and page_index == 0 and "discovery" in kinds:
                 raise ValueError("balanced layout has invalid discovery anchor")
             if len(page) == PAGE_SIZE and not _balanced_page(
                 page,

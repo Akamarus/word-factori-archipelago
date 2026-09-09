@@ -35,9 +35,18 @@ class CampaignLayoutOption(Choice):
     default = 1
 
 
+class IntegrationMode(Choice):
+    """Enhanced requires the optional native patch and shuffled pages. Supported leaves the game binary unchanged."""
+    display_name = "Integration Mode"
+    option_supported = 0
+    option_enhanced = 1
+    default = 0
+
+
 @dataclass
 class WordFactoriOptions(PerGameCommonOptions):
     goal: Goal
     campaign_count: CampaignCount
     custom_level_set: CustomLevelSet
     campaign_layout: CampaignLayoutOption
+    integration_mode: IntegrationMode

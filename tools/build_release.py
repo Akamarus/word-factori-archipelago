@@ -29,6 +29,7 @@ WORLD_SOURCE_NAMES = (
     "word_factori/data.py",
     "word_factori/dispatch.py",
     "word_factori/dispatch_store.py",
+    "word_factori/enhanced_runtime.py",
     "word_factori/docs/setup_en.md",
     "word_factori/layout.py",
     "word_factori/mod.py",
@@ -93,6 +94,7 @@ def write_release() -> None:
     files = [
         ROOT / "README.md", ROOT / "LICENSE", ROOT / "install.ps1",
         ROOT / "Install Word Factori Archipelago.cmd", WORLD_ARCHIVE,
+        ROOT / "docs/enhanced-playtest.md",
     ]
     for root_name in roots:
         files.extend(path for path in (ROOT / root_name).rglob("*") if path.is_file())

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 from dataclasses import dataclass, replace
 import json
 import os
@@ -58,6 +59,8 @@ from .dispatch_store import (
     save_ledger,
 )
 from .mod import render_levels, write_campaign_identity, write_levels
+from .capabilities import FULL
+from .enhanced_runtime import RUNTIME_NAME, patch_ready, publish_runtime
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
 from .overlay_preferences import load_preferences
 from .overlay_protocol import (
@@ -808,6 +811,13 @@ class WordFactoriContext(CommonContext):
         self, owned_machines: set[str], world_access: int,
         locations: tuple[LocationData, ...],
     ) -> bool:
+        campaign = self.selected_campaign()
+        if campaign is not None and campaign.layout is not None and campaign.layout.integration_mode == "enhanced":
+            if not patch_ready(self.mod_folder):
+                raise ValueError("Enhanced room requires the verified native patch. Close the game and install the enhanced patch for this game build.")
+            levels = render_levels(owned_machines, world_access, locations=locations)
+            room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
+            return publish_runtime(self.mod_folder / RUNTIME_NAME, room, campaign.layout.digest, levels)
         signature = (tuple(sorted(owned_machines)), world_access)
         if signature == self.last_render_signature:
             return False
@@ -834,11 +844,24 @@ class WordFactoriContext(CommonContext):
         if self.update_rendered_levels(
             view.owned_machines, view.world_access, self.active_locations(),
         ):
-            logger.info("Word Factori unlocks updated. Reload the AP mod or reselect its save slot in game.")
-            self.overlay_state = apply_action(
-                self.overlay_state, OverlayAction("reload-required", "true"),
-            )
+            if self.slot_data.get("integration_mode") == "enhanced":
+                logger.info("Word Factori unlocks published. Return to Levels and enter a factory to apply them; no save reload is needed.")
+            else:
+                logger.info("Word Factori unlocks updated. Reload the AP mod or reselect its save slot in game.")
+                self.overlay_state = apply_action(
+                    self.overlay_state, OverlayAction("reload-required", "true"),
+                )
             self.publish_overlay(self.connected_identity)
+
+        if self.slot_data.get("integration_mode") == "enhanced" and self.overlay_state.reload_required:
+            try:
+                loaded = json.loads((self.mod_folder / "archipelago_native_status.json").read_text(encoding="utf-8"))
+                expected = {"schema": 1, "mode": "enhanced", "room": hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest(), "layout": self.slot_data["layout_digest"]}
+                if loaded == expected:
+                    self.overlay_state = apply_action(self.overlay_state, OverlayAction("reload-required", "false"))
+                    self.publish_overlay(self.connected_identity)
+            except (OSError, ValueError, TypeError, KeyError):
+                pass
 
     def selected_mod(self) -> bool:
         try:
@@ -872,9 +895,27 @@ class WordFactoriContext(CommonContext):
             return False
         try:
             view = inventory_view(self.network_items())
-            self._prepared_campaign_reload_required = self.update_rendered_levels(
+            changed = self.update_rendered_levels(
                 view.owned_machines, view.world_access, campaign.locations,
             )
+            if campaign.layout is not None and campaign.layout.integration_mode == "enhanced":
+                room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
+                marker = {"schema": 1, "mode": "enhanced", "room": room, "layout": campaign.layout.digest}
+                try:
+                    installed = json.loads(self.levels_path.read_text(encoding="utf-8"))
+                    same = isinstance(installed, list) and len(installed) == len(campaign.locations) and installed[0].get("wf_ap") == marker
+                except (OSError, ValueError, TypeError, AttributeError, IndexError):
+                    same = False
+                if not same:
+                    levels = render_levels(view.owned_machines, view.world_access, locations=campaign.locations)
+                    caps = render_levels(set(FULL), 5, locations=campaign.locations)
+                    for level, cap in zip(levels, caps):
+                        level["wf_ap_caps"] = cap["module_counts"]
+                    levels[0]["wf_ap"] = marker
+                    write_levels(self.levels_path, levels)
+                self._prepared_campaign_reload_required = not same
+            else:
+                self._prepared_campaign_reload_required = changed
             write_campaign_identity(
                 self.campaign_path, campaign.manifest, campaign.layout,
             )
@@ -887,6 +928,7 @@ class WordFactoriContext(CommonContext):
         return (
             self.selected_campaign() is not None
             and campaign_compatible(self.slot_data, self.installed_campaign())
+            and (self.slot_data.get("integration_mode") != "enhanced" or patch_ready(self.mod_folder))
         )
 
     def ensure_game_slot_binding(self, active: ActiveSlot | None = None) -> ActiveSlot | None:
