@@ -1,10 +1,10 @@
 # Word Factori Experimental Multiworld Setup
 
-Version **1.4.0 is an unreleased development candidate** with live acceptance pending. It uses one integration: enhanced, shuffled, machine-only progression. There is no integration-mode or fixed-layout selector. Generate a **new Archipelago room** with this APWorld and client and use a **fresh empty mod save**; old rooms are unsupported and cannot be converted by updating.
+Version **[1.4.0 is a tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.0)** with a full connected playthrough still pending. It uses one integration: enhanced, shuffled, machine-only progression. There is no integration-mode or fixed-layout selector. Generate a **new Archipelago room** with this APWorld and client and use a **fresh empty mod save**; old rooms are unsupported and cannot be converted by updating.
 
 ## Install
 
-1. Extract **word-factori-archipelago-1.4.0.zip**, the single player package.
+1. Download and extract **[word-factori-archipelago-1.4.0.zip](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.0/word-factori-archipelago-1.4.0.zip)**, the single player package. Do not use GitHub's automatic source-code archives.
 2. Close Word Factori and Archipelago.
 3. Double-click the root **Install Word Factori Archipelago.cmd**. It installs the APWorld and mod, verifies the original game, preserves a backup, and applies the required native delta patch.
 4. If prompted, select `data.win` from your Word Factori installation (Steam → Manage → Browse local files).

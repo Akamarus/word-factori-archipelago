@@ -8,7 +8,7 @@ An experimental public beta for playing **Word Factori** with [Archipelago](http
 
 ## New in 1.4.0: machine-only progression
 
-The main branch contains the **1.4.0 development candidate**, not a new packaged release.
+**[Download the 1.4.0 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.0).** This is an experimental testing build, not a stable release; a full connected playthrough remains pending.
 
 - **No World Access items in new seeds.** Your machines and recipe requirements determine which puzzles you can solve, alongside page progression.
 - **I stays available in every level.** Discovery Labs still restrict machine types, and challenge factories retain their machine limits.
@@ -69,7 +69,7 @@ Generate a **new room** with the matching 1.4.0 APWorld and client and use a **f
 
 ## Simple installation
 
-1. Obtain **word-factori-archipelago-1.4.0.zip**, the single player package for this development candidate. This candidate has not been published yet.
+1. Download **[word-factori-archipelago-1.4.0.zip](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.0/word-factori-archipelago-1.4.0.zip)**, the single player package. Use this ZIP, not GitHub's automatic source-code archives.
 2. Extract the ZIP to a normal folder.
 3. Close Word Factori and Archipelago.
 4. Double-click the root **Install Word Factori Archipelago.cmd**. It installs the APWorld and mod, verifies your game, backs up the original game data, and applies the required native delta patch. If prompted, select `data.win` in your Steam Word Factori installation (Steam → Manage → Browse local files).
@@ -245,7 +245,7 @@ Complete any four levels on the current full page, including page one. If the th
 
 ## Current limitations
 
-- Version 1.4.0 is a local development candidate; machine-only progression still needs live acceptance.
+- Version 1.4.0 is a tester prerelease; machine-only progression still needs a full connected in-game playthrough.
 - Arbitrary Workshop packs are not imported into generated seeds.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.
 - Sticker items are AP filler rather than in-game sticker grants.
@@ -253,7 +253,7 @@ Complete any four levels on the current full page, including page one. If the th
 - The full in-game client is implemented. Its primary Windows 10/125%/2560×1440 path is live-smoke tested; password-room, 100%/150% scaling, ultrawide, and multi-monitor permutations remain in the beta matrix.
 - Exclusive fullscreen is not supported; use windowed or borderless mode.
 
-The required native patch uses the existing compiled delta. Isolated engine tests verify first-page freedom, factory-entry machine refresh, malformed-state fallback, and vanilla isolation; a normal connected in-game playthrough of this candidate is still required before public release. See [native integration and playtest details](docs/enhanced-playtest.md). These earlier isolated results do not establish complete live acceptance of 1.4.0.
+The required native patch uses the existing compiled delta. Isolated engine tests verify first-page freedom, factory-entry machine refresh, malformed-state fallback, and vanilla isolation; a normal connected in-game playthrough is still required before a stable release. See [native integration and playtest details](docs/enhanced-playtest.md). These earlier isolated results do not establish complete live acceptance of 1.4.0.
 
 ## Verification evidence
 

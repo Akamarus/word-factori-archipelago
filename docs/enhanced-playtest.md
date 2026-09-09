@@ -1,6 +1,6 @@
 # Native integration and playtest details
 
-Version **1.4.0 is an unreleased development candidate**, not a newly published release. The integration always uses enhanced, shuffled, machine-only progression and requires the reversible native patch for the exact verified Steam Word Factori build 12616577. There is one player package and one installation route. This document records technical behavior and acceptance work for that integration.
+Version **[1.4.0 is a tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.0)**, not a stable release. The integration always uses enhanced, shuffled, machine-only progression and requires the reversible native patch for the exact verified Steam Word Factori build 12616577. There is one player package and one installation route. This document records technical behavior and acceptance work for that integration.
 
 ## Runtime behavior
 
@@ -36,6 +36,6 @@ For integration updates, close the game and Archipelago and double-click the sam
 - Automated Python checks cover room logic, first-page variation, duplicate delivery, reconnects, runtime publication, and installed-game verification. Results must correspond to the candidate being evaluated.
 - The previous tiered build passed 40 real AP 0.6.7 generations. Those results are historical evidence and do not establish generation or live acceptance of this machine-only candidate.
 - Isolated native-engine tests execute the real button availability method, page threshold function, and factory module-count hook. They check all six first-page buttons, runtime refresh, wrong-room/stale data rejection, caps, and quiet handling of missing/malformed files.
-- A **full visual playthrough with a live AP server and the normal game screens remains pending** and is a public-release gate. The isolated harness substitutes startup and unrelated UI dependencies and uses a separate save directory.
+- A **full visual playthrough with a live AP server and the normal game screens remains pending** and is a stable-release gate. The isolated harness substitutes startup and unrelated UI dependencies and uses a separate save directory.
 
-If something fails, close the game and keep the client log. Do not delete your saves. A single packaged installation route does not establish completed live acceptance or publication of this candidate.
+If something fails, close the game and keep the client log. Do not delete your saves. Publication for testing does not establish completed live acceptance or stable-release readiness.
