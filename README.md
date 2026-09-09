@@ -6,7 +6,16 @@ An experimental public beta for playing **Word Factori** with [Archipelago](http
 
 ![Word Factori with the integrated Archipelago Chat panel open](docs/images/word-factori-archipelago-chat.png)
 
-Version 1.4.0 is a local development candidate: new seeds use **machine-only progression**, without World Access items. I is always available; received machines, valid recipes, and page requirements determine what you can complete. In default supported mode, finish I, C, V, L, O, and A in order to open page two. Later unlocked pages offer all six levels; completing any four opens the next page. Enhanced mode also randomizes the first page and uses four completions there. Live acceptance remains pending; this is not a newly published release.
+## New in 1.4.0: machine-only progression
+
+The main branch contains the **1.4.0 development candidate**, not a new packaged release.
+
+- **No World Access items in new seeds.** Your machines and recipe requirements determine which puzzles you can solve, alongside page progression.
+- **I stays available in every level.** Discovery Labs still restrict machine types, and challenge factories retain their machine limits.
+- **More freedom with enhanced mode.** The first page is randomized, all six levels on an unlocked page are selectable, and four completions advance. New machines apply when you re-enter a factory, without restarting the game.
+- **Start a new room and empty mod save to use these rules.** Existing rooms keep their original rules and World Access locks; updating the client does not convert them.
+
+Default supported mode still uses the ordered I, C, V, L, O, A tutorial, followed by four-of-six page progression. It does not patch the game and still requires reloading the mod save after machine unlocks. Enhanced mode requires the separate opt-in playtest package. Live acceptance remains pending, and in-game missing-machine notices are still planned.
 
 If you tested an earlier unpublished 1.3.0 build that shuffled A onto the first slot, generate a **new room** with this build and use an empty mod save. Those rooms used incorrect native unlock rules and cannot be repaired just by updating the client. Existing 1.2.x rooms retain their original canonical layout and server rules.
 
