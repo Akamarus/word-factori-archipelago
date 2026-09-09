@@ -175,9 +175,11 @@ class WorldLayoutTests(unittest.TestCase):
     def test_slot_data_describes_authoritative_native_layout(self):
         slot_data = self.make_world(104729).fill_slot_data()
 
-        self.assertEqual("four_of_six_v1", slot_data["progression_model"])
+        self.assertEqual("tutorial_six_then_four_v1", slot_data["progression_model"])
         self.assertEqual(6, slot_data["page_size"])
-        self.assertEqual(4, slot_data["page_unlock_count"])
+        self.assertEqual("supported", slot_data["integration_mode"])
+        self.assertEqual(6, slot_data["tutorial_page_unlock_count"])
+        self.assertEqual(4, slot_data["later_page_unlock_count"])
         self.assertEqual(slot_data["manifest_digest"], slot_data["layout_digest"])
         self.assertEqual(
             list(range(len(slot_data["locations"]))),

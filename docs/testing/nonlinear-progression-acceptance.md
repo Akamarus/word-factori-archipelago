@@ -1,52 +1,100 @@
 # Nonlinear Progression Acceptance Matrix
 
-This matrix separates repeatable automated evidence from live Word Factori acceptance. Automated success does not promote a live row. Every 1.3.0 live observation remains pending until the dedicated live pass records the environment, room, steps, and result.
+The 2026-09-09 correction supersedes the September 2 four-of-six beta evidence.
+That earlier generator passed its own incorrect model; the live game exposed
+the tutorial restriction. Old beta rooms must be regenerated. Automated checks
+below do not certify live gameplay.
 
 | Behavior | Automated evidence | Live acceptance |
 |---|---|---|
-| Generate both 30-level `core_campaign` and 40-level `discovery_labs` shuffled layouts with the canonical Starter Workshop on page one | Unit coverage plus 200/200 real AP 0.6.7 solo generations passed on 2026-09-02 | Pending live test |
-| Repeating a seed produces the same complete layout digest and order | Unit coverage plus real AP seed 13000 repeat / 13001 variation passed | Pending live test |
-| Different seeds vary the shuffled page order | Verified by seed-variation tests | Pending live test |
-| Three completed checks keep the next-page frontier closed; four open it | Verified by access-rule boundary tests | Pending live test |
-| Either remaining page check can be deferred and revisited after the next page opens | Four-of-six reachability is verified automatically; revisit behavior requires the game | Pending live test |
-| A native save-slot completion maps to the canonical stable Archipelago location ID | Verified by layout projection, client-core, manual-check, and shuffled lifecycle tests | Pending live test |
-| Reconnect reconciliation does not duplicate a shuffled check or received item | Verified by shuffled lifecycle and bridge idempotency tests | Pending live test |
-| Campaign Count and Final Factory goals use canonical identities after shuffling | Verified by world and client-core goal tests | Pending live test |
-| The 1.3.0 client connects to a legacy 1.2.x room and retains canonical order | Verified by legacy room resolution and client lifecycle tests | Pending live test |
-| A layout digest or installed identity mismatch blocks rewrites and check submission | Verified by validation, compatibility, and client lifecycle tests | Pending live test |
+| Tutorial remains I, C, V, L, O, A in both level sets | Layout tests and native-order validation | Pending corrected-build playthrough |
+| Tutorial levels require their immediate predecessor | Access-rule and independent sphere-replay regressions | Pending |
+| Page two requires all six tutorial levels | Boundary and tutorial-gap regressions | Pending |
+| Page three onward uses four of the previous six, with independent siblings | Access-rule tests and sphere replay | Pending |
+| Later page membership/order varies; IDs do not | 200 distinct real AP seeds, repeatability and canonical projection checks | Pending |
+| Missing/tampered layout and invalid beta contracts are rejected | Layout, identity and client tests | Pending |
+| Correct save is selected using slot zero's previous_save pointer | Multi-slot, stale-flag and selection-menu fixtures | Pending |
+| Duplicate items/checks, reconnect and both goals remain idempotent | Bridge, client lifecycle and goal tests | Pending |
+| Enhanced AP-only menu and factory-entry hooks compile | Exact-hash isolated build, reopen and hook inspection | Pending; not installed or shipped |
 
-## Feasibility boundary
+## Corrected model
 
-The first shuffled page contains exactly the six canonical Starter Workshop records. Their slot order is shuffled, while later page membership remains seed-specific. The APWorld requests one local-early `Merger2 Access` and one local-early `Rotation Access`. Merger2 is required because only Complete I and Complete C are reachable at bootstrap; Rotation is also local-early because a Merger2 plus Progressive World Access placement can otherwise leave only Complete V as the next unused reachable check.
+Supported rooms use `tutorial_six_then_four_v1`; shuffled layouts use
+`balanced_pages_v2`. Slot identity includes supported integration mode and
+separate tutorial (6) and later-page (4) thresholds, all covered by the digest.
+The unpublished `four_of_six_v1` contract is rejected with regeneration guidance.
+Legacy 1.2.x rooms keep their canonical mapping.
 
-Each full page retains at least three distinct unavoidable machine profiles. Reflection, Merger3, and Merger4 are unavoidable for at most three checks per full page. Rotation uses the same limit except that at most one later complete Core Campaign page may contain four Rotation-unavoidable checks; no page may exceed four. This narrow exception is necessary because fixing the canonical starter membership leaves 13 Rotation-unavoidable records for four later Core pages, whose capacity would otherwise be only 12. The four-of-six unlock rule and all canonical region tiers remain unchanged.
+The tutorial is sequential. Later full pages retain at least three machine
+profiles. Reflection, Merger3 and Merger4 are unavoidable for at most three
+checks per page; at most one later Core page may have four Rotation-dependent
+checks. Challenges stay outside the first two pages and Pitchfork stays on the
+last page. AP fill requests local-early Merger2 and Rotation.
 
-AP 0.6.7 spoiler `Playthrough` lines identify the advancement checks retained by spoiler pruning; they do not enumerate every reachable location. Automated acceptance therefore parses each sphere's progression items and replays them over the generated `level_order` using the production recipe requirements, Progressive World Access tiers, and four-of-six page frontier. Already-used playthrough checks are removed from each reconstructed choice set. A room must have at least one pre-goal replay state, and the required number of states with at least two reachable unused locations is `min(3, total pre-goal replay states)`. Evidence records the observed numerator, required denominator, total states, and per-state counts explicitly.
+The independent replay counts recipe- and tier-reachable locations in native
+order. It stops the tutorial at the first missing capability, requires all six
+before page two, then uses four-of-six gates. Spoiler checks are validated
+against that state, and already-used checks are removed from the available
+choice count. The existing minimum number of broad pre-goal states
+(`min(3, total pre-goal states)`) was retained.
 
-## Automated AP 0.6.7 record
+## Real AP 0.6.7 generation — 2026-09-09
 
-On 2026-09-02, seeds 13000–13049 were generated with `C:\ProgramData\Archipelago\ArchipelagoGenerate.exe` as 200 independent one-player rooms: Core Campaign / Campaign Count, Core Campaign / Final Factory, Discovery Labs / Campaign Count, and Discovery Labs / Final Factory. The definitive audited-identity run from 15:16:46 through 15:35:38 EDT took 18 minutes 52 seconds. All 200 exited successfully, matched their requested level set, numeric goal, campaign count, level count and actual order length, layout algorithm, and implementation version, and passed proportional replay acceptance. Every evidence row stores those requested and generated values separately with `identity_validation: Pass`. Same-seed Discovery Count generation reproduced digest `b3cd5448ff934026163258f8a2087c88863ae3f8a414493e30413f82466210db`; seed 13001 changed it to `c5b48378ad56b76ed01c8f17f9e291d58421879d02745f69329c517e2fbe0d5d` while preserving all 40 stable keys and AP IDs.
+An isolated copy of the installed AP 0.6.7 runtime loaded the newly built
+APWorld; the installed APWorld and game saves were not modified.
 
-After the final identity hardening, the same 200-case matrix was rerun from 16:07:57 through 16:28:51 EDT against an isolated copy of the installed AP 0.6.7 runtime containing the freshly built worktree APWorld. All 200 rows passed again. Each row additionally records `canonical_identity_validation: Pass`, proving exact cardinality and exact canonical stable-key/name/AP-ID projection rather than relying on sets that could hide duplicate or consistently corrupted rows. Deterministic seed 13000/13001 validation also passed. The installed APWorld was not changed for this rerun; the controller must perform the final installation separately.
+| Level set / goal | Shuffled seeds | Result | Fixed-layout seed |
+|---|---|---|---|
+| Core / Campaign Count | 19000–19049 | 50/50 pass | 19201 pass |
+| Core / Final Factory | 19050–19099 | 50/50 pass | 19201 pass |
+| Discovery / Campaign Count | 19100–19149 | 50/50 pass | 19201 pass |
+| Discovery / Final Factory | 19150–19199 | 50/50 pass | 19201 pass |
 
-## Live record
+All 204 cases passed generation, requested identity, exact canonical
+key/name/ID projection and progression replay. This is 200 distinct shuffled
+seeds across the four cases, not 200 seeds per case. These are solo-room tests;
+a mixed-game multiworld is still a live acceptance case.
 
-No 1.3.0 live acceptance is recorded yet. Do not replace `Pending live test` with a pass until the behavior has been observed in Word Factori and the evidence identifies the AP version, game build, generated room, display environment, exact steps, and outcome.
+Discovery Count seed 13000 reproduced layout digest
+`28e1521bea2e9cdde22cf36417ebd34a170d497bcc8db6fa94af334de0f19ef9`.
+Seed 13001 changed it to
+`33e1c1a85afdb7f3e5d83d0862c3d5683e2f4ab3751f36a51454375e0a664389`
+while preserving all 40 stable keys and AP IDs.
 
-The prepared 40-level shuffled Campaign Count room is:
+Local per-case evidence, the four-worker runner and the combined report are
+under `tests/output-native-20260909/`. The combined report is
+`completed-evidence.json`. The APWorld used for generation had SHA-256
+`4feccdb2f2db0b9fa2a15aea9ecbd0d6d6f0d53eda1d0591d008221ec29fbbf4`;
+subsequent changes concern save parsing, client validation and documentation,
+not world generation rules.
 
-- AP: 0.6.7; seed: 13050; player: `WF_Live_Discovery_Count_13050`
-- archive: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-_wer3wzd\output\AP_87260292545628931117.zip`
-- YAML: `C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-_wer3wzd\players\player.yaml`
-- layout digest: `d07d55295bd9bb46d44822872e8482f675a465d5bc167869b02f003ff3889dbe`
-- page one, in native slot order: Complete A, Complete C, Complete L, Complete I, Complete O, Complete V
+## Prepared supported-mode playthrough
 
-The currently installed APWorld remains the earlier SHA-256 `8A1AC5102B841CEDE7575BEC432D253B4E79BFA847C58F7B261F12697E1A1F2E`. The fresh build used to generate this room has SHA-256 `F6CF0D532F02D46E8B1769E3A2EEF398E1DE2413EB27C7B076C9CFE9B2FB781F` and was loaded only in the isolated runtime copy. No save or external installation was touched.
+- AP version: 0.6.7; seed: 19200; player: `WF_Live_Discovery_Count_19200`.
+- Level set: Discovery Labs, 40 locations; goal: 25 campaign checks.
+- Room archive: `tests/output-native-20260909/word-factori-ap067-live-refiqevy/output/AP_44962264437902995202.zip`.
+- Player YAML: same room directory, `players/player.yaml`.
+- Layout digest: `115b6429e5097b1e4a2f0cebdbd2b39e393d9eb9d95bf7bf43bff20eb764c0b1`.
+- First page: I, C, V, L, O, A.
 
-The user must host the prepared archive, launch Word Factori Client, connect as `WF_Live_Discovery_Count_13050`, select the integration mod in Word Factori, and use a clean empty mod save. Record the six page-one targets; confirm the arrow is disabled after three completions and enabled after four; open page two with two unfinished checks; later complete one deferred check after its needed machine arrives; verify native slots report the canonical AP names; reconnect/restart and verify the mapping is unchanged with no duplicate check or item; and record one Campaign Count goal update. Do not mark any live row passed without those observations.
+Install the candidate using the normal installer, host the room archive, and
+connect the client before entering an empty AP mod save. Existing saves must
+not be deleted. Confirm sequential tutorial selection and a closed page-two
+arrow after five checks. After A, verify every page-two button is selectable;
+machine/world restrictions can still make individual puzzles temporarily
+unsolvable. Finish any four page-two checks, advance, then return to a deferred
+check. Check AP names, reconnect without duplicate rewards, and complete the
+25-check goal.
 
-To extract the room identity again without launching the game, run:
+Supported mode still requires reselecting the AP save after machine/world
+unlocks. No restart-free claim is made for this package.
 
-```powershell
-C:\Users\Jack\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools\verify_generation_matrix.py --inspect-archive 'C:\Users\Jack\AppData\Local\Temp\word-factori-ap067-live-_wer3wzd\output\AP_87260292545628931117.zip'
-```
+## Enhanced prototype boundary
+
+See [enhanced probe notes](enhanced-patch-probe.md). The three narrow hooks
+compiled into an isolated copy and were found again after reopening it.
+Native execution, malformed/wrong-room runtime behavior, vanilla isolation and
+live machine refresh have not yet been tested. Enhanced room generation,
+client state publication, reversible player installation and binary delta
+distribution are not enabled. They remain follow-on work before enhanced mode
+can be offered in the normal installer.

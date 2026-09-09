@@ -1,6 +1,6 @@
 # Native Open Pages and Enhanced Patch Design
 
-**Status:** Approved in chat; written specification pending user review
+**Status:** Approved; supported implementation complete pending live acceptance. Enhanced hooks compiled as an isolated development probe; enhanced client/installer integration remains pending.
 
 **Date:** 2026-09-02
 
@@ -183,6 +183,11 @@ The active-save parser must be corrected independently before any future
 feature writes Word Factori save data. Multiple serialized slots can carry the
 same active-looking flag, and the live experiments proved that selecting a slot
 by that flag alone is unsafe. This design does not require save writes.
+
+September 9 inspection verified the actual selection pointer:
+`slots["0"].previous_save` names the selected slot, regardless of which slot it
+names. `-1` denotes the save-selection menu. The supported parser now follows
+that pointer, rejects invalid or ambiguous selection, and never writes saves.
 
 Completion submission, received-item reconciliation, reconnect behavior, and
 victory remain idempotent. A native index outside the validated layout fails

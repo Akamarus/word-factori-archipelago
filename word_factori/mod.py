@@ -60,7 +60,9 @@ def write_campaign_identity(
             "progression_model": layout.progression_model,
             "layout_algorithm": layout.algorithm,
             "page_size": layout.page_size,
-            "page_unlock_count": layout.page_unlock_count,
+            "integration_mode": layout.integration_mode,
+            "tutorial_page_unlock_count": layout.tutorial_page_unlock_count,
+            "later_page_unlock_count": layout.later_page_unlock_count,
         })
     _write_json(path, payload)
 

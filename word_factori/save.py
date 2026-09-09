@@ -12,26 +12,33 @@ class ActiveSlot:
     beaten_levels: frozenset[int]
 
 
-def _matches_previous_save(key: str, slot: dict) -> bool:
-    previous = slot.get("previous_save")
+def _selected_slot_key(previous: object) -> str:
     if isinstance(previous, bool) or not isinstance(previous, (int, float)):
-        return False
+        raise ValueError("save selection pointer is not a native integer")
     try:
-        numeric_key = int(key)
-        return str(numeric_key) == key and int(previous) == numeric_key and previous == numeric_key
+        numeric_key = int(previous)
     except (OverflowError, ValueError):
-        return False
+        raise ValueError("save selection pointer is not a native integer") from None
+    if numeric_key < 0 or numeric_key != previous:
+        raise ValueError("No Word Factori save is selected. Enter the room's save slot first.")
+    return str(numeric_key)
 
 
 def parse_active_slot(payload: dict) -> ActiveSlot:
+    if not isinstance(payload, dict):
+        raise ValueError("save is not an object")
     slots = payload.get("slots")
     if not isinstance(slots, dict):
         raise ValueError("save has no slots object")
+    if any(not isinstance(slot, dict) for slot in slots.values()):
+        raise ValueError("save slot is not an object")
     active = [(str(key), slot) for key, slot in slots.items() if slot.get("slot_is_active") == 1]
-    if len(active) > 1:
-        selected = [(key, slot) for key, slot in active if _matches_previous_save(key, slot)]
-        if len(selected) == 1:
-            active = selected
+    # Verified native slot-button behavior stores the selection in slot zero,
+    # regardless of which slot is selected. Activation flags persist for all
+    # used slots. -1 means the player has returned to the save-selection menu.
+    if "previous_save" in slots.get("0", {}):
+        selected_key = _selected_slot_key(slots["0"]["previous_save"])
+        active = [(key, slot) for key, slot in active if key == selected_key]
     if len(active) != 1:
         raise ValueError(f"expected exactly one active slot, found {len(active)}")
     key, slot = active[0]

@@ -25,7 +25,7 @@ if str(ROOT) not in sys.path:
 from word_factori.campaign import campaign_for_level_set
 from word_factori.capabilities import requirements_for_record
 from word_factori.data import locations_for_level_set
-from word_factori.layout import PAGE_SIZE, PAGE_UNLOCK_COUNT
+from word_factori.layout import PAGE_SIZE, PAGE_UNLOCK_COUNT, TUTORIAL_PAGE_UNLOCK_COUNT
 
 MAX_MULTIDATA_MEMBER_BYTES = 16 * 1024 * 1024
 MAX_MULTIDATA_PAYLOAD_BYTES = 64 * 1024 * 1024
@@ -72,6 +72,7 @@ class MatrixCase:
     key: str
     level_set: str
     goal: str
+    campaign_layout: str = "shuffled_pages"
 
 
 @dataclass(frozen=True)
@@ -106,7 +107,7 @@ Word Factori:
   goal: {case.goal}
   campaign_count: 25
   custom_level_set: {case.level_set}
-  campaign_layout: shuffled_pages
+  campaign_layout: {case.campaign_layout}
 """
 
 
@@ -267,12 +268,15 @@ def replay_progression_choices(
         previous_page_reachable = PAGE_UNLOCK_COUNT
         for page_start in range(0, len(ordered), PAGE_SIZE):
             page = ordered[page_start:page_start + PAGE_SIZE]
-            if page_start and previous_page_reachable < PAGE_UNLOCK_COUNT:
+            threshold = TUTORIAL_PAGE_UNLOCK_COUNT if page_start == PAGE_SIZE else PAGE_UNLOCK_COUNT
+            if page_start and previous_page_reachable < threshold:
                 previous_page_reachable = 0
                 continue
             page_reachable = 0
             for record in page:
                 if record.world_tier > world_access:
+                    if page_start == 0:
+                        break
                     continue
                 if any(
                     requirements <= item_names
@@ -280,6 +284,8 @@ def replay_progression_choices(
                 ):
                     reachable.add(record.name)
                     page_reachable += 1
+                elif page_start == 0:
+                    break
             previous_page_reachable = page_reachable
         return reachable
 
@@ -379,7 +385,7 @@ def _requested_identity(case: MatrixCase) -> dict:
         "campaign_count": 25,
         "level_count": level_count,
         "level_order_count": level_count,
-        "layout_algorithm": "balanced_pages_v1",
+        "layout_algorithm": "fixed_pages_v1" if case.campaign_layout == "fixed_pages" else "balanced_pages_v2",
         "implementation_version": "1.3.0",
     }
 

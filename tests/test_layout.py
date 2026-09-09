@@ -13,6 +13,27 @@ from word_factori.mod import render_levels
 
 
 class FixedLayoutTests(unittest.TestCase):
+    def test_room_contract_carries_native_thresholds_and_rejects_mismatches(self):
+        manifest = campaign_for_level_set("core_campaign")
+        layout = fixed_layout(manifest, "core_campaign")
+        payload = layout_slot_data(layout)
+        self.assertEqual("supported", payload.get("integration_mode"))
+        self.assertEqual(6, payload.get("tutorial_page_unlock_count"))
+        self.assertEqual(4, payload.get("later_page_unlock_count"))
+        self.assertNotIn("page_unlock_count", payload)
+        for field, value in (("integration_mode", "enhanced"),
+                             ("tutorial_page_unlock_count", 4),
+                             ("later_page_unlock_count", 6)):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                layout_from_slot_data(manifest, "core_campaign", {**payload, field: value})
+
+    def test_unpublished_beta_contract_requires_regeneration(self):
+        manifest = campaign_for_level_set("core_campaign")
+        payload = layout_slot_data(fixed_layout(manifest, "core_campaign"))
+        payload["progression_model"] = "four_of_six_v1"
+        with self.assertRaisesRegex(ValueError, "[Rr]egenerate"):
+            layout_from_slot_data(manifest, "core_campaign", payload)
+
     def test_fixed_layout_preserves_canonical_order_but_has_layout_identity(self):
         manifest = campaign_for_level_set("discovery_labs")
         layout = fixed_layout(manifest, "discovery_labs")
@@ -97,15 +118,16 @@ class ShuffledLayoutTests(unittest.TestCase):
                                 self.assertLess(count, 4)
                 self.assertLessEqual(later_pages_with_four_rotation, 1)
 
-    def test_page_one_slot_order_and_later_page_membership_still_vary(self):
+    def test_tutorial_order_is_safe_while_later_page_membership_varies(self):
         manifest = campaign_for_level_set("discovery_labs")
         layouts = [
             shuffled_layout(manifest, "discovery_labs", random.Random(seed))
             for seed in range(20)
         ]
 
-        self.assertGreater(
-            len({layout.ordered_stable_keys[:6] for layout in layouts}), 1
+        self.assertEqual(
+            {("complete-i", "complete-c", "complete-v", "complete-l", "complete-o", "complete-a")},
+            {layout.ordered_stable_keys[:6] for layout in layouts},
         )
         self.assertGreater(
             len({frozenset(layout.ordered_stable_keys[6:12]) for layout in layouts}),

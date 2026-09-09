@@ -78,16 +78,17 @@ class DataTests(unittest.TestCase):
         levels = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual([location.target for location in LOCATIONS], [level["text"] for level in levels])
 
-    def test_first_native_page_has_no_sibling_frontier(self):
+    def test_tutorial_v_requires_its_native_predecessor(self):
         rule = access_rule_for(LOCATIONS[2], LOCATIONS, player=1)
-        self.assertTrue(rule(State({"Merger2 Access"}, set())))
+        self.assertFalse(rule(State({"Merger2 Access"}, set())))
+        self.assertTrue(rule(State({"Merger2 Access"}, {LOCATIONS[1].name})))
 
-    def test_later_native_page_requires_four_reachable_predecessor_slots(self):
+    def test_second_native_page_requires_all_six_tutorial_slots(self):
         rule = access_rule_for(LOCATIONS[6], LOCATIONS, player=1)
         all_machines = set(MACHINE_ITEMS)
         page_one = [location.name for location in LOCATIONS[:6]]
-        self.assertFalse(rule(State(all_machines, page_one[:3])))
-        self.assertTrue(rule(State(all_machines, page_one[:4])))
+        self.assertFalse(rule(State(all_machines, page_one[:5])))
+        self.assertTrue(rule(State(all_machines, page_one)))
 
     def test_recipe_requirements_remain_closed_when_frontier_is_open(self):
         rule = access_rule_for(LOCATIONS[6], LOCATIONS, player=1)
@@ -170,11 +171,42 @@ class ModTests(unittest.TestCase):
         self.assertEqual(layout.progression_model, payload["progression_model"])
         self.assertEqual(layout.algorithm, payload["layout_algorithm"])
         self.assertEqual(layout.page_size, payload["page_size"])
-        self.assertEqual(layout.page_unlock_count, payload["page_unlock_count"])
+        self.assertEqual("supported", payload["integration_mode"])
+        self.assertEqual(6, payload["tutorial_page_unlock_count"])
+        self.assertEqual(4, payload["later_page_unlock_count"])
         self.assertEqual(len(manifest.levels), payload["level_count"])
 
 
 class SaveTests(unittest.TestCase):
+    def test_slot_zero_previous_save_selects_another_activated_slot(self):
+        payload = {"slots": {
+            "0": {"slot_is_active": 1, "previous_save": 2.0,
+                  "random_id": "old-slot", "beaten_levels": {"29": 1}},
+            "2": {"slot_is_active": 1, "previous_save": -1.0,
+                  "random_id": "selected-slot", "beaten_levels": {"0": 1}},
+        }}
+        selected = parse_active_slot(payload)
+        self.assertEqual("2", selected.key)
+        self.assertEqual("selected-slot", selected.random_id)
+        self.assertEqual(frozenset({0}), selected.beaten_levels)
+
+    def test_save_selection_menu_and_invalid_pointer_never_report_old_progress(self):
+        for previous in (-1, 2, 0.5, True, "0"):
+            payload = {"slots": {
+                "0": {"slot_is_active": 1, "previous_save": previous,
+                      "random_id": "old-slot", "beaten_levels": {"29": 1}},
+            }}
+            with self.subTest(previous=previous), self.assertRaises(ValueError):
+                parse_active_slot(payload)
+
+    def test_other_slots_previous_save_is_not_a_selection_authority(self):
+        payload = {"slots": {
+            "0": {"slot_is_active": 1, "previous_save": -1, "random_id": "zero"},
+            "1": {"slot_is_active": 1, "previous_save": 1, "random_id": "one"},
+        }}
+        with self.assertRaises(ValueError):
+            parse_active_slot(payload)
+
     def test_active_slot_exposes_stable_random_id_and_completion_set(self):
         payload = {"slots": {
             "0": {"slot_is_active": 0, "random_id": "blank-slot", "beaten_levels": {}},
@@ -364,10 +396,18 @@ class ClientCoreTests(unittest.TestCase):
 
         self.assertTrue(resolved.legacy)
         self.assertIsNone(resolved.layout)
-        self.assertEqual(
-            list(range(len(manifest.levels))),
-            [location.slot_index for location in resolved.locations],
-        )
+        self.assertEqual(list(range(40)), [location.slot_index for location in resolved.locations])
+
+    def test_partial_modern_contract_cannot_fall_back_to_legacy(self):
+        manifest = campaign_for_level_set("discovery_labs")
+        for field, value in (("integration_mode", "enhanced"), ("layout_digest", "0" * 64),
+                             ("page_unlock_count", 4)):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                resolve_room_campaign({
+                    "campaign_id": manifest.campaign_id, "manifest_version": manifest.version,
+                    "manifest_digest": campaign_digest(manifest), "level_count": 40,
+                    field: value,
+                })
 
     def test_game_font_is_resolved_only_when_neighboring_file_exists(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -456,7 +496,9 @@ class ClientCoreTests(unittest.TestCase):
             "progression_model",
             "layout_algorithm",
             "page_size",
-            "page_unlock_count",
+            "integration_mode",
+            "tutorial_page_unlock_count",
+            "later_page_unlock_count",
             "base_manifest_digest",
             "layout_digest",
         ):

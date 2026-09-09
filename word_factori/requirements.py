@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .data import LOCATIONS, LocationData
 from .capabilities import requirements_for_record
-from .layout import PAGE_SIZE, PAGE_UNLOCK_COUNT
+from .layout import PAGE_SIZE, PAGE_UNLOCK_COUNT, TUTORIAL_PAGE_UNLOCK_COUNT
 
 WORD_REQUIREMENT_OPTIONS = {
     location.target: location.requirement_options
@@ -28,11 +28,15 @@ def access_rule_for(
 ):
     requirements = requirements_for(location)
     predecessors = previous_page_names(location, locations)
+    threshold = TUTORIAL_PAGE_UNLOCK_COUNT if location.page_index == 1 else PAGE_UNLOCK_COUNT
+    if 0 < location.slot_index < PAGE_SIZE:
+        predecessors = (locations[location.slot_index - 1].name,)
+        threshold = 1
 
     def rule(state) -> bool:
         if predecessors and sum(
             state.can_reach_location(name, player) for name in predecessors
-        ) < PAGE_UNLOCK_COUNT:
+        ) < threshold:
             return False
         return any(state.has_all(needs, player) for needs in requirements)
 

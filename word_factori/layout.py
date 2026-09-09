@@ -12,9 +12,13 @@ from .capabilities import FULL, unavoidable_nonbootstrap_machines
 
 PAGE_SIZE = 6
 PAGE_UNLOCK_COUNT = 4
-PROGRESSION_MODEL = "four_of_six_v1"
+TUTORIAL_PAGE_UNLOCK_COUNT = 6
+PROGRESSION_MODEL = "tutorial_six_then_four_v1"
 FIXED_ALGORITHM = "fixed_pages_v1"
-SHUFFLED_ALGORITHM = "balanced_pages_v1"
+SHUFFLED_ALGORITHM = "balanced_pages_v2"
+TUTORIAL_KEYS = (
+    "complete-i", "complete-c", "complete-v", "complete-l", "complete-o", "complete-a",
+)
 _SHUFFLE_ATTEMPT_BUDGET = 100_000
 _CAPPED_MACHINES = FULL - {"Bender Access", "Merger2 Access"}
 
@@ -28,7 +32,9 @@ class CampaignLayout:
     ordered_stable_keys: tuple[str, ...]
     digest: str
     page_size: int = PAGE_SIZE
-    page_unlock_count: int = PAGE_UNLOCK_COUNT
+    integration_mode: str = "supported"
+    tutorial_page_unlock_count: int = TUTORIAL_PAGE_UNLOCK_COUNT
+    later_page_unlock_count: int = PAGE_UNLOCK_COUNT
 
 
 @dataclass(frozen=True)
@@ -45,7 +51,9 @@ def _layout_digest(layout: CampaignLayout) -> str:
         "level_set": layout.level_set,
         "ordered_stable_keys": layout.ordered_stable_keys,
         "page_size": layout.page_size,
-        "page_unlock_count": layout.page_unlock_count,
+        "integration_mode": layout.integration_mode,
+        "tutorial_page_unlock_count": layout.tutorial_page_unlock_count,
+        "later_page_unlock_count": layout.later_page_unlock_count,
         "progression_model": layout.progression_model,
     }
     encoded = json.dumps(
@@ -93,11 +101,11 @@ def shuffled_layout(
         for record in manifest.levels
         if record.region == "Starter Workshop" and record.kind != "discovery"
     )
-    if len(starter_page) != PAGE_SIZE:
-        raise ValueError("balanced_pages_v1 requires six canonical starter levels")
+    if starter_page != TUTORIAL_KEYS:
+        raise ValueError("balanced_pages_v2 requires the canonical tutorial order")
     anchors = {*starter_page, "pitchfork-final"}
     if not anchors <= set(records):
-        raise ValueError("balanced_pages_v1 could not satisfy page constraints")
+        raise ValueError("balanced_pages_v2 could not satisfy page constraints")
 
     priorities = {
         record.stable_key: random_source.random() for record in manifest.levels
@@ -139,7 +147,7 @@ def shuffled_layout(
                 ),
             ):
                 return False
-            ordered_page = tuple(
+            ordered_page = starter_page if page_index == 0 else tuple(
                 sorted(page, key=lambda stable_key: (priorities[stable_key], stable_key))
             )
             pages[page_index] = ordered_page
@@ -175,7 +183,7 @@ def shuffled_layout(
             attempts += 1
             if attempts > _SHUFFLE_ATTEMPT_BUDGET:
                 raise ValueError(
-                    "balanced_pages_v1 could not satisfy page constraints"
+                    "balanced_pages_v2 could not satisfy page constraints"
                 )
             if not candidate_allowed(stable_key, page_index):
                 continue
@@ -252,11 +260,7 @@ def shuffled_layout(
 
     remaining = frozenset(records) - anchors
     if not build_next_page(0, remaining):
-        raise ValueError("balanced_pages_v1 could not satisfy page constraints")
-
-    first_page = list(pages[0])
-    random_source.shuffle(first_page)
-    pages[0] = tuple(first_page)
+        raise ValueError("balanced_pages_v2 could not satisfy page constraints")
     ordered_stable_keys = tuple(stable_key for page in pages for stable_key in page)
     layout = CampaignLayout(
         algorithm=SHUFFLED_ALGORITHM,
@@ -288,7 +292,15 @@ def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
         raise ValueError("layout algorithm is invalid")
     if layout.progression_model != PROGRESSION_MODEL:
         raise ValueError("layout progression model is invalid")
-    if layout.page_size != PAGE_SIZE or layout.page_unlock_count != PAGE_UNLOCK_COUNT:
+    if layout.integration_mode != "supported":
+        raise ValueError("layout integration mode is unsupported")
+    if any(type(value) is not int for value in (
+        layout.page_size, layout.tutorial_page_unlock_count, layout.later_page_unlock_count,
+    )) or (
+        layout.page_size != PAGE_SIZE
+        or layout.tutorial_page_unlock_count != TUTORIAL_PAGE_UNLOCK_COUNT
+        or layout.later_page_unlock_count != PAGE_UNLOCK_COUNT
+    ):
         raise ValueError("layout page parameters are invalid")
     if layout.base_manifest_digest != campaign_digest(manifest):
         raise ValueError("layout base manifest digest does not match")
@@ -299,6 +311,8 @@ def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
         raise ValueError("layout stable keys must be complete and unique")
     if set(layout_keys) != set(manifest_keys):
         raise ValueError("layout stable keys do not match the manifest")
+    if layout_keys[:PAGE_SIZE] != TUTORIAL_KEYS:
+        raise ValueError("layout must preserve canonical tutorial order")
     if layout.algorithm == FIXED_ALGORITHM and layout_keys != manifest_keys:
         raise ValueError("fixed layout must preserve canonical stable key order")
     if layout.algorithm == SHUFFLED_ALGORITHM:
@@ -365,7 +379,9 @@ def layout_slot_data(layout: CampaignLayout) -> dict[str, Any]:
         "progression_model": layout.progression_model,
         "layout_algorithm": layout.algorithm,
         "page_size": layout.page_size,
-        "page_unlock_count": layout.page_unlock_count,
+        "integration_mode": layout.integration_mode,
+        "tutorial_page_unlock_count": layout.tutorial_page_unlock_count,
+        "later_page_unlock_count": layout.later_page_unlock_count,
         "base_manifest_digest": layout.base_manifest_digest,
         "layout_digest": layout.digest,
         "level_order": list(layout.ordered_stable_keys),
@@ -376,9 +392,12 @@ def layout_from_slot_data(
     manifest: CampaignManifest, level_set: str, slot_data: dict[str, Any]
 ) -> CampaignLayout:
     expected_keys = {
-        "progression_model", "layout_algorithm", "page_size", "page_unlock_count",
+        "progression_model", "layout_algorithm", "page_size", "integration_mode",
+        "tutorial_page_unlock_count", "later_page_unlock_count",
         "base_manifest_digest", "layout_digest", "level_order",
     }
+    if isinstance(slot_data, dict) and slot_data.get("progression_model") == "four_of_six_v1":
+        raise ValueError("Unpublished beta room used incorrect native rules. Regenerate the room with the current APWorld.")
     if not isinstance(slot_data, dict) or set(slot_data) != expected_keys:
         raise ValueError("layout slot data has invalid fields")
     if not isinstance(level_set, str):
@@ -387,7 +406,9 @@ def layout_from_slot_data(
         raise ValueError("layout progression model is invalid")
     if not isinstance(slot_data["layout_algorithm"], str):
         raise ValueError("layout algorithm is invalid")
-    if type(slot_data["page_size"]) is not int or type(slot_data["page_unlock_count"]) is not int:
+    if any(type(slot_data[field]) is not int for field in (
+        "page_size", "tutorial_page_unlock_count", "later_page_unlock_count",
+    )):
         raise ValueError("layout page parameters are invalid")
     if not isinstance(slot_data["base_manifest_digest"], str):
         raise ValueError("layout base manifest digest is invalid")
@@ -405,7 +426,9 @@ def layout_from_slot_data(
         ordered_stable_keys=tuple(slot_data["level_order"]),
         digest=slot_data["layout_digest"],
         page_size=slot_data["page_size"],
-        page_unlock_count=slot_data["page_unlock_count"],
+        integration_mode=slot_data["integration_mode"],
+        tutorial_page_unlock_count=slot_data["tutorial_page_unlock_count"],
+        later_page_unlock_count=slot_data["later_page_unlock_count"],
     )
     validate_layout(manifest, layout)
     return layout

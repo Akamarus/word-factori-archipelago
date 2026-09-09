@@ -27,7 +27,9 @@ _LAYOUT_SLOT_DATA_FIELDS = (
     "progression_model",
     "layout_algorithm",
     "page_size",
-    "page_unlock_count",
+    "integration_mode",
+    "tutorial_page_unlock_count",
+    "later_page_unlock_count",
     "base_manifest_digest",
     "layout_digest",
     "level_order",
@@ -107,6 +109,8 @@ def resolve_room_campaign(slot_data: Mapping[str, object]) -> ResolvedCampaign:
         raise ValueError("room campaign level count does not match the bundled manifest")
 
     if "progression_model" not in slot_data:
+        if any(field in slot_data for field in (*_LAYOUT_SLOT_DATA_FIELDS, "page_unlock_count")):
+            raise ValueError("room has a partial modern layout contract; regenerate the room")
         if slot_data.get("manifest_digest") != campaign_digest(manifest):
             raise ValueError("room manifest digest does not match the bundled manifest")
         return ResolvedCampaign(
@@ -116,6 +120,8 @@ def resolve_room_campaign(slot_data: Mapping[str, object]) -> ResolvedCampaign:
             legacy=True,
         )
 
+    if slot_data.get("progression_model") == "four_of_six_v1":
+        raise ValueError("Unpublished beta room used incorrect native rules. Regenerate the room with the current APWorld.")
     if slot_data.get("progression_model") != PROGRESSION_MODEL:
         raise ValueError("room progression model is unsupported")
     layout_payload = {
