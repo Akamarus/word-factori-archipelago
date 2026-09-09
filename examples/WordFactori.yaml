@@ -1,5 +1,5 @@
 name: WordFactoriTest
-description: Fixed integration fixture
+description: Shuffled machine-only Word Factori campaign
 game: Word Factori
 requires:
   version: 0.6.7
@@ -9,4 +9,3 @@ Word Factori:
   goal: campaign_count
   campaign_count: 25
   custom_level_set: discovery_labs
-  campaign_layout: shuffled_pages

@@ -3,7 +3,8 @@ param(
     [string]$GameData,
     [string]$ModFolder = (Join-Path $env:LOCALAPPDATA 'factori\mods\word factori archipelago'),
     [string]$PatchFile,
-    [switch]$Restore
+    [switch]$Restore,
+    [switch]$CheckOnly
 )
 $ErrorActionPreference = 'Stop'
 if (-not $PatchFile) { $PatchFile = Join-Path $PSScriptRoot 'enhanced.patch.gz' }
@@ -37,7 +38,6 @@ if (-not $GameData) {
 $GameData = [IO.Path]::GetFullPath($GameData)
 $ModFolder = [IO.Path]::GetFullPath($ModFolder)
 if ([IO.Path]::GetFileName($GameData) -ne 'data.win') { throw 'Select the data.win file, not a folder.' }
-if (-not [IO.Directory]::Exists($ModFolder)) { throw 'Install the normal Word Factori Archipelago package first.' }
 $receiptPath = Join-Path $ModFolder 'archipelago_enhanced_install.json'
 if ([IO.File]::Exists($receiptPath)) {
     $existingReceipt = [IO.File]::ReadAllText($receiptPath) | ConvertFrom-Json
@@ -46,25 +46,42 @@ if ([IO.File]::Exists($receiptPath)) {
 $original = [IO.File]::ReadAllBytes($GameData)
 $currentHash = Hash-Bytes $original
 $backup = Join-Path ([IO.Path]::GetDirectoryName($GameData)) 'data.wf-ap-original.win'
+if ([IO.Directory]::Exists($backup)) { throw 'The original backup path is a directory; nothing changed.' }
 if ($Restore) {
+    $saved = $null
     if ($currentHash -ne $originalHash) {
         if ($currentHash -ne $patchedHash) { throw 'Game changed since patching. Refusing to overwrite an unknown build.' }
         $saved = [IO.File]::ReadAllBytes($backup)
         if ((Hash-Bytes $saved) -ne $originalHash) { throw 'Backup does not match the verified original; nothing changed.' }
-        Write-Atomic $GameData $saved
     }
-    if ([IO.File]::Exists($receiptPath)) { [IO.File]::Delete($receiptPath) }
+    if (Get-Process -Name 'word factori' -ErrorAction SilentlyContinue) { throw 'Close Word Factori before restoring.' }
+    if ((Hash-Bytes ([IO.File]::ReadAllBytes($GameData))) -ne $currentHash) { throw 'Game changed during preparation; retry with the game closed.' }
+    if ($CheckOnly) { return $GameData }
+    $gameRestored = $false
+    try {
+        if ($null -ne $saved) { Write-Atomic $GameData $saved; $gameRestored = $true }
+        if ([IO.File]::Exists($receiptPath)) { [IO.File]::Delete($receiptPath) }
+    }
+    catch {
+        if ($gameRestored -and (Hash-Bytes ([IO.File]::ReadAllBytes($GameData))) -eq $originalHash) { Write-Atomic $GameData $original }
+        throw
+    }
     Write-Host 'Original game restored. Your saves and the original backup were kept.'
-    exit 0
+    return
 }
 if ($currentHash -ne $originalHash -and $currentHash -ne $patchedHash) {
     throw 'Unsupported or already modified Word Factori build. No files changed.'
 }
-$replacement = $null
-if ($currentHash -eq $patchedHash -and (-not [IO.File]::Exists($backup) -or (Hash-Bytes ([IO.File]::ReadAllBytes($backup))) -ne $originalHash)) {
+$sourceOriginal = $original
+if ([IO.File]::Exists($backup)) {
+    $sourceOriginal = [IO.File]::ReadAllBytes($backup)
+    if ((Hash-Bytes $sourceOriginal) -ne $originalHash) { throw 'An unknown backup already exists; nothing changed.' }
+}
+elseif ($currentHash -eq $patchedHash) {
     throw 'The verified original backup is missing. Restore the game through Steam before installing again.'
 }
-if ($currentHash -eq $originalHash) {
+# Validate the complete delta on every install, including already patched games.
+function Get-PatchedBytes {
     $stream = [IO.File]::OpenRead($PatchFile)
     $gzip = New-Object IO.Compression.GZipStream($stream, [IO.Compression.CompressionMode]::Decompress)
     $decoded = New-Object IO.MemoryStream
@@ -85,8 +102,8 @@ if ($currentHash -eq $originalHash) {
         foreach ($operation in $patch.operations) {
             if ($operation[0] -eq 'copy' -and $operation.Count -eq 3) {
                 $offset = [long]$operation[1]; $length = [long]$operation[2]
-                if ($offset -lt 0 -or $length -lt 0 -or $offset + $length -gt $original.Length -or $output.Length + $length -gt $patch.size) { throw 'Invalid patch copy range.' }
-                $output.Write($original, [int]$offset, [int]$length)
+                if ($offset -lt 0 -or $length -lt 0 -or $offset + $length -gt $sourceOriginal.Length -or $output.Length + $length -gt $patch.size) { throw 'Invalid patch copy range.' }
+                $output.Write($sourceOriginal, [int]$offset, [int]$length)
             }
             elseif ($operation[0] -eq 'data' -and $operation.Count -eq 2) {
                 $literal = [Convert]::FromBase64String($operation[1])
@@ -99,28 +116,33 @@ if ($currentHash -eq $originalHash) {
     }
     finally { $output.Dispose() }
     if ($replacement.Length -ne $patch.size -or (Hash-Bytes $replacement) -ne $patchedHash) { throw 'Patched output failed verification; nothing changed.' }
-    if ([IO.File]::Exists($backup)) {
-        if ((Hash-Bytes ([IO.File]::ReadAllBytes($backup))) -ne $originalHash) { throw 'An unknown backup already exists; nothing changed.' }
-    }
-    else {
-        # Exclusive creation preserves any concurrently created backup.
-        $backupStream = [IO.File]::Open($backup, 'CreateNew', 'Write', 'None')
-        try { $backupStream.Write($original, 0, $original.Length); $backupStream.Flush($true) }
-        finally { $backupStream.Dispose() }
-    }
+    return ,$replacement
+}
+$replacement = Get-PatchedBytes
+if (Get-Process -Name 'word factori' -ErrorAction SilentlyContinue) { throw 'Word Factori started during preparation. Close it and retry.' }
+if ((Hash-Bytes ([IO.File]::ReadAllBytes($GameData))) -ne $currentHash) { throw 'Game changed during preparation; retry with the game closed.' }
+if ($CheckOnly) { return $GameData }
+if (-not [IO.Directory]::Exists($ModFolder)) { throw 'The Word Factori Archipelago mod folder is missing.' }
+if (-not [IO.File]::Exists($backup)) {
+    # Exclusive creation preserves any concurrently created backup.
+    $backupStream = [IO.File]::Open($backup, 'CreateNew', 'Write', 'None')
+    try { $backupStream.Write($sourceOriginal, 0, $sourceOriginal.Length); $backupStream.Flush($true) }
+    finally { $backupStream.Dispose() }
 }
 $receipt = @{ protocol='enhanced_v1'; original_sha256=$originalHash; patched_sha256=$patchedHash; game_data=$GameData }
+$gamePatched = $false
 try {
-    if ($null -ne $replacement) {
+    if ($currentHash -eq $originalHash) {
         if (Get-Process -Name 'word factori' -ErrorAction SilentlyContinue) { throw 'Word Factori started during preparation. Close it and retry.' }
         if ((Hash-Bytes ([IO.File]::ReadAllBytes($GameData))) -ne $originalHash) { throw 'Game changed during preparation; retry with the game closed.' }
         Write-Atomic $GameData $replacement
+        $gamePatched = $true
     }
     Write-Atomic $receiptPath ([Text.Encoding]::UTF8.GetBytes(($receipt | ConvertTo-Json)))
 }
 catch {
-    if ($null -ne $replacement -and (Hash-Bytes ([IO.File]::ReadAllBytes($GameData))) -eq $patchedHash) { Write-Atomic $GameData $original }
+    if ($gamePatched -and (Hash-Bytes ([IO.File]::ReadAllBytes($GameData))) -eq $patchedHash) { Write-Atomic $GameData $original }
     throw
 }
-Write-Host 'Enhanced patch installed. Use a NEW room with integration_mode: enhanced and campaign_layout: shuffled_pages.'
+Write-Host 'Required native integration installed. Start a fresh Archipelago room and an empty mod save.'
 Write-Host 'New items apply when you return to Levels and enter a factory. Existing saves were not changed.'

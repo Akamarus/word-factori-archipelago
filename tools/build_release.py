@@ -14,6 +14,9 @@ WORLD_ARCHIVE = ROOT / "word_factori.apworld"
 LEGACY_RELEASE_ARCHIVE = ROOT / "word-factori-archipelago-full-1.0.0.zip"
 RELEASE_ARCHIVE = ROOT / f"word-factori-archipelago-{VERSION}.zip"
 RELEASE_MANIFEST = ROOT / "release-manifest.json"
+PATCH_FILE = ROOT / "tools/enhanced.patch.gz"
+# Independently round-tripped against the verified original and patched game.
+PATCH_SHA256 = "5101e3172ecb171e36fce4e08c40b68d4cff077d8ef72452f988e010b1e03c5b"
 WORLD_SOURCE_NAMES = (
     "word_factori/Components.py",
     "word_factori/__init__.py",
@@ -90,11 +93,15 @@ def write_world() -> None:
 
 
 def write_release() -> None:
+    if hashlib.sha256(PATCH_FILE.read_bytes()).hexdigest() != PATCH_SHA256:
+        raise ValueError("Native patch failed verification; refusing an incomplete player package")
     roots = ["docs/images", "examples", "game_mod"]
     files = [
         ROOT / "README.md", ROOT / "LICENSE", ROOT / "install.ps1",
         ROOT / "Install Word Factori Archipelago.cmd", WORLD_ARCHIVE,
         ROOT / "docs/enhanced-playtest.md",
+        ROOT / "Restore Original Game.cmd",
+        ROOT / "tools/install_enhanced.ps1", PATCH_FILE,
     ]
     for root_name in roots:
         files.extend(path for path in (ROOT / root_name).rglob("*") if path.is_file())

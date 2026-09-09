@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$Force, [switch]$Uninstall)
+param([string]$GameData, [switch]$Force, [switch]$Uninstall)
 
 $ErrorActionPreference = "Stop"
 $distributionRoot = $PSScriptRoot
@@ -9,6 +9,8 @@ $worldTargetDirectory = Join-Path $env:ProgramData "Archipelago\custom_worlds"
 $worldTarget = Join-Path $worldTargetDirectory "word_factori.apworld"
 $modTargetDirectory = Join-Path $env:LOCALAPPDATA "factori\mods"
 $modTarget = Join-Path $modTargetDirectory "word factori archipelago"
+$nativeInstaller = Join-Path $distributionRoot 'tools\install_enhanced.ps1'
+$nativePatch = Join-Path $distributionRoot 'tools\enhanced.patch.gz'
 
 function Assert-DirectChild([string]$Candidate, [string]$Parent) {
     $candidateFull = [IO.Path]::GetFullPath($Candidate)
@@ -22,6 +24,9 @@ function Assert-DirectChild([string]$Candidate, [string]$Parent) {
 Assert-DirectChild $worldTarget $worldTargetDirectory
 Assert-DirectChild $modTarget $modTargetDirectory
 if ($Uninstall) {
+    # Restore before deleting the receipt that pairs the mod with its game copy.
+    $GameData = & $nativeInstaller -GameData $GameData -ModFolder $modTarget -Restore -CheckOnly
+    & $nativeInstaller -GameData $GameData -ModFolder $modTarget -Restore
     if (Test-Path -LiteralPath $worldTarget) {
         Remove-Item -LiteralPath $worldTarget -Force
     }
@@ -42,6 +47,9 @@ if (-not $Force -and ((Test-Path -LiteralPath $worldTarget) -or (Test-Path -Lite
     throw "Word Factori Archipelago is already installed. Rerun with -Force to update it."
 }
 
+# This performs no writes, and checks the real installed receipt before replacing it.
+$GameData = & $nativeInstaller -GameData $GameData -ModFolder $modTarget -PatchFile $nativePatch -CheckOnly
+
 New-Item -ItemType Directory -Force -Path $worldTargetDirectory | Out-Null
 New-Item -ItemType Directory -Force -Path $modTargetDirectory | Out-Null
 
@@ -49,10 +57,13 @@ $transaction = [guid]::NewGuid().ToString('N')
 $worldStage = Join-Path $worldTargetDirectory ".word_factori.$transaction.tmp"
 $worldBackup = Join-Path $worldTargetDirectory ".word_factori.$transaction.backup"
 $modStage = Join-Path $modTargetDirectory ".word-factori-archipelago.$transaction.stage"
-$modBackup = Join-Path $modTargetDirectory ".word-factori-archipelago.$transaction.backup"
+$modBackupRoot = Join-Path $env:LOCALAPPDATA 'factori\archipelago\install-backups'
+$modBackupDirectory = Join-Path $modBackupRoot $transaction
+$modBackup = Join-Path $modBackupDirectory 'mod'
+Assert-DirectChild $modBackupDirectory $modBackupRoot
 foreach ($pathPair in @(
     @($worldStage, $worldTargetDirectory), @($worldBackup, $worldTargetDirectory),
-    @($modStage, $modTargetDirectory), @($modBackup, $modTargetDirectory)
+    @($modStage, $modTargetDirectory), @($modBackup, $modBackupDirectory)
 )) {
     Assert-DirectChild $pathPair[0] $pathPair[1]
 }
@@ -86,11 +97,17 @@ try {
     }
 
     if ($worldWasPresent) { Move-Item -LiteralPath $worldTarget -Destination $worldBackup }
-    if ($modWasPresent) { Move-Item -LiteralPath $modTarget -Destination $modBackup }
+    if ($modWasPresent) {
+        # Keep prior versions outside the game's scanned mods directory.
+        New-Item -ItemType Directory -Force -Path $modBackupDirectory | Out-Null
+        Move-Item -LiteralPath $modTarget -Destination $modBackup
+    }
     Move-Item -LiteralPath $worldStage -Destination $worldTarget
     $worldCommitted = $true
     Move-Item -LiteralPath $modStage -Destination $modTarget
     $modCommitted = $true
+    # Apply the required native integration last. It rolls itself back on failure.
+    & $nativeInstaller -GameData $GameData -ModFolder $modTarget -PatchFile $nativePatch
 }
 catch {
     if ($worldCommitted -and (Test-Path -LiteralPath $worldTarget)) {
@@ -104,7 +121,7 @@ catch {
     throw
 }
 finally {
-    foreach ($temporary in @($worldStage, $worldBackup, $modStage, $modBackup)) {
+    foreach ($temporary in @($worldStage, $modStage)) {
         if (Test-Path -LiteralPath $temporary) {
             Remove-Item -LiteralPath $temporary -Recurse -Force
         }
@@ -113,4 +130,6 @@ finally {
 
 Write-Host "Installed the Archipelago world to $worldTarget"
 Write-Host "Installed the Word Factori mod to $modTarget"
-Write-Host "Restart Archipelago and Word Factori before playing."
+if (Test-Path -LiteralPath $worldBackup) { Write-Host "Previous Archipelago world kept at $worldBackup" }
+if (Test-Path -LiteralPath $modBackup) { Write-Host "Previous game mod kept at $modBackup" }
+Write-Host "Restart Archipelago and Word Factori. Use a fresh room and an empty mod save."

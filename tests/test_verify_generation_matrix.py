@@ -88,12 +88,15 @@ class ProgressionReplayTests(unittest.TestCase):
         keys, names = list(identity.level_order), list(identity.location_names)
         keys[0], keys[5] = keys[5], keys[0]
         names[0], names[5] = names[5], names[0]
-        identity = replace(identity, level_order=tuple(keys), location_names=tuple(names), integration_mode="enhanced")
+        identity = replace(
+            identity, level_order=tuple(keys), location_names=tuple(names),
+            integration_mode="enhanced", progression_model="machines_enhanced_four_of_six_v1",
+        )
         spoiler = "Playthrough:\n0: {\n  Bender Access\n}\n1: {\n  Complete C: Merger2 Access\n}\n2: {\n  Victory: Victory\n}\n"
         result = replay_progression_choices(parse_progression_playthrough(spoiler), identity)
         self.assertEqual((2,), result.location_counts)
 
-    def test_tutorial_gap_blocks_later_tutorial_and_second_page(self):
+    def test_legacy_tutorial_gap_blocks_later_tutorial_and_second_page(self):
         # Without Rotation, I/C/V are a reachable prefix. O and A have
         # alternate Reflection recipes, but native L still blocks them.
         for target in ("Complete O", "Complete IVY"):
@@ -128,9 +131,11 @@ class ProgressionReplayTests(unittest.TestCase):
             ap_ids=frozenset(),
             level_set="core_campaign",
             location_names=tuple(record.name for record in manifest.levels),
+            integration_mode="supported",
+            progression_model="tutorial_six_then_four_v1",
         )
 
-    def test_replays_items_over_recipes_world_tiers_and_page_frontier(self):
+    def test_legacy_replay_uses_recipes_world_tiers_and_page_frontier(self):
         spoiler = """Playthrough:
 0: {
   Bender Access
@@ -233,7 +238,9 @@ class IdentityExtractionTests(unittest.TestCase):
             "goal": 0,
             "campaign_count": 25,
             "level_count": 2,
-            "layout_algorithm": "balanced_pages_v2",
+            "layout_algorithm": "enhanced_balanced_pages_v1",
+            "integration_mode": "enhanced",
+            "progression_model": "machines_enhanced_four_of_six_v1",
             "locations": [
                 {"slot_index": 0, "stable_key": "owl-second", "name": "OWL — Second", "id": 975301002},
                 {"slot_index": 1, "stable_key": "cat-first", "name": "CAT — First", "id": 975301001},
@@ -258,7 +265,9 @@ class IdentityExtractionTests(unittest.TestCase):
         self.assertEqual(getattr(identity, "goal", None), 0)
         self.assertEqual(getattr(identity, "campaign_count", None), 25)
         self.assertEqual(getattr(identity, "level_count", None), 2)
-        self.assertEqual(getattr(identity, "layout_algorithm", None), "balanced_pages_v2")
+        self.assertEqual(identity.layout_algorithm, "enhanced_balanced_pages_v1")
+        self.assertEqual(identity.integration_mode, "enhanced")
+        self.assertEqual(identity.progression_model, "machines_enhanced_four_of_six_v1")
         self.assertEqual(identity.location_names, ("OWL — Second", "CAT — First"))
         self.assertEqual(
             identity.location_projection,
@@ -286,7 +295,9 @@ class IdentityExtractionTests(unittest.TestCase):
             goal=0,
             campaign_count=25,
             level_count=len(canonical_locations),
-            layout_algorithm="balanced_pages_v2",
+            layout_algorithm="enhanced_balanced_pages_v1",
+            integration_mode="enhanced",
+            progression_model="machines_enhanced_four_of_six_v1",
         )
         mutations = {
             "duplicate and omission": canonical[:-1] + (canonical[0],),
@@ -465,10 +476,13 @@ class IdentityExtractionTests(unittest.TestCase):
 
 
 class PlayerYamlTests(unittest.TestCase):
-    def test_fixed_layout_case_generates_and_validates_fixed_identity(self):
-        case = matrix_tool.MatrixCase("core-fixed", "core_campaign", "campaign_count", "fixed_pages")
-        self.assertIn("  campaign_layout: fixed_pages\n", render_player_yaml(case, "Fixed"))
-        self.assertEqual("fixed_pages_v1", matrix_tool._requested_identity(case)["layout_algorithm"])
+    def test_matrix_requests_current_machine_identity_for_every_case(self):
+        for case in MATRIX_CASES:
+            with self.subTest(case=case.key):
+                requested = matrix_tool._requested_identity(case)
+                self.assertEqual("enhanced", requested["integration_mode"])
+                self.assertEqual("enhanced_balanced_pages_v1", requested["layout_algorithm"])
+                self.assertEqual("machines_enhanced_four_of_six_v1", requested["progression_model"])
 
     def test_matrix_crosses_both_level_sets_and_goals_with_shuffled_pages(self):
         # Dropping or duplicating an option pairing breaks the required 2x2 matrix.
@@ -484,7 +498,8 @@ class PlayerYamlTests(unittest.TestCase):
         rendered = render_player_yaml(MATRIX_CASES[0], "WF_Matrix_core_count_13000")
         self.assertIn("name: WF_Matrix_core_count_13000\n", rendered)
         self.assertIn("requires:\n  version: 0.6.7\n", rendered)
-        self.assertIn("  campaign_layout: shuffled_pages\n", rendered)
+        self.assertNotIn("campaign_layout:", rendered)
+        self.assertNotIn("integration_mode:", rendered)
         self.assertIn(f"  goal: {MATRIX_CASES[0].goal}\n", rendered)
         self.assertIn(f"  custom_level_set: {MATRIX_CASES[0].level_set}\n", rendered)
 
@@ -505,6 +520,7 @@ p.add_argument("--spoiler", required=True)
 p.add_argument("--skip_prog_balancing", action="store_true")
 a = p.parse_args()
 yaml = next(Path(a.player_files_path).glob("*.yaml")).read_text(encoding="utf-8")
+assert "campaign_layout:" not in yaml and "integration_mode:" not in yaml
 level_set = "discovery_labs" if "custom_level_set: discovery_labs" in yaml else "core_campaign"
 goal = 1 if "goal: final_factory" in yaml else 0
 canonical = list(locations_for_level_set(level_set))
@@ -516,7 +532,8 @@ by_key = {location.stable_key: location for location in canonical}
 slot = {"level_order": order, "layout_digest": ("a" if a.seed != 13001 else "b") * 64,
         "implementation_version": "1.4.0",
         "level_set": level_set, "goal": goal, "campaign_count": 25,
-        "level_count": level_count, "layout_algorithm": "balanced_pages_v2",
+        "level_count": level_count, "layout_algorithm": "enhanced_balanced_pages_v1",
+        "integration_mode": "enhanced", "progression_model": "machines_enhanced_four_of_six_v1",
         "locations": [{"stable_key": key, "name": by_key[key].name, "id": by_key[key].code} for key in order]}
 encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
 spoiler = """Archipelago Version 0.6.7  -  Seed: 13000
@@ -562,7 +579,8 @@ assert list(Path(a.player_files_path).glob("*.yaml"))
 slot = {"level_order": ["cat", "owl"], "layout_digest": "d" * 64,
         "implementation_version": "1.4.0", "level_set": "core_campaign",
         "goal": 0, "campaign_count": 25, "level_count": 2,
-        "layout_algorithm": "balanced_pages_v2",
+        "layout_algorithm": "enhanced_balanced_pages_v1",
+        "integration_mode": "enhanced", "progression_model": "machines_enhanced_four_of_six_v1",
         "locations": [{"stable_key": "cat", "id": 1},
                       {"stable_key": "owl", "id": 2}]}
 encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
@@ -624,26 +642,35 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
             "goal": 1,
             "campaign_count": 25,
             "level_count": 40,
-            "layout_algorithm": "balanced_pages_v2",
+            "layout_algorithm": "enhanced_balanced_pages_v1",
+            "integration_mode": "enhanced",
+            "progression_model": "machines_enhanced_four_of_six_v1",
             "location_projection": tuple(
                 (location.stable_key, location.name, location.code)
                 for location in canonical_locations
             ),
         }
-        mismatches = {
-            "level_set": "core_campaign",
-            "goal": 0,
-            "campaign_count": 24,
-            "level_count": 30,
-            "layout_algorithm": "fixed_pages_v1",
-            "integration_mode": "enhanced",
-            "implementation_version": "",
-            "level_order": tuple(location.stable_key for location in canonical_locations[:-1]),
-        }
+        mismatches = (
+            ("level_set", "core_campaign"),
+            ("goal", 0),
+            ("campaign_count", 24),
+            ("level_count", 30),
+            ("layout_algorithm", "fixed_pages_v1"),
+            ("layout_algorithm", "balanced_pages_v2"),
+            ("integration_mode", "supported"),
+            ("integration_mode", ""),
+            ("integration_mode", None),
+            ("progression_model", "enhanced_four_of_six_v1"),
+            ("progression_model", "machines_tutorial_six_then_four_v1"),
+            ("progression_model", ""),
+            ("progression_model", None),
+            ("implementation_version", ""),
+            ("level_order", tuple(location.stable_key for location in canonical_locations[:-1])),
+        )
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)
-            for field, wrong_value in mismatches.items():
-                with self.subTest(field=field):
+            for field, wrong_value in mismatches:
+                with self.subTest(field=field, value=wrong_value):
                     identity_values = dict(valid)
                     identity_values[field] = wrong_value
                     identity = GenerationIdentity(**identity_values)
@@ -698,7 +725,8 @@ slot = {
     "goal": 0,
     "campaign_count": 25,
     "level_count": 30,
-    "layout_algorithm": "balanced_pages_v2",
+    "layout_algorithm": "enhanced_balanced_pages_v1",
+    "integration_mode": "enhanced", "progression_model": "machines_enhanced_four_of_six_v1",
     "locations": [
         {"stable_key": key, "name": key, "id": index}
         for index, key in enumerate(order)
@@ -755,7 +783,8 @@ slot = {
     "goal": 0,
     "campaign_count": 25,
     "level_count": 1,
-    "layout_algorithm": "balanced_pages_v2",
+    "layout_algorithm": "enhanced_balanced_pages_v1",
+    "integration_mode": "enhanced", "progression_model": "machines_enhanced_four_of_six_v1",
     "locations": [{"stable_key": "cat", "name": "CAT", "id": 1}],
 }
 encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
@@ -813,7 +842,8 @@ order = [location.stable_key for location in canonical]
 slot = {"level_order": order, "layout_digest": ("a" if a.seed == 13000 else "b") * 64,
         "implementation_version": "1.4.0", "level_set": "core_campaign",
         "goal": goal, "campaign_count": 25, "level_count": 30,
-        "layout_algorithm": "balanced_pages_v2",
+        "layout_algorithm": "enhanced_balanced_pages_v1",
+        "integration_mode": "enhanced", "progression_model": "machines_enhanced_four_of_six_v1",
         "locations": [{"stable_key": location.stable_key, "name": location.name,
                        "id": location.code} for location in canonical]}
 encoded = bytes((3,)) + zlib.compress(pickle.dumps({"slot_data": {1: slot}}, protocol=4))
@@ -865,6 +895,8 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
                         "requested_level_count",
                         "requested_level_order_count",
                         "requested_layout_algorithm",
+                        "requested_integration_mode",
+                        "requested_progression_model",
                         "requested_implementation_version",
                         "generated_level_set",
                         "generated_goal",
@@ -872,6 +904,8 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
                         "generated_level_count",
                         "generated_level_order_count",
                         "generated_layout_algorithm",
+                        "generated_integration_mode",
+                        "generated_progression_model",
                         "generated_implementation_version",
                         "identity_validation",
                         "canonical_identity_validation",
@@ -883,14 +917,18 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
                     "requested_campaign_count": 25,
                     "requested_level_count": 30,
                     "requested_level_order_count": 30,
-                    "requested_layout_algorithm": "balanced_pages_v2",
+                    "requested_layout_algorithm": "enhanced_balanced_pages_v1",
+                    "requested_integration_mode": "enhanced",
+                    "requested_progression_model": "machines_enhanced_four_of_six_v1",
                     "requested_implementation_version": "1.4.0",
                     "generated_level_set": "core_campaign",
                     "generated_goal": 0,
                     "generated_campaign_count": 25,
                     "generated_level_count": 30,
                     "generated_level_order_count": 30,
-                    "generated_layout_algorithm": "balanced_pages_v2",
+                    "generated_layout_algorithm": "enhanced_balanced_pages_v1",
+                    "generated_integration_mode": "enhanced",
+                    "generated_progression_model": "machines_enhanced_four_of_six_v1",
                     "generated_implementation_version": "1.4.0",
                     "identity_validation": "Pass",
                     "canonical_identity_validation": "Pass",
