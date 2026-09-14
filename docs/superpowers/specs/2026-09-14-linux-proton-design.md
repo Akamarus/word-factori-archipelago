@@ -1,6 +1,7 @@
 # Linux client with Word Factori through Proton
 
-Status: proposed detailed design for user review; overall direction approved.
+Status: implemented locally September 14; automated Windows verification passed.
+Independent final review and Linux/Proton acceptance remain pending. Unpublished.
 
 ## Goal and boundaries
 

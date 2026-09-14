@@ -1,6 +1,9 @@
 import dataclasses
 import hashlib
+import io
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -11,6 +14,30 @@ from tools import build_release
 
 
 class UnifiedDistributionTests(unittest.TestCase):
+    def test_linux_installer_runs_from_extracted_player_zip_without_source_checkout(self):
+        build_release.write_world()
+        build_release.write_release()
+        with tempfile.TemporaryDirectory(prefix="wf package ") as temporary:
+            root = Path(temporary)
+            with zipfile.ZipFile(build_release.RELEASE_ARCHIVE) as archive:
+                for name in ("Install Word Factori Archipelago.sh", "tools/install_linux.py",
+                             "tools/linux_transaction.py", "tools/enhanced_delta.py", "docs/linux-proton.md"):
+                    self.assertIn(name, archive.namelist())
+                self.assertNotIn(b"\r", archive.read("Install Word Factori Archipelago.sh"))
+                with zipfile.ZipFile(io.BytesIO(archive.read("word_factori.apworld"))) as world:
+                    self.assertIn("word_factori/platform_paths.py", world.namelist())
+                archive.extractall(root)
+            self.assertFalse((root / "word_factori").exists())
+            result = subprocess.run([sys.executable, "-E", "-s", str(root / "tools/install_linux.py"), "--help"],
+                                    cwd=root, capture_output=True, text=True, timeout=30)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn("--config", result.stdout)
+            if sys.platform.startswith("linux"):
+                result = subprocess.run(["bash", str(root / "Install Word Factori Archipelago.sh"), "--help"],
+                                        cwd=root.parent, capture_output=True, text=True, timeout=30)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn("--ap-worlds", result.stdout)
+
     def test_missing_or_modified_patch_cannot_replace_the_player_archive(self):
         build_release.write_world()
         build_release.write_release()

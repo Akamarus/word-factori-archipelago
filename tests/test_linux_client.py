@@ -180,6 +180,30 @@ class LinuxClientTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.to_thread(launch_client, "--wf-config", str(self.config))
             self.assertEqual(self.paths.factori_root, made[0].factori_root)
 
+    async def check_redirected_mod_is_refused(self, redirect_parent):
+        from tests.test_platform_paths import PlatformPathsTests
+        with self.install():
+            ctx = self.context()
+            self.enhanced_room(ctx)
+            source = self.paths.mod_folder.parent if redirect_parent else self.paths.mod_folder
+            destination = self.root / "redirected"
+            source.rename(destination)
+            PlatformPathsTests.directory_alias(self, destination, source)
+            before = {p.relative_to(destination): p.read_bytes()
+                      for p in destination.rglob("*") if p.is_file()}
+            from word_factori.client import logger
+            with self.assertLogs(logger, level="WARNING"):
+                self.assertFalse(ctx.prepare_selected_campaign())
+            self.assertIn("unsafe", ctx.last_bridge_error.lower())
+            self.assertEqual(before, {p.relative_to(destination): p.read_bytes()
+                                     for p in destination.rglob("*") if p.is_file()})
+
+    async def test_redirected_mod_folder_cannot_receive_client_writes(self):
+        await self.check_redirected_mod_is_refused(False)
+
+    async def test_redirected_mod_parent_cannot_receive_client_writes(self):
+        await self.check_redirected_mod_is_refused(True)
+
     async def test_overlay_never_starts_or_restarts_on_linux(self):
         ctx = self.context()
         ctx.start_overlay()

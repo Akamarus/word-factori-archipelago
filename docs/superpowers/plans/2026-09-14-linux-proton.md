@@ -97,6 +97,9 @@ tests/test_linux_client.py; extend tests/test_enhanced_runtime.py and test_save_
 
 **Consumes:** Task 1 descriptor and path functions. **Produces:** native Linux setup selection,
 structured patch readiness and safe selected mod/save lookup; no Windows overlay spawn on Linux.
+Expose --wf-config in the client parser and pass it to an optional
+installation_config constructor argument so advanced installer --config overrides
+can be used by the client without changing global environment variables.
 
 - [ ] Write regression tests against real client methods using existing AP test scaffolding.
 
@@ -110,6 +113,7 @@ structured patch readiness and safe selected mod/save lookup; no Windows overlay
   ```
 
   Also test missing config causes no guessed-directory writes, Linux receipt path validation,
+  alternate configuration selected through the real client argument parser,
   selected mod and active account containment, items/checks/reconnect/victory with configured
   fixture paths, and regular-client fallback without renderer launch.
 - [ ] Run focused tests and record expected regressions.

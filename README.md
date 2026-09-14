@@ -69,6 +69,11 @@ Generate a **new room** with the matching 1.4.0 APWorld and client and use a **f
 
 ## Simple installation
 
+The instructions below are for **Windows**. Native Linux setup with the game
+through Proton is being added in the **unreleased development package**; the
+published v1.4.0 ZIP does not include it. See [Linux/Proton setup](docs/linux-proton.md).
+Linux uses the regular Archipelago client for items/chat, not the Windows overlay.
+
 1. Download **[word-factori-archipelago-1.4.0.zip](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.0/word-factori-archipelago-1.4.0.zip)**, the single player package. Use this ZIP, not GitHub's automatic source-code archives.
 2. Extract the ZIP to a normal folder.
 3. Close Word Factori and Archipelago.

@@ -9,6 +9,13 @@ from word_factori import enhanced_runtime as runtime
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_missing_windows_receipt_names_windows_installer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = runtime.patch_readiness(Path(tmp))
+            self.assertFalse(result.ready)
+            self.assertIn("Install Word Factori Archipelago.cmd", result.message)
+            self.assertNotIn("Linux", result.message)
+
     def test_linux_receipt_must_match_selected_installation_and_patched_game(self):
         from word_factori.platform_paths import InstallationPaths
         with tempfile.TemporaryDirectory() as tmp:

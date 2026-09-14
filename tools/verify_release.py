@@ -50,7 +50,7 @@ def find_prohibited_release_entries(names: list[str]) -> list[str]:
 
 
 _DOCUMENTED_INSTALLER = re.compile(
-    r"(?:`|\*\*)([^`\n*]+\.(?:cmd|bat|ps1))(?:`|\*\*)",
+    r"(?:`|\*\*)([^`\n*]+\.(?:cmd|bat|ps1|sh))(?:`|\*\*)",
     re.IGNORECASE,
 )
 _MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -112,6 +112,11 @@ def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | Non
                 "Restore Original Game.cmd",
                 "tools/install_enhanced.ps1",
                 "tools/enhanced.patch.gz",
+                "Install Word Factori Archipelago.sh",
+                "tools/install_linux.py",
+                "tools/linux_transaction.py",
+                "tools/enhanced_delta.py",
+                "docs/linux-proton.md",
             )
         ]
         for root in roots:

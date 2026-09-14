@@ -4,6 +4,12 @@ Version **[1.4.0 is a tester prerelease](https://github.com/Akamarus/word-factor
 
 ## Install
 
+These steps are for **Windows**. The unreleased development player package also
+contains `Install Word Factori Archipelago.sh` and `docs/linux-proton.md` for
+native Linux setup with the game through Steam Proton. The already-published
+v1.4.0 ZIP does not contain those additions. Linux gameplay remains unverified;
+use the regular native Archipelago client for items/chat, not the Windows overlay.
+
 1. Download and extract **[word-factori-archipelago-1.4.0.zip](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.0/word-factori-archipelago-1.4.0.zip)**, the single player package. Do not use GitHub's automatic source-code archives.
 2. Close Word Factori and Archipelago.
 3. Double-click the root **Install Word Factori Archipelago.cmd**. It installs the APWorld and mod, verifies the original game, preserves a backup, and applies the required native delta patch.

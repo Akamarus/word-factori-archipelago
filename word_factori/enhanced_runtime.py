@@ -9,7 +9,7 @@ import re
 import time
 
 from .mod import MODULES, _write_json
-from .platform_paths import InstallationPaths
+from .platform_paths import InstallationPaths, validate_installation
 
 ORIGINAL_SHA256 = "d40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978"
 PATCH_PROTOCOL = "enhanced_v1"
@@ -32,7 +32,13 @@ class PatchReadiness:
 
 def patch_readiness(mod_folder: Path, installation: InstallationPaths | None = None) -> PatchReadiness:
     """Explain why a receipt cannot authorize this exact game installation."""
-    missing = PatchReadiness(False, "receipt_missing", "Native patch receipt is missing; run the Word Factori Linux installer.")
+    installer = "the Word Factori Linux installer" if installation is not None else "Install Word Factori Archipelago.cmd"
+    missing = PatchReadiness(False, "receipt_missing", f"Native patch receipt is missing; run {installer}.")
+    if installation is not None:
+        try:
+            validate_installation(installation)
+        except (OSError, ValueError):
+            return PatchReadiness(False, "path_unsafe", "Configured installation path is missing or unsafe; rerun the Linux installer.")
     try:
         receipt = json.loads((mod_folder / RECEIPT_NAME).read_text(encoding="utf-8"))
     except FileNotFoundError:

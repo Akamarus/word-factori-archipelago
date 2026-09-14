@@ -86,6 +86,8 @@ def validate_installation(paths: InstallationPaths) -> InstallationPaths:
         current = current / component
         if _is_alias(current):
             raise ValueError("factori directory contains an unsafe symlink")
+    if _has_alias_ancestor(paths.mod_folder):
+        raise ValueError("mod directory contains an unsafe symlink")
     return paths
 
 

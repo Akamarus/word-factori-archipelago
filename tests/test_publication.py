@@ -32,6 +32,7 @@ class PublicationTests(unittest.TestCase):
         "word_factori/layout.py",
         "word_factori/mod.py",
         "word_factori/options.py",
+        "word_factori/platform_paths.py",
         "word_factori/overlay_model.py",
         "word_factori/overlay_preferences.py",
         "word_factori/overlay_protocol.py",
@@ -57,6 +58,7 @@ class PublicationTests(unittest.TestCase):
                 "LICENSE text eol=lf",
                 "*.ps1 text eol=crlf",
                 "*.cmd text eol=crlf",
+                "*.sh text eol=lf",
             }.issubset(set(attributes))
         )
 
@@ -170,6 +172,11 @@ class PublicationTests(unittest.TestCase):
                 "docs/images/word-factori-archipelago-chat.png",
                 "docs/images/word-factori-discovery-lab-v.png",
                 "docs/enhanced-playtest.md",
+                "docs/linux-proton.md",
+                "Install Word Factori Archipelago.sh",
+                "tools/install_linux.py",
+                "tools/linux_transaction.py",
+                "tools/enhanced_delta.py",
                 "examples/WordFactori.yaml",
                 "examples/WordFactoriTarget.yaml",
                 "game_mod/word factori archipelago/archipelago_campaign.json",
