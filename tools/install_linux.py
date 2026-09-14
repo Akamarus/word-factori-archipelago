@@ -253,10 +253,14 @@ class LinuxInstaller:
         elif operation in ('restore', 'uninstall'):
             if before['receipt'] is None:
                 raise ValueError('A verified installation receipt is required for restoration/removal')
-            source = before['backup'] if before['backup'] is not None else before['game']
-            changes = {'game': source, 'receipt': None}
+            if before['backup'] is None:
+                raise ValueError('Restoration/removal requires the verified original backup')
+            source = before['backup']
+            # Retain pairing evidence after restore so a later uninstall does not
+            # need to patch the game again. Readiness still checks the game hash.
+            changes = {'game': source}
             if operation == 'uninstall':
-                changes.update({name: None for name in (*MOD_FILES, 'world', 'config')})
+                changes.update({name: None for name in ('receipt', *MOD_FILES, 'world', 'config')})
         else:
             raise ValueError('Unknown operation')
         for key in changes:

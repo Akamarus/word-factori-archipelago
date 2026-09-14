@@ -82,16 +82,28 @@ class LinuxInstallerTests(unittest.TestCase):
         self.setup.run('install')
         save = self.paths.mod_folder / 'player.save'
         save.write_bytes(b'precious save')
+        receipt = self.setup.receipt.read_bytes()
         self.setup.run('restore')
         self.assertEqual(self.game.read_bytes(), self.original)
-        self.assertFalse(self.setup.receipt.exists())
-        self.setup.run('install')
+        self.assertEqual(self.setup.receipt.read_bytes(), receipt)
+        with self.assertRaises(ValueError):
+            self.setup.run('verify')
         self.setup.run('uninstall')
         self.assertEqual(self.game.read_bytes(), self.original)
         self.assertEqual(save.read_bytes(), b'precious save')
         self.assertEqual(self.setup.backup.read_bytes(), self.original)
         self.assertFalse((self.worlds / 'word_factori.apworld').exists())
         self.assertFalse(self.config.exists())
+        self.assertFalse(self.setup.receipt.exists())
+
+    def test_uninstall_restored_game_requires_verified_original_backup(self):
+        self.setup.run('install')
+        self.setup.run('restore')
+        self.setup.backup.unlink()
+        before = self.snapshot()
+        with self.assertRaisesRegex(ValueError, 'backup'):
+            self.setup.run('uninstall')
+        self.assertEqual(before, self.snapshot())
 
     def test_bad_backup_receipt_and_config_pairing(self):
         self.setup.run('install')

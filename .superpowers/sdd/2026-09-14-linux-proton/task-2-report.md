@@ -86,9 +86,13 @@ recovery after the uncertainty is resolved. No process is killed.
 Uninstall removes only the five packaged mod JSON files, existing receipt,
 `word_factori.apworld`, and matching selected configuration. It preserves original
 backup, all historical backups, saves, generated runtime/sidecar files, all other
-unowned files, and directories. `restore` removes the receipt after restoring the
-game and leaves the remaining integration in place. Reinstall before uninstalling
-an already-restored installation, because deletion requires a pairing receipt.
+unowned files, and directories. `restore` retains the existing validated receipt
+as ownership/pairing evidence after restoring the game and leaves the remaining
+integration in place. A subsequent `uninstall` verifies the original backup and
+exact pairing, then removes the receipt and other owned files without repatching.
+Both restoration and removal require the verified original backup. A retained
+receipt never establishes readiness by itself: `verify` still requires the pinned
+patched game hash and rejects a restored original.
 
 This is recoverable coordination across filesystems, not an atomic cross-filesystem
 commit. Journal storage requires hardlink support; failure to publish leaves game
@@ -127,3 +131,29 @@ process records; production path, hash, transaction and process-name guards run.
 `git diff --check` passed. Full regression/release/package verification belongs to
 parent integration. No real game writes, Windows installer runs, dependency
 installation, pushes, publishing or Linux/Proton gameplay claims were made.
+
+## Review round 1: restoration ownership lifecycle
+
+Review identified that removing the only ownership receipt during `restore`
+prevented direct subsequent uninstall. The original test hid this defect with an
+intermediate reinstall. Updated that test to perform the direct
+`install -> restore -> uninstall` sequence, assert the receipt remains byte-for-byte
+unchanged after restore, assert verification refuses the original game, and assert
+uninstall removes the receipt while preserving the save and original backup.
+The separate genuinely-unpaired-files refusal test remains. Added a regression
+requiring an existing verified original backup when uninstalling a restored game.
+
+RED: direct lifecycle failed reading the removed receipt; the missing-backup
+regression failed because restoration had already removed pairing evidence.
+GREEN after retaining the receipt on restore and validating backup availability:
+
+```text
+python -m unittest tests.test_linux_installer -q
+Ran 31 tests
+OK (skipped=1)
+```
+
+30 passed; the same real Linux `dosdevices/z:` test remains explicitly skipped on
+Windows. Receipt fields and configuration schema are unchanged for the client.
+The client must continue checking the actual pinned patched game hash even when
+the receipt is present; the original hash represents a restored/unpatched game.
