@@ -41,6 +41,18 @@ class PlatformPathsTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def directory_alias(self, target, alias):
+        alias.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.symlink(target, alias, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            if os.name != "nt":
+                self.skipTest(f"directory symlinks unavailable: {error}")
+            result = subprocess.run(["cmd", "/c", "mklink", "/J", str(alias), str(target)],
+                                    capture_output=True, text=True)
+            if result.returncode:
+                self.skipTest(f"directory aliases unavailable: {result.stderr}")
+
     def test_round_trip_descriptor_and_derived_folders(self):
         paths = self.installation()
         config = self.home / "config" / "installation.json"
@@ -226,6 +238,56 @@ class PlatformPathsTests(unittest.TestCase):
                 self.skipTest(f"directory aliases unavailable: {result.stderr}")
         with self.assertRaises(ValueError):
             validate_installation(InstallationPaths(alias / "data.win", paths.prefix, paths.factori_root))
+
+    def test_deeper_game_and_prefix_ancestors_cannot_be_aliased(self):
+        paths = self.installation(self.home / "Real Steam")
+        steamapps = paths.game_data.parents[2]
+        for name, target, suffix, game_alias in (
+            ("common", steamapps / "common", "steamapps/common/Word Factori/data.win", True),
+            ("steamapps", steamapps, "steamapps/common/Word Factori/data.win", True),
+            ("compatdata", steamapps / "compatdata", f"steamapps/compatdata/{APP}/pfx", False),
+            ("app-id", steamapps / "compatdata" / APP, f"steamapps/compatdata/{APP}/pfx", False),
+        ):
+            with self.subTest(name=name):
+                alias_root = self.home / f"Alias {name}"
+                alias = alias_root / ("steamapps" if name == "steamapps" else
+                                      "steamapps/common" if name == "common" else
+                                      "steamapps/compatdata" if name == "compatdata" else
+                                      f"steamapps/compatdata/{APP}")
+                self.directory_alias(target, alias)
+                aliased = alias_root / suffix
+                if game_alias:
+                    candidate = InstallationPaths(aliased, paths.prefix, paths.factori_root)
+                else:
+                    candidate = InstallationPaths(paths.game_data, aliased,
+                                                  aliased / "drive_c/users/Player/AppData/Local/factori")
+                with self.assertRaises(ValueError):
+                    validate_installation(candidate)
+
+    def test_discovery_canonicalizes_steam_root_alias(self):
+        root = self.home / "Canonical Steam"
+        paths = self.installation(root)
+        self.manifest(root)
+        alias = self.home / "Steam Shortcut"
+        self.directory_alias(root, alias)
+        self.assertEqual(discover_installations([alias]), [paths])
+
+    def test_discovery_reports_library_limit_instead_of_partial_results(self):
+        roots = [self.home / f"Steam {number:02d}" for number in range(65)]
+        for root in roots:
+            root.mkdir()
+        with self.assertRaisesRegex(ValueError, "libraries"):
+            discover_installations(roots)
+
+    def test_discovery_reports_user_limit_instead_of_partial_results(self):
+        root = self.home / "Steam"
+        paths = self.installation(root)
+        self.manifest(root)
+        users = paths.prefix / "drive_c/users"
+        for number in range(32):
+            (users / f"Player {number:02d}/AppData/Local/factori").mkdir(parents=True)
+        with self.assertRaisesRegex(ValueError, "users"):
+            discover_installations([root])
 
 
 if __name__ == "__main__":

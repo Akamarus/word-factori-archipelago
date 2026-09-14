@@ -52,6 +52,10 @@ def _is_alias(path: Path) -> bool:
     return path.is_symlink() or getattr(path, "is_junction", lambda: False)()
 
 
+def _has_alias_ancestor(path: Path) -> bool:
+    return any(_is_alias(candidate) for candidate in (path, *path.parents))
+
+
 def validate_installation(paths: InstallationPaths) -> InstallationPaths:
     """Require an existing game and one exact account inside an existing prefix."""
     if not isinstance(paths, InstallationPaths):
@@ -60,9 +64,10 @@ def validate_installation(paths: InstallationPaths) -> InstallationPaths:
     if not all(isinstance(p, Path) and p.is_absolute() for p in (game_data, prefix, factori)):
         raise ValueError("installation paths must be absolute")
     if (game_data.name != "data.win" or not game_data.is_file()
-            or _is_alias(game_data) or _is_alias(game_data.parent)):
+            or _has_alias_ancestor(game_data)):
         raise ValueError("game data.win is missing or unsafe")
-    if not prefix.is_dir() or _is_alias(prefix) or not (prefix / "drive_c" / "users").is_dir():
+    if (not prefix.is_dir() or _has_alias_ancestor(prefix)
+            or not (prefix / "drive_c" / "users").is_dir()):
         raise ValueError("Proton prefix has not been initialized")
     try:
         relative = factori.relative_to(prefix)
@@ -74,8 +79,8 @@ def validate_installation(paths: InstallationPaths) -> InstallationPaths:
         raise ValueError("factori directory is not a Proton user's AppData/Local/factori")
     if not factori.is_dir() or not _within(factori, prefix):
         raise ValueError("factori directory is missing or leaves the Proton prefix")
-    # A Steam root itself may be a symlink; components below the chosen prefix
-    # may not redirect mutations into another user's tree or outside the prefix.
+    # Discovery canonicalizes Steam-root aliases first. Below the selected
+    # prefix, no component may redirect into another user or outside it.
     current = prefix
     for component in parts:
         current = current / component
@@ -249,7 +254,9 @@ def discover_installations(steam_roots=None) -> list[InstallationPaths]:
 
     def add_library(value: Path) -> None:
         library = Path(value).expanduser().resolve()
-        if library.is_dir() and library not in seen_libraries and len(libraries) < 64:
+        if library.is_dir() and library not in seen_libraries:
+            if len(libraries) >= 64:
+                raise ValueError("Steam discovery exceeds 64 libraries")
             seen_libraries.add(library)
             libraries.append(library)
 
@@ -284,10 +291,15 @@ def discover_installations(steam_roots=None) -> list[InstallationPaths]:
         if not users.is_dir():
             continue
         try:
-            accounts = sorted((entry for entry in users.iterdir() if entry.is_dir()), key=lambda p: p.name)
+            accounts = []
+            for entry in users.iterdir():
+                if entry.is_dir():
+                    accounts.append(entry)
+                    if len(accounts) > 32:
+                        raise ValueError("Steam discovery exceeds 32 Proton users")
         except OSError:
             continue
-        for account in accounts[:32]:
+        for account in sorted(accounts, key=lambda p: p.name):
             factori = account / "AppData" / "Local" / "factori"
             candidate = InstallationPaths(game_data, prefix, factori)
             try:
