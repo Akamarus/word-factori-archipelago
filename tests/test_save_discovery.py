@@ -7,6 +7,24 @@ from word_factori.save import find_save
 
 
 class SaveDiscoveryTests(unittest.TestCase):
+    def test_active_account_and_mod_cannot_escape_selected_factori_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            local = Path(directory)
+            factori = local / "factori"
+            factori.mkdir()
+            outside = local / "outside"
+            outside.mkdir()
+            (outside / "save.json").write_text("{}")
+            reference = factori / "user_ref.json"
+            for folder in ("../outside", "/tmp/outside", "C:\\outside"):
+                reference.write_text(json.dumps({"most_recent_steam": folder}))
+                with self.assertRaises(ValueError):
+                    find_save(local, Path("mods") / "word factori archipelago")
+            reference.write_text(json.dumps({"most_recent_steam": "account"}))
+            (factori / "account").mkdir()
+            with self.assertRaises(ValueError):
+                find_save(local, Path("..") / "outside")
+
     def test_custom_campaign_save_is_scoped_to_account_and_mod(self):
         with tempfile.TemporaryDirectory() as directory:
             local = Path(directory)

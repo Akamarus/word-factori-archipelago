@@ -343,6 +343,10 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
+        # This suite exercises the Windows LOCALAPPDATA client contract even on Linux CI.
+        self.platform = patch("word_factori.client.sys.platform", "win32")
+        self.platform.start()
+        self.addCleanup(self.platform.stop)
         self.environment = patch.dict(os.environ, {"LOCALAPPDATA": self.directory.name})
         self.environment.start()
         self.addCleanup(self.environment.stop)

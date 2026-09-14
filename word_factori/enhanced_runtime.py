@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 import re
 import time
 
 from .mod import MODULES, _write_json
+from .platform_paths import InstallationPaths
 
 ORIGINAL_SHA256 = "d40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978"
 PATCH_PROTOCOL = "enhanced_v1"
@@ -21,21 +23,59 @@ def valid_digest(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch("[0-9a-f]{64}", value) is not None
 
 
-def patch_ready(mod_folder: Path) -> bool:
-    """A stale receipt cannot enable an unpatched or subsequently updated game."""
+@dataclass(frozen=True)
+class PatchReadiness:
+    ready: bool
+    code: str
+    message: str
+
+
+def patch_readiness(mod_folder: Path, installation: InstallationPaths | None = None) -> PatchReadiness:
+    """Explain why a receipt cannot authorize this exact game installation."""
+    missing = PatchReadiness(False, "receipt_missing", "Native patch receipt is missing; run the Word Factori Linux installer.")
     try:
         receipt = json.loads((mod_folder / RECEIPT_NAME).read_text(encoding="utf-8"))
-        if receipt["protocol"] != PATCH_PROTOCOL or receipt["original_sha256"] != ORIGINAL_SHA256:
-            return False
-        if receipt["patched_sha256"] != PATCHED_SHA256:
-            return False
+    except FileNotFoundError:
+        return missing
+    except (OSError, ValueError, TypeError):
+        return PatchReadiness(False, "receipt_invalid", "Native patch receipt is unreadable or invalid; rerun the installer.")
+    try:
+        if (not isinstance(receipt, dict) or receipt["protocol"] != PATCH_PROTOCOL
+                or receipt["original_sha256"] != ORIGINAL_SHA256
+                or receipt["patched_sha256"] != PATCHED_SHA256):
+            raise ValueError("unsupported receipt")
         path = Path(receipt["game_data"])
         if not path.is_absolute() or path.name.lower() != "data.win":
-            return False
+            raise ValueError("invalid game path")
+        if installation is not None:
+            if (mod_folder != installation.mod_folder
+                    or receipt.get("platform") != "linux" or path != installation.game_data
+                    or receipt.get("prefix") != str(installation.prefix)
+                    or receipt.get("factori_root") != str(installation.factori_root)):
+                raise ValueError("receipt does not match selected installation")
+            worlds = Path(receipt.get("ap_worlds", ""))
+            if not worlds.is_absolute() or worlds.name != "custom_worlds" or not worlds.is_dir():
+                raise ValueError("receipt has no native Archipelago worlds directory")
+            backup = installation.game_data.with_name("data.wf-ap-original.win")
+            if not backup.is_file() or _digest(backup) != ORIGINAL_SHA256:
+                return PatchReadiness(False, "backup_invalid", "Native patch backup is missing or invalid; rerun the installer.")
         with path.open("rb") as stream:
-            return hashlib.file_digest(stream, "sha256").hexdigest() == receipt["patched_sha256"]
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        if digest != PATCHED_SHA256:
+            detail = "The game is unpatched after restore" if digest == ORIGINAL_SHA256 else "The game binary hash changed"
+            return PatchReadiness(False, "game_hash_mismatch", f"{detail}; rerun the native patch installer.")
+        return PatchReadiness(True, "ready", "Native patch is ready.")
     except (OSError, ValueError, TypeError, KeyError):
-        return False
+        return PatchReadiness(False, "receipt_invalid", "Native patch receipt does not match the selected installation; rerun the installer.")
+
+
+def _digest(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def patch_ready(mod_folder: Path, installation: InstallationPaths | None = None) -> bool:
+    return patch_readiness(mod_folder, installation).ready
 
 
 def publish_runtime(path: Path, room: str, layout: str, levels: list[dict]) -> bool:

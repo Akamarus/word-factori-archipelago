@@ -60,9 +60,10 @@ from .dispatch_store import (
 )
 from .mod import render_levels, write_campaign_identity, write_levels
 from .capabilities import FULL
-from .enhanced_runtime import RUNTIME_NAME, patch_ready, publish_runtime
+from .enhanced_runtime import RUNTIME_NAME, patch_readiness, publish_runtime
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
-from .overlay_preferences import load_preferences
+from .overlay_preferences import OverlayPreferences, load_preferences
+from .platform_paths import InstallationPaths, load_installation, selected_proton_mod
 from .overlay_protocol import (
     ConnectIntent,
     DisconnectIntent,
@@ -145,15 +146,26 @@ class WordFactoriContext(CommonContext):
 
     def __init__(
         self, server_address: str | None, password: str | None, *, overlay: object | None = None,
+        installation_config: Path | None = None,
     ):
         super().__init__(server_address, password)
-        local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-        self.factori_root = local / "factori"
-        self.mod_folder = self.factori_root / "mods" / MOD_FOLDER
-        self.levels_path = self.mod_folder / "levels.json"
-        self.campaign_path = self.mod_folder / "archipelago_campaign.json"
-        self.mods_path = self.factori_root / "mods.json"
-        self.state_root = self.factori_root / "archipelago"
+        self.native_linux = sys.platform.startswith("linux")
+        self.installation_paths: InstallationPaths | None = None
+        self.setup_error: str | None = None
+        if self.native_linux:
+            try:
+                self.installation_paths = load_installation(installation_config)
+            except (OSError, ValueError) as error:
+                self.setup_error = f"Word Factori Linux setup is missing or invalid ({error}); run the Linux installer or use --wf-config."
+            self.factori_root = self.installation_paths.factori_root if self.installation_paths else None
+        else:
+            local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+            self.factori_root = local / "factori"
+        self.mod_folder = self.factori_root / "mods" / MOD_FOLDER if self.factori_root else None
+        self.levels_path = self.mod_folder / "levels.json" if self.mod_folder else None
+        self.campaign_path = self.mod_folder / "archipelago_campaign.json" if self.mod_folder else None
+        self.mods_path = self.factori_root / "mods.json" if self.factori_root else None
+        self.state_root = self.factori_root / "archipelago" if self.factori_root else None
         self.slot_data: dict = {}
         self.bridge_state = BridgeState.empty()
         self.last_render_signature: tuple[tuple[str, ...], int] | None = None
@@ -166,7 +178,8 @@ class WordFactoriContext(CommonContext):
         self.pending_overlay_events: tuple[DispatchEvent, ...] = ()
         self._dispatch_lock = asyncio.Lock()
         self.overlay = overlay if overlay is not None else OverlaySupervisor()
-        self.overlay_preferences = load_preferences(self.overlay_preferences_path())
+        self.overlay_preferences = (OverlayPreferences(enabled=False) if self.native_linux
+                                    else load_preferences(self.overlay_preferences_path()))
         self.overlay_state = OverlayState.closed(max_visible=self.overlay_preferences.max_visible)
         self.last_overlay_transport_error: str | None = None
         self.last_overlay_persistence_error: str | None = None
@@ -304,7 +317,12 @@ class WordFactoriContext(CommonContext):
                 )
                 self._overlay_identity = None
                 self.publish_overlay()
-                self._bridge_warning(CAMPAIGN_MISMATCH)
+                self._bridge_warning(self.setup_error or CAMPAIGN_MISMATCH)
+                return
+            if self.setup_error is not None:
+                self._bridge_warning(self.setup_error)
+                self.bridge_state = BridgeState.empty()
+                self.dispatch_ledger = DispatchLedger.empty("disconnected")
                 return
             try:
                 baseline_ledger = load_ledger(
@@ -332,7 +350,7 @@ class WordFactoriContext(CommonContext):
                 self._bridge_warning(f"Ignoring invalid bridge sidecar; server state will rebuild it: {error}")
                 self.bridge_state = BridgeState.empty()
             if not self.compatible_campaign():
-                self._bridge_warning(CAMPAIGN_MISMATCH)
+                self._bridge_warning(self._campaign_issue())
                 return
             self.bridge_state = acknowledge_checks(self.bridge_state, self.checked_locations)
             save_state(self.state_path(), self.bridge_state)
@@ -365,14 +383,20 @@ class WordFactoriContext(CommonContext):
                 save_state(self.state_path(), self.bridge_state)
 
     def state_path(self) -> Path:
+        if self.state_root is None:
+            raise ValueError(self.setup_error or "Word Factori installation is not configured")
         identity = self.connected_identity or self.current_identity()
         return self.state_root / f"{_safe_filename(identity)}.json"
 
     def dispatch_path(self, identity: str | None = None) -> Path:
+        if self.state_root is None:
+            raise ValueError(self.setup_error or "Word Factori installation is not configured")
         identity = identity or self.connected_identity or self.current_identity()
         return ledger_path(self.state_root, _safe_filename(identity))
 
     def overlay_preferences_path(self) -> Path:
+        if self.state_root is None:
+            raise ValueError(self.setup_error or "Word Factori installation is not configured")
         return self.state_root / "overlay_preferences.json"
 
     def overlay_config(self) -> OverlayConfig:
@@ -391,6 +415,9 @@ class WordFactoriContext(CommonContext):
 
     def start_overlay(self) -> None:
         """Start optional cosmetic work only after the async client runtime exists."""
+        if self.native_linux:
+            self._overlay_warning("Windows overlay is unavailable on Linux; items and chat remain in the regular client")
+            return
         if not self.overlay_preferences.enabled:
             return
         try:
@@ -813,8 +840,9 @@ class WordFactoriContext(CommonContext):
     ) -> bool:
         campaign = self.selected_campaign()
         if campaign is not None and campaign.layout is not None and campaign.layout.integration_mode == "enhanced":
-            if not patch_ready(self.mod_folder):
-                raise ValueError("The integration requires its verified native patch. Close the game and rerun Install Word Factori Archipelago.cmd for this game build.")
+            readiness = patch_readiness(self.mod_folder, self.installation_paths)
+            if not readiness.ready:
+                raise ValueError(readiness.message)
             levels = render_levels(owned_machines, world_access, locations=locations)
             room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
             return publish_runtime(self.mod_folder / RUNTIME_NAME, room, campaign.layout.digest, levels)
@@ -835,7 +863,7 @@ class WordFactoriContext(CommonContext):
 
     async def reconcile_received(self) -> None:
         if not self.compatible_campaign():
-            self._bridge_warning(CAMPAIGN_MISMATCH)
+            self._bridge_warning(self._campaign_issue())
             return
         result = reconcile(self.bridge_state, self.network_items(), set(), set(), authoritative=True)
         self.bridge_state = result.state
@@ -864,13 +892,19 @@ class WordFactoriContext(CommonContext):
                 pass
 
     def selected_mod(self) -> bool:
+        if self.mods_path is None:
+            return False
         try:
             payload = json.loads(self.mods_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return False
+        if self.native_linux:
+            return selected_proton_mod(payload, self.installation_paths)
         return mod_is_selected(payload, str(self.mod_folder))
 
     def installed_campaign(self) -> dict:
+        if self.campaign_path is None:
+            return {}
         try:
             payload = json.loads(self.campaign_path.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError):
@@ -890,9 +924,18 @@ class WordFactoriContext(CommonContext):
     def prepare_selected_campaign(self) -> bool:
         """Install only a bundled, digest-matched curated level set for this slot."""
         self._prepared_campaign_reload_required = False
+        if self.setup_error is not None:
+            self._bridge_warning(self.setup_error)
+            return False
         campaign = self.selected_campaign()
         if campaign is None:
+            self._bridge_warning(CAMPAIGN_MISMATCH)
             return False
+        if self.native_linux:
+            readiness = patch_readiness(self.mod_folder, self.installation_paths)
+            if not readiness.ready:
+                self._bridge_warning(readiness.message)
+                return False
         try:
             view = inventory_view(self.network_items())
             changed = self.update_rendered_levels(
@@ -924,12 +967,21 @@ class WordFactoriContext(CommonContext):
             return False
         return True
 
+    def _campaign_issue(self) -> str | None:
+        if self.setup_error is not None:
+            return self.setup_error
+        if self.selected_campaign() is None:
+            return CAMPAIGN_MISMATCH
+        if self.native_linux or self.slot_data.get("integration_mode") == "enhanced":
+            readiness = patch_readiness(self.mod_folder, self.installation_paths)
+            if not readiness.ready:
+                return readiness.message
+        if not campaign_compatible(self.slot_data, self.installed_campaign()):
+            return CAMPAIGN_MISMATCH
+        return None
+
     def compatible_campaign(self) -> bool:
-        return (
-            self.selected_campaign() is not None
-            and campaign_compatible(self.slot_data, self.installed_campaign())
-            and (self.slot_data.get("integration_mode") != "enhanced" or patch_ready(self.mod_folder))
-        )
+        return self._campaign_issue() is None
 
     def ensure_game_slot_binding(self, active: ActiveSlot | None = None) -> ActiveSlot | None:
         try:
@@ -949,7 +1001,7 @@ class WordFactoriContext(CommonContext):
 
     async def scan_once(self, ignore_selection_guard: bool = False) -> None:
         if not self.compatible_campaign():
-            self._bridge_warning(CAMPAIGN_MISMATCH)
+            self._bridge_warning(self._campaign_issue())
             return
         if not ignore_selection_guard and not self.selected_mod():
             self._bridge_warning("Automatic checks paused: the selected Word Factori mod is not the Archipelago mod. Use /wf_scan for an explicit one-time scan.")
@@ -987,7 +1039,7 @@ class WordFactoriContext(CommonContext):
         expected_identity = self.connected_identity
         expected_generation = self._connection_generation
         if not self.compatible_campaign():
-            self._bridge_warning(CAMPAIGN_MISMATCH)
+            self._bridge_warning(self._campaign_issue())
             return
         locations = self.active_locations()
         try:
@@ -1065,7 +1117,8 @@ class WordFactoriContext(CommonContext):
 
     def status_text(self) -> str:
         selected = "selected" if self.selected_mod() else "not selected or unverified"
-        campaign = "compatible" if self.compatible_campaign() else "mismatched or missing"
+        issue = self._campaign_issue()
+        campaign = "compatible" if issue is None else ("mismatched or missing" if issue == CAMPAIGN_MISMATCH else "setup or patch needed")
         game_slot = "bound" if self.bridge_state.game_slot_id else "not bound"
         deliveries = max(0, len(self.bridge_state.applied) - 1)
         return f"AP mod: {selected}; campaign: {campaign}; game save: {game_slot}; received item deliveries: {deliveries}; bridge: {self.last_bridge_error or 'ready'}; overlay: {self.last_overlay_error or 'ready'}"
@@ -1296,6 +1349,8 @@ class WordFactoriContext(CommonContext):
                 pass
 
     def check_overlay_health(self) -> None:
+        if self.native_linux:
+            return
         if not self.overlay_preferences.enabled:
             return
         try:
@@ -1309,6 +1364,11 @@ class WordFactoriContext(CommonContext):
             self._overlay_warning(f"health check failed: {error}; using regular client")
 
     async def overlay_control(self, action: str) -> None:
+        if self.native_linux:
+            if action not in {"show", "hide", "restart"}:
+                raise ValueError("unknown overlay control")
+            self._overlay_warning("Windows overlay is unavailable on Linux; items and chat remain in the regular client")
+            return
         if action == "show":
             if not self.overlay_preferences.enabled:
                 self._overlay_warning("disabled by preference; regular client active")
@@ -1377,7 +1437,7 @@ async def game_watcher(ctx: WordFactoriContext) -> None:
 
 def launch_client(*passed_args: str) -> None:
     async def _main(args) -> None:
-        ctx = WordFactoriContext(args.connect, args.password)
+        ctx = WordFactoriContext(args.connect, args.password, installation_config=args.wf_config)
         ctx.auth = args.name
         ctx.server_task = asyncio.create_task(server_loop(ctx), name="server loop")
         if gui_enabled:
@@ -1391,6 +1451,7 @@ def launch_client(*passed_args: str) -> None:
 
     parser = get_base_parser(description="Word Factori Archipelago Client")
     parser.add_argument("--name", default=None, help="Archipelago slot name")
+    parser.add_argument("--wf-config", type=Path, default=None, help="Word Factori Linux installation descriptor")
     parser.add_argument("url", nargs="?", help="archipelago:// connection URL")
     args = parser.parse_args(passed_args)
     if args.url:
