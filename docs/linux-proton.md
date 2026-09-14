@@ -1,8 +1,8 @@
-# Linux setup with Steam Proton (unreleased, experimental)
+# Linux setup with Steam Proton (1.4.1, experimental)
 
-These instructions apply to the development package containing
-**Install Word Factori Archipelago.sh**, not the already-published v1.4.0 ZIP.
-Linux support has automated filesystem/client tests but has **not been validated
+Download the **[1.4.1 player package](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.1)**,
+which includes **Install Word Factori Archipelago.sh** alongside the Windows installer.
+Automated Windows and Ubuntu checks pass, but Linux support has **not been validated
 in a real Linux/Proton playthrough**. Do not describe it as stable support yet.
 
 There is one campaign and one player package for both platforms. Linux runs the
@@ -20,7 +20,7 @@ is needed. This feature does not change the existing 1.4.0 campaign contract.
 - Launch Word Factori through Steam Proton once, then close it and Archipelago.
   This creates the game's Proton prefix and AppData folders. Setup never creates
   a prefix or chooses an account by guessing.
-- Extract the complete development player ZIP. Keep all files together.
+- Extract the complete player ZIP. Keep all files together.
 
 ## Install or update
 

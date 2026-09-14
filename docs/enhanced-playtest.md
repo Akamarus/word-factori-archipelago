@@ -1,6 +1,6 @@
 # Native integration and playtest details
 
-Version **[1.4.0 is a tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.0)**, not a stable release. The integration always uses enhanced, shuffled, machine-only progression and requires the reversible native patch for the exact verified Steam Word Factori build 12616577. There is one player package and one installation route. This document records technical behavior and acceptance work for that integration.
+Version **[1.4.1 is a tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.1)**, not a stable release. The integration always uses enhanced, shuffled, machine-only progression and requires the reversible native patch for the exact verified Steam Word Factori build 12616577. There is one player package with platform-specific installers. This document records technical behavior and acceptance work for that integration.
 
 ## Runtime behavior
 
@@ -15,10 +15,12 @@ This candidate uses the existing compiled native delta. The unified installation
 
 ## Install and start a playtest
 
-1. Extract **word-factori-archipelago-1.4.0.zip** and close Word Factori and Archipelago.
+For Linux/Proton, follow the [Linux setup guide](linux-proton.md); real Proton gameplay remains unverified. The steps below are for Windows.
+
+1. Extract **word-factori-archipelago-1.4.1.zip** and close Word Factori and Archipelago.
 2. Run the root **Install Word Factori Archipelago.cmd**. It installs the matching APWorld and mod and applies the required native delta patch after verifying and backing up the original game data.
 3. If prompted, select `data.win` from the Word Factori installation (Steam → Manage → Browse local files).
-4. Generate a **new room** using either bundled example YAML. There are no integration-mode or campaign-layout selectors. Old rooms are unsupported by this candidate, including earlier development contracts.
+4. For a new playtest, generate a **new room** using either bundled example YAML. There are no integration-mode or campaign-layout selectors. Matching 1.4.0 rooms retain the same contract and do not need a reset when updating; pre-1.4.0 rooms and earlier development contracts remain unsupported.
 5. Start the updated Word Factori client and connect first so it prepares the shuffled campaign. Then start the game, select the AP mod, and choose a **fresh empty mod save**.
 
 The first load of a new room needs a fresh campaign load. After that, items refresh on factory entry. Keep the AP client connected while playing. During acceptance, confirm I and C are both selectable regardless of their button positions, verify four completions open page two, and check a newly received machine after returning to Levels and entering another factory.
