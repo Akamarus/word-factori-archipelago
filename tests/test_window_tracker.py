@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -393,8 +394,7 @@ class RendererBoundaryTests(unittest.TestCase):
 
     def test_production_visibility_adapter_uses_verified_no_activate_show_and_hide(self):
         user32 = FakeVisibilityUser32()
-        adapter = CtypesOverlayHookAPI.__new__(CtypesOverlayHookAPI)
-        adapter._user32 = user32
+        adapter = self.visibility_adapter(user32)
 
         adapter.show_no_activate(77)
         adapter.hide_window(77)
@@ -422,22 +422,35 @@ class RendererBoundaryTests(unittest.TestCase):
 
     def test_production_visibility_adapter_raises_when_set_window_pos_fails(self):
         user32 = FakeVisibilityUser32(set_position_result=False)
-        adapter = CtypesOverlayHookAPI.__new__(CtypesOverlayHookAPI)
-        adapter._user32 = user32
+        adapter = self.visibility_adapter(user32)
 
         with self.assertRaises(OSError):
             adapter.show_no_activate(77)
 
     def test_production_visibility_adapter_raises_on_visibility_mismatch(self):
         user32 = FakeVisibilityUser32(apply_visibility=False)
-        adapter = CtypesOverlayHookAPI.__new__(CtypesOverlayHookAPI)
-        adapter._user32 = user32
+        adapter = self.visibility_adapter(user32)
 
         with self.assertRaisesRegex(OSError, "visible state"):
             adapter.show_no_activate(77)
         user32.visible = True
         with self.assertRaisesRegex(OSError, "hidden state"):
             adapter.hide_window(77)
+
+    def visibility_adapter(self, user32):
+        # Fake user32 also needs its OS error boundary on non-Windows hosts.
+        # Keep the production visibility logic and its behavioral assertions real.
+        for name, replacement in (
+            ("set_last_error", lambda value: None),
+            ("get_last_error", lambda: 0),
+            ("WinError", lambda value: OSError(value, "simulated Windows error")),
+        ):
+            replacement_patch = patch.object(ctypes, name, replacement, create=True)
+            replacement_patch.start()
+            self.addCleanup(replacement_patch.stop)
+        adapter = CtypesOverlayHookAPI.__new__(CtypesOverlayHookAPI)
+        adapter._user32 = user32
+        return adapter
 
     def test_hotkeys_are_gated_by_game_focus_and_ledger_state(self):
         api = FakeHookAPI()

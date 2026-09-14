@@ -93,8 +93,10 @@ def check_campaign(files: dict[str, bytes]):
         if not isinstance(document, (dict, list)):
             raise ValueError(f'Invalid mod JSON: {name}')
     campaign = json.loads(files['archipelago_campaign.json'])
-    if (not isinstance(campaign, dict) or campaign.get('campaign_id') != 'word-factori-hybrid'
-            or campaign.get('manifest_version') != '1.2.0' or campaign.get('level_count') != 40
+    if (not isinstance(campaign, dict)
+            or (campaign.get('campaign_id'), campaign.get('level_count')) not in
+                (('word-factori-hybrid', 40), ('word-factori-core', 30))
+            or campaign.get('manifest_version') != '1.2.0'
             or not isinstance(campaign.get('manifest_digest'), str)
             or not re.fullmatch('[0-9a-f]{64}', campaign['manifest_digest'])):
         raise ValueError('Mod does not identify the supported Word Factori campaign')

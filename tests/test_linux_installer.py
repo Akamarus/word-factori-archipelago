@@ -253,6 +253,34 @@ class LinuxInstallerTests(unittest.TestCase):
                 self.setup.run('install')
         self.assertEqual(before, self.snapshot())
 
+    def test_core_room_allows_verify_update_restore_and_uninstall(self):
+        self.setup.run('install')
+        campaign = self.paths.mod_folder / 'archipelago_campaign.json'
+        def select_core():
+            document = json.loads(campaign.read_text())
+            document.update(campaign_id='word-factori-core', level_count=30)
+            campaign.write_text(json.dumps(document))
+        select_core()
+        self.assertEqual(self.setup.run('verify'), 'Installation verified.')
+        self.setup.run('install')
+        select_core()
+        self.setup.run('restore')
+        self.assertEqual(self.original, self.game.read_bytes())
+        self.setup.run('uninstall')
+        self.assertFalse(self.setup.receipt.exists())
+        self.assertEqual(self.original, self.setup.backup.read_bytes())
+
+    def test_mismatched_campaign_id_and_count_refuses_changes(self):
+        self.setup.run('install')
+        campaign = self.paths.mod_folder / 'archipelago_campaign.json'
+        document = json.loads(campaign.read_text())
+        document['campaign_id'] = 'word-factori-core'
+        campaign.write_text(json.dumps(document))
+        before = self.snapshot()
+        with self.assertRaises(ValueError):
+            self.setup.run('uninstall')
+        self.assertEqual(before, self.snapshot())
+
     def test_ambiguous_discovery_never_selects_first_with_yes(self):
         args = argparse.Namespace(game_data=None, prefix=None, factori_root=None,
                                   config=self.config, yes=True)

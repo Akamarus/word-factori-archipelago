@@ -204,6 +204,33 @@ class LinuxClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_redirected_mod_parent_cannot_receive_client_writes(self):
         await self.check_redirected_mod_is_refused(True)
 
+    async def check_redirected_state_is_refused(self, dispatch_only):
+        from tests.test_platform_paths import PlatformPathsTests
+        from word_factori.bridge import save_state
+        from word_factori.dispatch_store import save_ledger
+        with self.install():
+            ctx = self.context()
+            self.enhanced_room(ctx)
+            destination = self.root / "outside-state"
+            destination.mkdir()
+            marker = destination / "keep.txt"
+            marker.write_bytes(b"unchanged")
+            alias = ctx.state_root / "dispatch" if dispatch_only else ctx.state_root
+            PlatformPathsTests.directory_alias(self, destination, alias)
+            if not dispatch_only:
+                with self.assertRaisesRegex(ValueError, "unsafe"):
+                    save_state(ctx.state_path(), ctx.bridge_state)
+            with self.assertRaisesRegex(ValueError, "unsafe"):
+                save_ledger(ctx.dispatch_path(), ctx.dispatch_ledger)
+            self.assertEqual([marker], list(destination.iterdir()))
+            self.assertEqual(b"unchanged", marker.read_bytes())
+
+    async def test_redirected_state_root_cannot_receive_client_writes(self):
+        await self.check_redirected_state_is_refused(False)
+
+    async def test_redirected_dispatch_cannot_receive_client_writes(self):
+        await self.check_redirected_state_is_refused(True)
+
     async def test_overlay_never_starts_or_restarts_on_linux(self):
         ctx = self.context()
         ctx.start_overlay()

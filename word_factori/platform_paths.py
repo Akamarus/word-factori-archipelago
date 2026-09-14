@@ -91,6 +91,16 @@ def validate_installation(paths: InstallationPaths) -> InstallationPaths:
     return paths
 
 
+def validate_state_target(paths: InstallationPaths, target: Path) -> Path:
+    """Recheck a native client's sidecar destination before reading or writing."""
+    validate_installation(paths)
+    if (not target.is_absolute()
+            or not target.is_relative_to(paths.factori_root / "archipelago")
+            or ".." in target.parts or _has_alias_ancestor(target)):
+        raise ValueError("Client state path is unsafe; remove the redirection before reconnecting")
+    return target
+
+
 def config_path(environ: Mapping[str, str] | None = None, home: Path | None = None) -> Path:
     environment = os.environ if environ is None else environ
     home = Path.home() if home is None else Path(home)

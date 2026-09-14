@@ -63,7 +63,7 @@ from .capabilities import FULL
 from .enhanced_runtime import RUNTIME_NAME, patch_readiness, publish_runtime
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
 from .overlay_preferences import OverlayPreferences, load_preferences
-from .platform_paths import InstallationPaths, load_installation, selected_proton_mod
+from .platform_paths import InstallationPaths, load_installation, selected_proton_mod, validate_state_target
 from .overlay_protocol import (
     ConnectIntent,
     DisconnectIntent,
@@ -386,18 +386,21 @@ class WordFactoriContext(CommonContext):
         if self.state_root is None:
             raise ValueError(self.setup_error or "Word Factori installation is not configured")
         identity = self.connected_identity or self.current_identity()
-        return self.state_root / f"{_safe_filename(identity)}.json"
+        return self._checked_state_target(self.state_root / f"{_safe_filename(identity)}.json")
 
     def dispatch_path(self, identity: str | None = None) -> Path:
         if self.state_root is None:
             raise ValueError(self.setup_error or "Word Factori installation is not configured")
         identity = identity or self.connected_identity or self.current_identity()
-        return ledger_path(self.state_root, _safe_filename(identity))
+        return self._checked_state_target(ledger_path(self.state_root, _safe_filename(identity)))
 
     def overlay_preferences_path(self) -> Path:
         if self.state_root is None:
             raise ValueError(self.setup_error or "Word Factori installation is not configured")
-        return self.state_root / "overlay_preferences.json"
+        return self._checked_state_target(self.state_root / "overlay_preferences.json")
+
+    def _checked_state_target(self, target: Path) -> Path:
+        return validate_state_target(self.installation_paths, target) if self.native_linux else target
 
     def overlay_config(self) -> OverlayConfig:
         preferences = self.overlay_preferences

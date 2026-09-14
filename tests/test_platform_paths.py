@@ -20,7 +20,8 @@ class PlatformPathsTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.home = Path(self.temporary.name)
+        # Discovery returns canonical paths, including expanded Windows 8.3 names.
+        self.home = Path(self.temporary.name).resolve()
 
     def installation(self, library=None, user="Player", game_dir="Word Factori"):
         library = library or self.home / "Steam"
