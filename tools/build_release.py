@@ -37,6 +37,7 @@ WORLD_SOURCE_NAMES = (
     "word_factori/layout.py",
     "word_factori/mod.py",
     "word_factori/options.py",
+    "word_factori/platform_paths.py",
     "word_factori/overlay_model.py",
     "word_factori/overlay_preferences.py",
     "word_factori/overlay_protocol.py",
@@ -102,6 +103,9 @@ def write_release() -> None:
         ROOT / "docs/enhanced-playtest.md",
         ROOT / "Restore Original Game.cmd",
         ROOT / "tools/install_enhanced.ps1", PATCH_FILE,
+        ROOT / "Install Word Factori Archipelago.sh",
+        ROOT / "tools/install_linux.py", ROOT / "tools/linux_transaction.py",
+        ROOT / "tools/enhanced_delta.py", ROOT / "docs/linux-proton.md",
     ]
     for root_name in roots:
         files.extend(path for path in (ROOT / root_name).rglob("*") if path.is_file())

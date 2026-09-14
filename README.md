@@ -1,19 +1,21 @@
 # Word Factori Archipelago
 
-[![Windows verification](https://github.com/Akamarus/word-factori-archipelago/actions/workflows/verify.yml/badge.svg)](https://github.com/Akamarus/word-factori-archipelago/actions/workflows/verify.yml)
+[![Windows and Linux verification](https://github.com/Akamarus/word-factori-archipelago/actions/workflows/verify.yml/badge.svg)](https://github.com/Akamarus/word-factori-archipelago/actions/workflows/verify.yml)
 
 An experimental public beta for playing **Word Factori** with [Archipelago](https://archipelago.gg/). It assembles a curated 30- or 40-level custom campaign into seed-specific six-level pages, turns completed levels into Archipelago checks, and unlocks factory machinery as items arrive from the multiworld.
 
 ![Word Factori with the integrated Archipelago Chat panel open](docs/images/word-factori-archipelago-chat.png)
 
-## New in 1.4.0: machine-only progression
+## New in 1.4.1: experimental Linux/Proton setup
 
-**[Download the 1.4.0 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.0).** This is an experimental testing build, not a stable release; a full connected playthrough remains pending.
+**[Download the 1.4.1 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.1).** One player ZIP now includes Windows and native Linux installers. Linux uses the regular Archipelago client while Steam runs Word Factori through Proton. Automated Windows and Ubuntu checks pass, but a real Linux/Proton playthrough has **not** been verified. This is a tester prerelease, not a stable release.
+
+### Current gameplay
 
 - **No World Access items in new seeds.** Your machines and recipe requirements determine which puzzles you can solve, alongside page progression.
 - **I stays available in every level.** Discovery Labs still restrict machine types, and challenge factories retain their machine limits.
 - **Shuffled pages from the start.** The first page is randomized, all six levels on an unlocked page are selectable, and four completions advance. New machines apply when you return to Levels and re-enter a factory, without restarting the game.
-- **Start a new room and empty mod save.** Old rooms are no longer supported. Updating the client does not convert them.
+- **New rooms start with an empty mod save.** The 1.4.0 campaign contract is unchanged in 1.4.1, so an existing matching 1.4.0 room does not require a reset. Pre-1.4.0 rooms remain unsupported; updating does not convert them.
 
 There is one integration: enhanced, shuffled, machine-only progression. The player package includes the APWorld, JSON mod, and required reversible native delta patch. There are no integration-mode or fixed-layout choices. Live acceptance remains pending, and in-game missing-machine notices are still planned.
 
@@ -26,9 +28,9 @@ The native patch enables independent first-page buttons and machine refresh on f
 - Deterministic recipe-graph and progression modeling for automated reachability rules.
 - Idempotent item delivery, completed-check, reconnect, and victory reconciliation.
 - Defensive save-slot binding and digest-verified campaign identity without writing game saves.
-- Transactional Windows install, update, and uninstall that preserve neighboring files.
-- Failure-isolated, Word Factori-styled Items/Chat overlay with the regular client as fallback.
-- A reproducible player package, full automated suite, release verifier, and Windows CI workflow.
+- Transactional Windows and Linux install, update, and uninstall that preserve neighboring files.
+- Failure-isolated, Word Factori-styled Items/Chat overlay on Windows; regular native client on Linux.
+- A reproducible player package, full automated suite, release verifier, and Windows/Ubuntu CI workflow.
 
 ## Architecture
 
@@ -61,15 +63,20 @@ Letters are always manufactured inside Word Factori. Archipelago never sends ind
 
 - Word Factori on Steam
 - Archipelago **0.6.7**
-- Windows
+- Windows, or Linux with Steam Proton (experimental)
+- On Linux: native Archipelago and Python **3.12 or newer**
 
 The required Word Factori depot is Steam build **12616577**, with the exact original `data.win` verified by the installer. Other builds and other binary modifications are rejected.
 
-Generate a **new room** with the matching 1.4.0 APWorld and client and use a **fresh empty mod save**. Old rooms are unsupported by this candidate, including earlier development rooms with a different progression contract. Updating does not convert an existing seed or save.
+For a new playthrough, generate a room with the matching APWorld and client and use a **fresh empty mod save**. Updating a matching 1.4.0 room to 1.4.1 does not require resetting its bound save. Pre-1.4.0 rooms and earlier development rooms with a different progression contract remain unsupported.
 
 ## Simple installation
 
-1. Download **[word-factori-archipelago-1.4.0.zip](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.0/word-factori-archipelago-1.4.0.zip)**, the single player package. Use this ZIP, not GitHub's automatic source-code archives.
+Download the single **[word-factori-archipelago-1.4.1.zip player package](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.1/word-factori-archipelago-1.4.1.zip)** for either platform. Use this ZIP, not GitHub's automatic source-code archives.
+
+### Windows
+
+1. Download the player package linked above.
 2. Extract the ZIP to a normal folder.
 3. Close Word Factori and Archipelago.
 4. Double-click the root **Install Word Factori Archipelago.cmd**. It installs the APWorld and mod, verifies your game, backs up the original game data, and applies the required native delta patch. If prompted, select `data.win` in your Steam Word Factori installation (Steam → Manage → Browse local files).
@@ -97,6 +104,26 @@ It also patches the verified game's `data.win`, preserving the original as `data
 
 To restore the game binary, close Word Factori and double-click the root **Restore Original Game.cmd**. This restores the verified original game and keeps saves and the backup. It does **not** uninstall the Archipelago integration. The integration requires its native patch to play; after restoring, run the main installer before using it again.
 
+### Linux with Steam Proton (experimental)
+
+1. Install **native Archipelago 0.6.7** and **Python 3.12 or newer**. Launch Word Factori through Steam Proton once, then close the game and Archipelago.
+2. Extract the same player ZIP linked above. Keep all files together.
+3. Open a terminal in the extracted folder and run:
+
+   ```bash
+   bash "Install Word Factori Archipelago.sh"
+   ```
+
+4. Choose your Steam/Proton installation if prompted. Enter your existing **native Archipelago `custom_worlds` directory**, check the displayed destinations, and confirm. These choices stay local; no personal setup details need to be posted publicly.
+5. Restart native Archipelago, launch **Word Factori Client**, and connect to your room before completing checks.
+6. Start Word Factori through Steam, select **word factori archipelago**, and use a fresh empty mod save for a **new** room. Keep the bound save when updating an existing matching 1.4.0 room.
+
+Use the regular Archipelago client for items, chat, hints, and connection status. **The in-game AP Mail overlay is Windows-only.** Do not run the Windows `.cmd` installer through Wine or use `sudo`.
+
+To update, close the game and Archipelago and run the same Linux command again. Setup verifies the game, preserves its original backup, installs the APWorld and mod, and records the selected paths locally. For manual path selection, verification, restore, uninstall, and interrupted-setup recovery, see the [Linux/Proton guide](docs/linux-proton.md).
+
+Automated tests run on Ubuntu, including the extracted ZIP's shell installer. **A real Linux/Proton gameplay session remains unverified**; please treat this as an experimental tester build.
+
 ## Starting a randomized game
 
 1. Copy one of the example player files into your Archipelago `Players` folder:
@@ -104,7 +131,7 @@ To restore the game binary, close Word Factori and double-click the root **Resto
    - `examples/WordFactoriTarget.yaml` for the Final Factory goal.
 2. Change the player `name` and any Word Factori options you want. Keep `custom_level_set: discovery_labs` for all 40 levels, or choose `core_campaign` for the focused 30-level set. Every room uses enhanced, shuffled, machine-only progression; the examples have no mode or layout selector.
 3. Generate and host the room normally with Archipelago.
-4. Launch **Word Factori Client** from the Archipelago Launcher. Connect from the in-game AP panel, through the regular client, or with an `archipelago://` launch link.
+4. Launch **Word Factori Client** from the Archipelago Launcher. Connect through the regular client, the in-game AP panel (Windows only), or an `archipelago://` launch link.
 5. Start Word Factori, select the Archipelago mod, and enter a new empty mod save slot.
 6. Choose freely among the six levels on the first page. Complete any four to open the next page, and use the same rule on later full pages. When a machine arrives, return to **Levels** and enter a factory to apply it. An already-open factory is not rebuilt; no game restart or save reload is needed for each item. Stickers never require a reload.
 
@@ -171,7 +198,7 @@ For example, the M Lab needs Merger3, J needs Bender and Merger2, and X needs Me
 
 ## Save safety
 
-Word Factori stores custom-campaign progress separately from its base campaign. The client reads:
+Word Factori stores custom-campaign progress separately from its base campaign. On Windows, the client reads:
 
 - `%LOCALAPPDATA%\factori\user_ref.json`
 - `%LOCALAPPDATA%\factori\mods.json`
@@ -181,6 +208,8 @@ These save and selection files are read-only to the integration. The client writ
 
 - the installed mod's `levels.json`, `archipelago_campaign.json`, and `archipelago_runtime.json`; and
 - an idempotency sidecar under `%LOCALAPPDATA%\factori\archipelago`.
+
+On Linux, the same game files are read under the selected Proton prefix's `AppData/Local/factori` directory. Setup records this location in a local configuration file; the [Linux guide](docs/linux-proton.md) explains its location and overrides.
 
 The installer separately modifies the verified game binary and preserves its original backup; it does not edit game saves.
 
@@ -203,7 +232,9 @@ Every curated set has an ID, version, stable level keys, and content digest. The
 
 Manual reporting cannot bypass campaign-digest or save-slot safety checks.
 
-## In-game Archipelago client
+## In-game Archipelago client (Windows)
+
+Linux uses the regular native Archipelago client for all items and chat; this overlay is not available there.
 
 While Word Factori is focused, received Archipelago items appear as blue popups on the left side of the game. The small **AP MAIL** button shows unread deliveries; click it or press **F8** to open the integrated client.
 
@@ -237,6 +268,8 @@ Use a new empty save slot for that Archipelago room. The safety system intention
 
 ### The in-game client is missing
 
+On Linux this is expected: use the regular native Word Factori Client.
+
 Use `/wf_overlay status` in the Word Factori Client. Then try `/wf_overlay restart`. Keep Word Factori in windowed or borderless mode; exclusive fullscreen is not supported. Item delivery and check reporting continue in the regular client even when the display is unavailable.
 
 ### The next-page arrow is gray
@@ -245,7 +278,8 @@ Complete any four levels on the current full page, including page one. If the th
 
 ## Current limitations
 
-- Version 1.4.0 is a tester prerelease; machine-only progression still needs a full connected in-game playthrough.
+- Version 1.4.1 is a tester prerelease; machine-only progression still needs a full connected in-game playthrough.
+- Linux setup and client behavior have automated Ubuntu coverage, but a real Linux/Proton playthrough remains unverified. Linux does not have the Windows in-game overlay.
 - Arbitrary Workshop packs are not imported into generated seeds.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.
 - Sticker items are AP filler rather than in-game sticker grants.
@@ -253,11 +287,11 @@ Complete any four levels on the current full page, including page one. If the th
 - The full in-game client is implemented. Its primary Windows 10/125%/2560×1440 path is live-smoke tested; password-room, 100%/150% scaling, ultrawide, and multi-monitor permutations remain in the beta matrix.
 - Exclusive fullscreen is not supported; use windowed or borderless mode.
 
-The required native patch uses the existing compiled delta. Isolated engine tests verify first-page freedom, factory-entry machine refresh, malformed-state fallback, and vanilla isolation; a normal connected in-game playthrough is still required before a stable release. See [native integration and playtest details](docs/enhanced-playtest.md). These earlier isolated results do not establish complete live acceptance of 1.4.0.
+The required native patch uses the existing compiled delta. Isolated engine tests verify first-page freedom, factory-entry machine refresh, malformed-state fallback, and vanilla isolation; a normal connected in-game playthrough is still required before a stable release. See [native integration and playtest details](docs/enhanced-playtest.md). These earlier isolated results do not establish complete live acceptance of the current release.
 
 ## Verification evidence
 
-**Automated and rerunnable:** the Windows verification command builds the APWorld and player ZIP, runs the complete unit/integration suite, and runs manifest, parity, recipe, and sensitive-data checks. GitHub Actions runs the same script on Windows with Python 3.12.
+**Automated and rerunnable:** verification builds the APWorld and player ZIP, runs the complete unit/integration suite, and runs manifest, parity, recipe, and sensitive-data checks. GitHub Actions runs this sequence on Windows and Ubuntu with Python 3.12, with platform-specific tests skipped only on the other OS. Ubuntu coverage includes Steam discovery, Proton paths, installer transactions, client reconciliation, and an extracted-package shell-installer smoke test.
 
 **Recorded earlier acceptance:** the pre-1.3 client and overlay path was exercised on Windows 10 at 2560×1440 and 125% scaling with Word Factori Steam build 12616577. That evidence does not establish live acceptance of shuffled pages or four-of-six progression. The 1.3.0 acceptance matrix is in the repository's [testing evidence](https://github.com/Akamarus/word-factori-archipelago/tree/main/docs/testing), with live rows marked pending until they are observed.
 

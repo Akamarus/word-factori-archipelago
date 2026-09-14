@@ -70,7 +70,18 @@ def read_active_slot(path: Path) -> ActiveSlot:
 def find_save(local_app_data: Path, mod_folder: Path | None = None) -> Path:
     reference = json.loads((local_app_data / "factori" / "user_ref.json").read_text(encoding="utf-8"))
     folder = reference["most_recent_steam"]
+    if (not isinstance(folder, str) or not folder or folder in (".", "..")
+            or any(char in folder for char in "/\\:\x00")):
+        raise ValueError("active Steam account reference is unsafe")
+    if mod_folder is not None and (mod_folder.is_absolute() or not mod_folder.parts
+                                   or any(part in (".", "..") or ":" in part or "\\" in part
+                                          for part in mod_folder.parts)):
+        raise ValueError("mod save location is unsafe")
     account = local_app_data / "factori" / folder
     path = account / mod_folder / "save.json" if mod_folder is not None else account / "save.json"
+    root = local_app_data / "factori"
+    if (account.is_symlink() or any(part.is_symlink() for part in (path, *path.parents) if part != root)
+            or not path.resolve().is_relative_to(root.resolve())):
+        raise ValueError("active save leaves selected account")
     if not path.is_file(): raise FileNotFoundError(path)
     return path
