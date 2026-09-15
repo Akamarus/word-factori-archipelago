@@ -18,10 +18,16 @@ else:
     )
     from .campaign import campaign_for_level_set
     from .client_core import resolve_room_campaign
-    from .layout import ENHANCED_MACHINE_MODEL, RECIPE_MODEL, build_layout, layout_slot_data
-    from .options import CampaignCount, CustomLevelSet, Goal, RecipeChecks, WordFactoriOptions
+    from .layout import ENHANCED_MACHINE_MODEL, RECIPE_MODEL, WORD_ORDER_MODEL, build_layout, layout_slot_data
+    from .options import (
+        CampaignCount, CustomLevelSet, Goal, RecipeChecks, TypeAWordChecks,
+        TypeAWordCount, TypeAWordWords, WordFactoriOptions,
+    )
     from .recipe_checks import RECIPE_CATALOG_DIGEST, RECIPE_CHECKS
     from .requirements import access_rule_for
+    from .word_orders import (
+        WORD_ORDER_NAME_TO_ID, choose_word_orders, orders_slot_data,
+    )
     from .version import AUTHOR, VERSION
     from . import Components as components
 
@@ -47,14 +53,18 @@ else:
         options_dataclass = WordFactoriOptions
         options: WordFactoriOptions
         item_name_to_id = ITEM_NAME_TO_ID
-        location_name_to_id = {**LOCATION_NAME_TO_ID, **{check.name: check.code for check in RECIPE_CHECKS}}
+        location_name_to_id = {
+            **LOCATION_NAME_TO_ID,
+            **{check.name: check.code for check in RECIPE_CHECKS},
+            **WORD_ORDER_NAME_TO_ID,
+        }
         ut_can_gen_without_yaml = True
 
         @staticmethod
         def interpret_slot_data(slot_data: dict) -> dict:
             """Give UT the room contract, never a newly randomized approximation."""
             resolved = resolve_room_campaign(slot_data)
-            if resolved.layout is None or slot_data.get("progression_model") not in {ENHANCED_MACHINE_MODEL, RECIPE_MODEL}:
+            if resolved.layout is None or slot_data.get("progression_model") not in {ENHANCED_MACHINE_MODEL, RECIPE_MODEL, WORD_ORDER_MODEL}:
                 raise ValueError("Universal Tracker requires a matching 1.4.0-or-newer machine-only room")
             if slot_data.get("level_set") not in ("core_campaign", "discovery_labs"):
                 raise ValueError("tracker room level_set is missing or invalid")
@@ -86,17 +96,35 @@ else:
                 self.options.goal = Goal.from_any(slot_data["goal"])
                 self.options.campaign_count = CampaignCount.from_any(slot_data["campaign_count"])
                 self.options.recipe_checks = RecipeChecks.from_any(slot_data.get("recipe_checks", False))
+                self.options.type_a_word_checks = TypeAWordChecks.from_any(bool(resolved.word_orders))
+                self.options.type_a_word_count = TypeAWordCount.from_any(len(resolved.word_orders) or TypeAWordCount.default)
+                self.options.type_a_word_words = TypeAWordWords.from_any([order.word for order in resolved.word_orders])
                 self._manifest = resolved.manifest
                 self._layout = resolved.layout
                 self._locations = resolved.locations
+                self.word_orders = resolved.word_orders
             else:
                 self._level_set = self.selected_level_set()
                 self._manifest = campaign_for_level_set(self._level_set)
+                if bool(self.options.type_a_word_checks.value):
+                    try:
+                        self.word_orders = choose_word_orders(
+                            self.options.type_a_word_words.value,
+                            self.options.type_a_word_count.value,
+                            self.random,
+                        )
+                    except (TypeError, ValueError) as error:
+                        raise ValueError(
+                            f"Type-a-Word options for player {self.player} are invalid: {error}"
+                        ) from error
+                else:
+                    self.word_orders = ()
                 self._layout = build_layout(
                     self._manifest, self._level_set, "shuffled_pages", self.random,
                     integration_mode="enhanced",
                     machine_only=True,
                     recipe_checks=bool(self.options.recipe_checks.value),
+                    type_a_word_checks=bool(self.word_orders),
                 )
                 self._locations = locations_for_layout(self._manifest, self._layout)
             self.multiworld.local_early_items[self.player]["Merger2 Access"] = 1
@@ -133,6 +161,19 @@ else:
                     ))
                     journal.locations.append(location)
                 regions["Recipe Journal"] = journal
+            for order in self.word_orders:
+                region_name = f"Word Order: {order.word}"
+                order_region = Region(region_name, self.player, self.multiworld)
+                menu.connect(order_region, f"Open {region_name}")
+                location = WordFactoriLocation(
+                    self.player, order.name, order.code, order_region,
+                )
+                set_rule(location, lambda state, routes=order.requirements: any(
+                    all(state.has(capability, self.player) for capability in route)
+                    for route in routes
+                ))
+                order_region.locations.append(location)
+                regions[region_name] = order_region
             campaign_goal = int(self.options.goal.value) == 0
             victory_region = menu if campaign_goal else regions["Final Contract"]
             victory = WordFactoriLocation(self.player, "Victory", None, victory_region)
@@ -159,7 +200,11 @@ else:
             return WordFactoriItem(name, classification, ITEM_NAME_TO_ID[name], self.player)
 
         def create_items(self) -> None:
-            count = len(self.selected_locations()) + (len(RECIPE_CHECKS) if bool(self.options.recipe_checks.value) else 0)
+            count = (
+                len(self.selected_locations())
+                + (len(RECIPE_CHECKS) if bool(self.options.recipe_checks.value) else 0)
+                + len(self.word_orders)
+            )
             self.multiworld.itempool += [self.create_item(name) for name in (
                 list(ITEM_POOL[:len(self.selected_locations())]) + ["I Sticker"] * (count - len(self.selected_locations()))
             )]
@@ -197,4 +242,5 @@ else:
                 "reload_required_for_items": self._layout.integration_mode != "enhanced",
                 "recipe_checks": recipe_checks,
                 **({"recipe_catalog_digest": RECIPE_CATALOG_DIGEST} if recipe_checks else {}),
+                **orders_slot_data(self.word_orders),
             }

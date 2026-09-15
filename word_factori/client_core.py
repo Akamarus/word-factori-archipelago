@@ -21,6 +21,7 @@ from .data import (
 )
 from .layout import CampaignLayout, PROGRESSION_MODEL, layout_from_slot_data
 from .save import ActiveSlot
+from .word_orders import WordOrder, orders_from_slot_data, orders_slot_data
 
 
 _LAYOUT_SLOT_DATA_FIELDS = (
@@ -62,6 +63,7 @@ class ResolvedCampaign:
     layout: CampaignLayout | None
     locations: tuple[LocationData, ...]
     legacy: bool
+    word_orders: tuple[WordOrder, ...] = ()
 
 
 def inventory_view(received: Iterable[ReceivedItem]) -> InventoryView:
@@ -108,11 +110,20 @@ def resolve_room_campaign(slot_data: Mapping[str, object]) -> ResolvedCampaign:
     if slot_data.get("level_count") != len(manifest.levels):
         raise ValueError("room campaign level count does not match the bundled manifest")
 
-    from .layout import MACHINE_MODELS, RECIPE_MODEL
+    from .layout import MACHINE_MODELS, RECIPE_MODEL, WORD_ORDER_MODEL
+    try:
+        word_orders = orders_from_slot_data(slot_data)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"room Type-a-Word contract is invalid: {error}") from error
     recipe_setting = slot_data.get("recipe_checks", False)
     if "recipe_checks" in slot_data and type(recipe_setting) is not bool:
         raise ValueError("room recipe_checks must be a JSON boolean")
-    if (slot_data.get("progression_model") == RECIPE_MODEL) != (recipe_setting is True):
+    progression_model = slot_data.get("progression_model")
+    if (progression_model == WORD_ORDER_MODEL) != bool(word_orders):
+        raise ValueError("room Type-a-Word setting does not match its progression model")
+    if progression_model != WORD_ORDER_MODEL and (
+        (progression_model == RECIPE_MODEL) != (recipe_setting is True)
+    ):
         raise ValueError("room recipe setting does not match its progression model")
     if recipe_setting:
         from .recipe_checks import RECIPE_CATALOG_DIGEST
@@ -131,6 +142,7 @@ def resolve_room_campaign(slot_data: Mapping[str, object]) -> ResolvedCampaign:
             layout=None,
             locations=locations_for_manifest(manifest),
             legacy=True,
+            word_orders=(),
         )
 
     if slot_data.get("progression_model") == "four_of_six_v1":
@@ -151,6 +163,7 @@ def resolve_room_campaign(slot_data: Mapping[str, object]) -> ResolvedCampaign:
         layout=layout,
         locations=locations_for_layout(manifest, layout),
         legacy=False,
+        word_orders=word_orders,
     )
 
 
@@ -319,6 +332,8 @@ def state_identity(
                 recipe_checks=True,
                 recipe_catalog_digest=slot_data.get("recipe_catalog_digest"),
             )
+        if campaign.word_orders:
+            contract.update(orders_slot_data(campaign.word_orders))
 
     room = {
         "seed_name": seed_name,

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from Options import Choice, DefaultOnToggle, PerGameCommonOptions, Range
+from Options import Choice, DefaultOnToggle, OptionList, PerGameCommonOptions, Range, Toggle
 
 
 class Goal(Choice):
@@ -31,9 +31,32 @@ class RecipeChecks(DefaultOnToggle):
     display_name = "Recipe Checks"
 
 
+class TypeAWordChecks(Toggle):
+    """Add checks for filling seed-selected Type-a-Word orders."""
+    display_name = "Type-a-Word Checks"
+    default = 0
+
+
+class TypeAWordCount(Range):
+    """Number of Type-a-Word orders to add."""
+    display_name = "Type-a-Word Count"
+    range_start = 1
+    range_end = 20
+    default = 5
+
+
+class TypeAWordWords(OptionList):
+    """Words from which this seed selects Type-a-Word orders."""
+    display_name = "Type-a-Word Words"
+    default = ()
+
+
 @dataclass
 class WordFactoriOptions(PerGameCommonOptions):
     goal: Goal
     campaign_count: CampaignCount
     custom_level_set: CustomLevelSet
     recipe_checks: RecipeChecks
+    type_a_word_checks: TypeAWordChecks
+    type_a_word_count: TypeAWordCount
+    type_a_word_words: TypeAWordWords

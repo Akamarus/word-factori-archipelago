@@ -20,6 +20,7 @@ class _Location:
         self.player = player
         self.name = name
         self.code = code
+        self.address = code
         self.parent = parent
         self.access_rule = lambda state: True
         self.item = None
@@ -27,12 +28,19 @@ class _Location:
     def place_locked_item(self, item):
         self.item = item
 
+    def can_reach(self, state):
+        return self.parent.can_reach(state) and self.access_rule(state)
+
 
 class _Entrance:
-    def __init__(self, target, name, access_rule):
+    def __init__(self, parent, target, name, access_rule):
+        self.parent = parent
         self.target = target
         self.name = name
         self.access_rule = access_rule
+
+    def can_reach(self, state):
+        return self.parent.can_reach(state) and self.access_rule(state)
 
 
 class _Region:
@@ -42,9 +50,15 @@ class _Region:
         self.multiworld = multiworld
         self.locations = []
         self.exits = []
+        self.entrances = []
 
     def connect(self, target, name, access_rule=None):
-        self.exits.append(_Entrance(target, name, access_rule or (lambda state: True)))
+        entrance = _Entrance(self, target, name, access_rule or (lambda state: True))
+        self.exits.append(entrance)
+        target.entrances.append(entrance)
+
+    def can_reach(self, state):
+        return not self.entrances or any(entrance.can_reach(state) for entrance in self.entrances)
 
 
 class _World:
@@ -52,6 +66,14 @@ class _World:
         self.multiworld = multiworld
         self.player = player
         self.random = multiworld.random
+
+    def get_location(self, name):
+        return next(
+            location
+            for region in self.multiworld.regions
+            for location in region.locations
+            if location.name == name
+        )
 
 
 class _Choice:
@@ -70,6 +92,14 @@ class _Range(_Choice):
 
 class _DefaultOnToggle(_Choice):
     default = 1
+
+
+class _Toggle(_Choice):
+    default = 0
+
+
+class _OptionList(_Choice):
+    default = ()
 
 
 class _PerGameCommonOptions:
@@ -109,6 +139,8 @@ def _install_archipelago_stubs():
     options.PerGameCommonOptions = _PerGameCommonOptions
     options.Range = _Range
     options.DefaultOnToggle = _DefaultOnToggle
+    options.Toggle = _Toggle
+    options.OptionList = _OptionList
 
     sys.modules.update({
         "BaseClasses": base_classes,
@@ -161,7 +193,9 @@ class WorldLayoutTests(unittest.TestCase):
     def test_recipe_checks_default_on(self):
         self.assertEqual(1, world_options.RecipeChecks.default)
 
-    def make_world(self, seed, *, campaign_layout=1, level_set=0, goal=0, integration_mode=0, recipe_checks=False, passthrough=None):
+    def make_world(self, seed, *, campaign_layout=1, level_set=0, goal=0, integration_mode=0,
+                   recipe_checks=False, type_a_word_checks=False, type_a_word_count=5,
+                   type_a_word_words=(), passthrough=None):
         multiworld = _MultiWorld(seed)
         if passthrough is not None:
             multiworld.re_gen_passthrough = passthrough
@@ -173,6 +207,9 @@ class WorldLayoutTests(unittest.TestCase):
             campaign_count=_OptionValue(25),
             integration_mode=_OptionValue(integration_mode),
             recipe_checks=_OptionValue(recipe_checks),
+            type_a_word_checks=_OptionValue(type_a_word_checks),
+            type_a_word_count=_OptionValue(type_a_word_count),
+            type_a_word_words=_OptionValue(type_a_word_words),
         )
         world.generate_early()
         return world
