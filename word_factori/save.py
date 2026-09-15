@@ -37,9 +37,9 @@ def _completed_words(journal: object) -> frozenset[str] | None:
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
-                or not math.isfinite(value)
                 or value < 0
                 or value > _MAX_EXACT_NATIVE_INTEGER
+                or not math.isfinite(value)
                 or int(value) != value
             ):
                 return None

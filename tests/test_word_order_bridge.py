@@ -76,6 +76,17 @@ class CompletedWordJournalTests(unittest.TestCase):
         self.assertEqual(10000, len(active_slot(boundary).completed_words))
         self.assertIsNone(active_slot(journal).completed_words)
 
+    def test_giant_positive_and_negative_integer_scores_are_malformed_not_exceptions(self):
+        for value in (10**1000, -(10**1000)):
+            with self.subTest(sign="positive" if value > 0 else "negative"):
+                try:
+                    active = active_slot({
+                        "II": {"buildings": value, "cycles": 1, "extra_letters": 0},
+                    })
+                except OverflowError as error:
+                    self.fail(f"malformed giant integer escaped validation: {error}")
+                self.assertIsNone(active.completed_words)
+
 
 class WordOrderBridgeTests(unittest.TestCase):
     def test_only_authoritative_selected_targets_map_to_static_order_codes(self):

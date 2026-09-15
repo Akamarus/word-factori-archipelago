@@ -2257,6 +2257,36 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(self.ctx.last_bridge_error)
         self.assertIn("Word journal", self.ctx.last_bridge_error)
 
+    async def test_giant_word_scores_pause_client_scan_without_escaping(self):
+        _, orders = self.install_word_room()
+        self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.write_native_ack()
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.ctx.missing_locations = {orders[0].code}
+
+        for value in (10**1000, -(10**1000)):
+            with self.subTest(sign="positive" if value > 0 else "negative"):
+                self.ctx.last_bridge_error = None
+                self.ctx.sent_messages.clear()
+                self.write_active_slot(
+                    "game-slot-A", set(),
+                    words={"II": {
+                        "buildings": value, "cycles": 1, "extra_letters": 0,
+                    }},
+                )
+                try:
+                    await self.ctx.scan_once(ignore_selection_guard=True)
+                except OverflowError as error:
+                    self.fail(f"malformed giant integer escaped client scan: {error}")
+
+                self.assertFalse(any(
+                    message["cmd"] == "LocationChecks"
+                    for message in self.ctx.sent_messages
+                ))
+                self.assertIsNotNone(self.ctx.last_bridge_error)
+                self.assertIn("Word journal", self.ctx.last_bridge_error)
+
     async def test_word_order_duplicate_win_ack_and_offline_reconnect_are_idempotent(self):
         _, orders = self.install_word_room()
         self.install_test_patch_receipt()
