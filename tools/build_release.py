@@ -103,6 +103,7 @@ def write_release() -> None:
         ROOT / "README.md", ROOT / "LICENSE", ROOT / "install.ps1",
         ROOT / "Install Word Factori Archipelago.cmd", WORLD_ARCHIVE,
         ROOT / "docs/enhanced-playtest.md",
+        ROOT / "docs/recipe-checks.md",
         ROOT / "Restore Original Game.cmd",
         ROOT / "tools/install_enhanced.ps1", PATCH_FILE,
         ROOT / "Install Word Factori Archipelago.sh",

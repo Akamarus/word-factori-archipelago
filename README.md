@@ -152,7 +152,7 @@ Word Factori:
   recipe_checks: true
 ```
 
-Set it to `false` to disable the extra checks. Enabled seeds add 187 working letter recipes, including 119 hidden alternatives: 217 total locations with the 30-level Core Campaign or 227 with the 40-level Discovery Labs. Disabled seeds remain at 30 or 40 locations. Source I and symbol-output recipes are excluded. Two native three-input Merger entries that contain only two inputs (`I N -> M` and `I Z1 -> M`) are also excluded because a real Building/Letter Pipe will not process them. See `docs/recipe-checks.md` in this development checkout for notation, identity, save behavior, and current verification limits.
+Set it to `false` to disable the extra checks. Enabled seeds add 187 working letter recipes, including 119 hidden alternatives: 217 total locations with the 30-level Core Campaign or 227 with the 40-level Discovery Labs. Disabled seeds remain at 30 or 40 locations. Source I and symbol-output recipes are excluded. Two native three-input Merger entries that contain only two inputs (`I N -> M` and `I Z1 -> M`) are also excluded because a real Building/Letter Pipe will not process them. See the [Recipe Journal checks guide](docs/recipe-checks.md) for notation, identity, save behavior, and current verification limits.
 
 The selected custom level set determines whether the seed has 30 or 40 stable locations:
 

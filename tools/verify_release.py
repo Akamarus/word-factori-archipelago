@@ -109,6 +109,7 @@ def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | Non
                 "word_factori.apworld",
                 "release-manifest.json",
                 "docs/enhanced-playtest.md",
+                "docs/recipe-checks.md",
                 "Restore Original Game.cmd",
                 "tools/install_enhanced.ps1",
                 "tools/enhanced.patch.gz",
