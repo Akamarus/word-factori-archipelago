@@ -227,9 +227,22 @@ def campaign_compatible(
     )
 
 
-def resolve_game_slot_binding(bound_id: str | None, active: ActiveSlot, *, recipe_checks: bool = False) -> str:
+def word_order_codes(
+    completed_words: frozenset[str], orders: tuple[WordOrder, ...],
+) -> frozenset[int]:
+    return frozenset(order.code for order in orders if order.word in completed_words)
+
+
+def resolve_game_slot_binding(
+    bound_id: str | None, active: ActiveSlot, *, recipe_checks: bool = False,
+    word_checks: bool = False,
+) -> str:
     if bound_id is None:
-        if active.beaten_levels or (recipe_checks and active.recipe_codes is not None and active.recipe_codes):
+        if (
+            active.beaten_levels
+            or (recipe_checks and active.recipe_codes is not None and active.recipe_codes)
+            or (word_checks and active.completed_words is not None and active.completed_words)
+        ):
             raise ValueError(
                 "The active Word Factori save has prior completions and cannot be auto-bound. "
                 "Select an empty save slot for this Archipelago room."
@@ -237,6 +250,10 @@ def resolve_game_slot_binding(bound_id: str | None, active: ActiveSlot, *, recip
         if recipe_checks and active.recipe_codes is None:
             raise ValueError(
                 "The active Word Factori save has a malformed recipe journal and cannot be auto-bound."
+            )
+        if word_checks and active.completed_words is None:
+            raise ValueError(
+                "The active Word Factori save has a malformed or unavailable word journal and cannot be auto-bound."
             )
         return active.random_id
     if bound_id != active.random_id:

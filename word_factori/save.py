@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 from pathlib import Path
+
+
+_MAX_NATIVE_JOURNAL_ENTRIES = 10000
+_MAX_NATIVE_JOURNAL_KEY_LENGTH = 64
+_MAX_EXACT_NATIVE_INTEGER = 2**53 - 1
+_SCORE_FIELDS = {"buildings", "cycles", "extra_letters"}
 
 
 @dataclass(frozen=True)
@@ -11,6 +18,33 @@ class ActiveSlot:
     random_id: str
     beaten_levels: frozenset[int]
     recipe_codes: frozenset[int] | None = frozenset()
+    completed_words: frozenset[str] | None = None
+
+
+def _completed_words(journal: object) -> frozenset[str] | None:
+    if not isinstance(journal, dict) or len(journal) > _MAX_NATIVE_JOURNAL_ENTRIES:
+        return None
+    completed: set[str] = set()
+    for word, score in journal.items():
+        if (
+            not isinstance(word, str)
+            or len(word) > _MAX_NATIVE_JOURNAL_KEY_LENGTH
+            or not isinstance(score, dict)
+            or set(score) != _SCORE_FIELDS
+        ):
+            return None
+        for value in score.values():
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value < 0
+                or value > _MAX_EXACT_NATIVE_INTEGER
+                or int(value) != value
+            ):
+                return None
+        completed.add(word)
+    return frozenset(completed)
 
 
 def _selected_slot_key(previous: object) -> str:
@@ -60,6 +94,7 @@ def parse_active_slot(payload: dict) -> ActiveSlot:
         random_id=random_id,
         beaten_levels=frozenset(int(index) for index, value in beaten.items() if value),
         recipe_codes=recipe_codes,
+        completed_words=_completed_words(slot.get("words")),
     )
 
 

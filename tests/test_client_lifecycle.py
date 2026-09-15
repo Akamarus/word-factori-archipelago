@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import hashlib
 from dataclasses import FrozenInstanceError
 from datetime import datetime
 import importlib
@@ -382,7 +383,7 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.save_path.parent.mkdir(parents=True)
         self.write_active_slot("game-slot-A", set())
 
-    def write_active_slot(self, random_id, beaten_indices, recipes=None):
+    def write_active_slot(self, random_id, beaten_indices, recipes=None, words=None):
         self.save_path.write_text(json.dumps({
             "slots": {
                 "0": {
@@ -390,6 +391,7 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
                     "random_id": random_id,
                     "beaten_levels": {str(index): 1 for index in beaten_indices},
                     **({"recipes": recipes} if recipes is not None else {}),
+                    **({"words": words} if words is not None else {}),
                 }
             }
         }), encoding="utf-8")
@@ -427,6 +429,42 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         write_campaign_identity(self.ctx.campaign_path, manifest, layout)
         self.ctx.connected_identity = self.ctx.current_identity()
         return locations
+
+    def install_word_room(self, words=("II",), *, recipe_checks=False):
+        from word_factori.layout import build_layout
+        from word_factori.recipe_checks import RECIPE_CATALOG_DIGEST
+        from word_factori.word_orders import WordOrder, orders_slot_data
+        manifest = campaign_for_level_set("discovery_labs")
+        layout = build_layout(
+            manifest, "discovery_labs", "shuffled_pages", random.Random(53),
+            integration_mode="enhanced", machine_only=True,
+            recipe_checks=recipe_checks, type_a_word_checks=True,
+        )
+        locations = locations_for_layout(manifest, layout)
+        orders = tuple(WordOrder(index, word) for index, word in enumerate(words, 1))
+        self.ctx.slot_data = {
+            **self.ctx.slot_data, **layout_slot_data(layout),
+            "level_set": "discovery_labs", "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version, "manifest_digest": layout.digest,
+            "level_count": len(locations), **orders_slot_data(orders),
+            **({"recipe_checks": True, "recipe_catalog_digest": RECIPE_CATALOG_DIGEST}
+               if recipe_checks else {}),
+        }
+        write_campaign_identity(self.ctx.campaign_path, manifest, layout)
+        self.ctx.connected_identity = self.ctx.current_identity()
+        self.ctx.dispatch_ledger = DispatchLedger.empty(self.ctx.connected_identity)
+        return locations, orders
+
+    def write_native_ack(self, **changes):
+        from word_factori.enhanced_runtime import runtime_context
+        from word_factori.word_orders import checks_contract_digest
+        marker = runtime_context(
+            hashlib.sha256(self.ctx.current_identity().encode()).hexdigest(),
+            self.ctx.slot_data["layout_digest"], checks_contract_digest(self.ctx.slot_data),
+        )
+        (self.ctx.mod_folder / "archipelago_native_status.json").write_text(
+            json.dumps({**marker, **changes}), encoding="utf-8",
+        )
 
     def capture_scheduled_task(self, callback):
         before = asyncio.all_tasks()
@@ -2087,7 +2125,11 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         await self.ctx.scan_once(ignore_selection_guard=True)
         packets = [m for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks"]
         self.assertEqual(1, len(packets))
-        self.assertEqual({locations[0].code, recipe.code}, set(packets[0]["locations"]))
+        self.assertEqual({locations[0].code}, set(packets[0]["locations"]))
+        self.write_native_ack()
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        packets = [m for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks"]
+        self.assertEqual([{locations[0].code}, {recipe.code}], [set(m["locations"]) for m in packets])
         self.ctx.checked_locations = {locations[0].code, recipe.code}
         self.ctx.on_package("RoomUpdate", {})
         self.ctx.sent_messages.clear()
@@ -2098,6 +2140,7 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         from word_factori.recipe_checks import RECIPE_CHECKS
         self.install_recipe_room()
         self.install_test_patch_receipt()
+        self.write_native_ack()
         recipe = RECIPE_CHECKS[0]
         self.ctx.server = None
         self.ctx.missing_locations = set()
@@ -2172,6 +2215,192 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("game-slot-A", self.ctx.bridge_state.game_slot_id)
         self.assertFalse(any(message["cmd"] == "LocationChecks" for message in self.ctx.sent_messages))
         self.assertIn("different Word Factori save", self.ctx.last_bridge_error)
+
+    async def test_word_order_scan_requires_exact_schema_two_native_ack(self):
+        _, orders = self.install_word_room()
+        self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.ctx.missing_locations = {orders[0].code}
+        score = {"buildings": 2.0, "cycles": 0.0, "extra_letters": 0.0}
+        self.write_active_slot("game-slot-A", set(), words={"II": score})
+
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        (self.ctx.mod_folder / "archipelago_native_status.json").write_text(
+            json.dumps({"schema": 1, "mode": "enhanced"}), encoding="utf-8",
+        )
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        self.write_native_ack(room="e" * 64)
+        await self.ctx.scan_once(ignore_selection_guard=True)
+
+        self.assertFalse(any(m["cmd"] == "LocationChecks" for m in self.ctx.sent_messages))
+        self.write_native_ack()
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        packets = [m for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks"]
+        self.assertEqual([{orders[0].code}], [set(m["locations"]) for m in packets])
+
+    async def test_malformed_selected_word_score_pauses_orders_with_visible_warning(self):
+        _, orders = self.install_word_room()
+        self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.write_native_ack()
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.ctx.missing_locations = {orders[0].code}
+        self.write_active_slot(
+            "game-slot-A", set(),
+            words={"II": {"buildings": True, "cycles": 1, "extra_letters": 0}},
+        )
+
+        await self.ctx.scan_once(ignore_selection_guard=True)
+
+        self.assertFalse(any(m["cmd"] == "LocationChecks" for m in self.ctx.sent_messages))
+        self.assertIsNotNone(self.ctx.last_bridge_error)
+        self.assertIn("Word journal", self.ctx.last_bridge_error)
+
+    async def test_word_order_duplicate_win_ack_and_offline_reconnect_are_idempotent(self):
+        _, orders = self.install_word_room()
+        self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.write_native_ack()
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.ctx.server = None
+        self.ctx.missing_locations = set()
+        score = {"buildings": 1, "cycles": 6, "extra_letters": 0}
+        self.write_active_slot("game-slot-A", set(), words={"II": score})
+
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        self.assertEqual(frozenset({orders[0].code}), self.ctx.bridge_state.pending_checks)
+        self.assertFalse(any(m["cmd"] == "LocationChecks" for m in self.ctx.sent_messages))
+
+        self.ctx.server = object()
+        self.ctx.missing_locations = {orders[0].code}
+        await self.ctx._resend_pending_checks(
+            self.ctx.connected_identity, self.ctx._connection_generation,
+        )
+        self.ctx.checked_locations = {orders[0].code}
+        self.ctx.on_package("RoomUpdate", {})
+        self.ctx.sent_messages.clear()
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        self.assertEqual(frozenset(), self.ctx.bridge_state.pending_checks)
+        self.assertFalse(any(m["cmd"] == "LocationChecks" for m in self.ctx.sent_messages))
+
+    async def test_pending_resend_is_bounded_to_selected_orders_and_requires_native_ack(self):
+        from word_factori.recipe_checks import RECIPE_CHECKS
+        _, orders = self.install_word_room(recipe_checks=True)
+        self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        unselected_reserved = orders[0].code + 1
+        recipe_code = RECIPE_CHECKS[0].code
+        self.ctx.bridge_state = BridgeState(
+            pending_checks=frozenset({orders[0].code, unselected_reserved, recipe_code}),
+            game_slot_id="game-slot-A",
+        )
+        self.ctx.missing_locations = {orders[0].code, unselected_reserved, recipe_code}
+        self.write_active_slot("game-slot-A", set(), words={})
+
+        await self.ctx._resend_pending_checks(
+            self.ctx.connected_identity, self.ctx._connection_generation,
+        )
+        self.assertEqual([], self.ctx.sent_messages)
+        self.write_native_ack()
+        await self.ctx._resend_pending_checks(
+            self.ctx.connected_identity, self.ctx._connection_generation,
+        )
+
+        packet = next(m for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks")
+        self.assertEqual({orders[0].code, recipe_code}, set(packet["locations"]))
+
+    async def test_overlapping_campaign_target_reports_two_checks_but_not_two_factories(self):
+        locations, _ = self.install_word_room(("II",))
+        target = locations[0].target
+        locations, orders = self.install_word_room((target,))
+        self.install_test_patch_receipt()
+        self.ctx.slot_data["goal"] = 0
+        self.ctx.slot_data["campaign_count"] = 2
+        self.ctx.connected_identity = self.ctx.current_identity()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.write_native_ack()
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.ctx.missing_locations = {locations[0].code, orders[0].code}
+        score = {"buildings": 1, "cycles": 1, "extra_letters": 0}
+        self.write_active_slot("game-slot-A", {0}, words={target: score})
+
+        await self.ctx.scan_once(ignore_selection_guard=True)
+
+        packet = next(m for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks")
+        self.assertEqual({locations[0].code, orders[0].code}, set(packet["locations"]))
+        self.assertFalse(any(m["cmd"] == "StatusUpdate" for m in self.ctx.sent_messages))
+
+    async def test_selected_order_allowlist_applies_to_scouting_and_history(self):
+        _, orders = self.install_word_room()
+        unselected_reserved = orders[0].code + 1
+        self.ctx.checked_locations = {orders[0].code, unselected_reserved}
+
+        await self.ctx.request_checked_location_info()
+        packet = next(m for m in self.ctx.sent_messages if m["cmd"] == "LocationScouts")
+        self.assertEqual([orders[0].code], packet["locations"])
+
+        item = make_network_item(item=7001, location=unselected_reserved, player=2)
+        await self.ctx._backfill_location_info_safely(
+            self.ctx.connected_identity, (item,), frozenset(self.ctx.checked_locations),
+        )
+        self.assertEqual((), self.ctx.dispatch_ledger.events)
+
+    async def test_orders_off_ignore_word_journal_and_never_allow_reserved_order_ids(self):
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.ctx.missing_locations = {LOCATIONS[0].code, 975303000}
+        score = {"buildings": 1, "cycles": 1, "extra_letters": 0}
+        self.write_active_slot("game-slot-A", {0}, words={"II": score})
+
+        await self.ctx.scan_once(ignore_selection_guard=True)
+
+        packet = next(m for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks")
+        self.assertEqual((LOCATIONS[0].code,), packet["locations"])
+
+    def test_wf_words_reports_authoritative_status_and_machine_alternatives(self):
+        _, orders = self.install_word_room(("II", "JACK", "III"))
+        self.ctx.checked_locations = {orders[0].code}
+        self.ctx.bridge_state = BridgeState(
+            pending_checks=frozenset({orders[1].code}), game_slot_id="game-slot-A",
+        )
+        score = {"buildings": 1, "cycles": 1, "extra_letters": 0}
+        self.write_active_slot("game-slot-A", set(), words={"JACK": score, "III": score})
+        processor = WordFactoriCommandProcessor(self.ctx)
+
+        processor._cmd_wf_words()
+
+        rendered = "\n".join(processor.outputs)
+        self.assertIn(f"{orders[0].name} — II: server", rendered)
+        self.assertIn("machines: ready", rendered)
+        self.assertIn(f"{orders[1].name} — JACK: pending", rendered)
+        self.assertIn(f"{orders[2].name} — III: completed", rendered)
+        self.assertIn("Merger2 Access", rendered)
+        self.assertIn("Rotation Access", rendered)
+        self.assertIn("Reflection Access", rendered)
+
+    def test_wf_words_has_clear_off_and_disconnected_messages(self):
+        processor = WordFactoriCommandProcessor(self.ctx)
+        processor._cmd_wf_words()
+        self.assertIn("off", processor.outputs[-1].casefold())
+
+        self.install_word_room()
+        self.ctx.connected_identity = None
+        processor._cmd_wf_words()
+        self.assertIn("connect", processor.outputs[-1].casefold())
+
+    def test_wf_words_never_uses_a_different_active_save_for_local_status(self):
+        _, orders = self.install_word_room()
+        self.ctx.bridge_state = BridgeState(game_slot_id="other-game-slot")
+        score = {"buildings": 1, "cycles": 1, "extra_letters": 0}
+        self.write_active_slot("game-slot-A", set(), words={"II": score})
+        processor = WordFactoriCommandProcessor(self.ctx)
+
+        processor._cmd_wf_words()
+
+        rendered = processor.outputs[-1]
+        self.assertIn(f"{orders[0].name} — II: journal unavailable", rendered)
+        self.assertNotIn("II: completed", rendered)
 
 
 if __name__ == "__main__":

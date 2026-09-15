@@ -44,6 +44,7 @@ from .client_core import (
     resolve_room_campaign,
     state_identity,
     utc_observed_at,
+    word_order_codes,
 )
 from .client_messages import (
     ClientMessageKind,
@@ -62,7 +63,7 @@ from .dispatch_store import (
 from .mod import render_levels, write_campaign_identity, write_levels
 from .capabilities import FULL
 from .enhanced_runtime import RUNTIME_NAME, patch_readiness, publish_runtime, machine_counts_for_view, runtime_context
-from .word_orders import checks_contract_digest
+from .word_orders import checks_contract_digest, missing_machine_options
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
 from .overlay_preferences import OverlayPreferences, load_preferences
 from .platform_paths import InstallationPaths, load_installation, selected_proton_mod, validate_state_target
@@ -129,6 +130,10 @@ class WordFactoriCommandProcessor(ClientCommandProcessor):
     def _cmd_wf_status(self) -> None:
         """Show bridge, mod-selection, and received-item status."""
         self.output(self.ctx.status_text())
+
+    def _cmd_wf_words(self) -> None:
+        """List authoritative Type-a-Word orders, completion state, and machine routes."""
+        self.output(self.ctx.words_text())
 
     def _cmd_wf_overlay(self, action: str = "status") -> None:
         """Show, hide, restart, or report the Word Factori overlay."""
@@ -673,9 +678,7 @@ class WordFactoriContext(CommonContext):
             frozenset(self.checked_locations)
             if checked_locations is None else frozenset(checked_locations)
         )
-        local_ids = {location.code for location in self.active_locations()}
-        if self.slot_data.get("recipe_checks") is True:
-            local_ids.update(check.code for check in RECIPE_CHECKS)
+        local_ids = self.active_check_codes()
         locations = sorted(checked_locations & local_ids)
         if locations and self._dispatch_room_matches(identity, connection_generation):
             await self.send_msgs([{
@@ -705,9 +708,7 @@ class WordFactoriContext(CommonContext):
             if connection_generation is None else connection_generation
         )
         try:
-            local_ids = {location.code for location in self.active_locations()}
-            if self.slot_data.get("recipe_checks") is True:
-                local_ids.update(check.code for check in RECIPE_CHECKS)
+            local_ids = self.active_check_codes()
             checked = checked_locations & local_ids
             async with self._dispatch_lock:
                 if not self._dispatch_room_matches(identity, connection_generation):
@@ -933,6 +934,34 @@ class WordFactoriContext(CommonContext):
         campaign = self.selected_campaign()
         return () if campaign is None else campaign.locations
 
+    def active_check_codes(self) -> frozenset[int]:
+        campaign = self.selected_campaign()
+        if campaign is None:
+            return frozenset()
+        codes = {location.code for location in campaign.locations}
+        if self.slot_data.get("recipe_checks") is True:
+            codes.update(check.code for check in RECIPE_CHECKS)
+        codes.update(order.code for order in campaign.word_orders)
+        return frozenset(codes)
+
+    def native_checks_acknowledged(self) -> bool:
+        campaign = self.selected_campaign()
+        if campaign is None or campaign.layout is None:
+            return False
+        try:
+            expected = runtime_context(
+                hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest(),
+                campaign.layout.digest, checks_contract_digest(self.slot_data),
+            )
+            loaded = json.loads(
+                (self.mod_folder / "archipelago_native_status.json").read_text(
+                    encoding="utf-8",
+                )
+            )
+        except (OSError, ValueError, TypeError, KeyError):
+            return False
+        return loaded == expected
+
     def prepare_selected_campaign(self) -> bool:
         """Install only a bundled, digest-matched curated level set for this slot."""
         self._prepared_campaign_reload_required = False
@@ -1004,6 +1033,7 @@ class WordFactoriContext(CommonContext):
             resolved = resolve_game_slot_binding(
                 self.bridge_state.game_slot_id, active,
                 recipe_checks=self.slot_data.get("recipe_checks") is True,
+                word_checks=bool(self.selected_campaign().word_orders),
             )
         except (OSError, ValueError, KeyError, TypeError) as error:
             self._bridge_warning(f"Word Factori save binding paused: {error}")
@@ -1042,18 +1072,29 @@ class WordFactoriContext(CommonContext):
             return
         if self.ensure_game_slot_binding(active) is None:
             return
+        self.last_bridge_error = None
         recipe_codes: frozenset[int] = frozenset()
         if self.slot_data.get("recipe_checks") is True:
             if active.recipe_codes is None:
                 self._bridge_warning("Recipe journal is malformed; no recipe checks were reported.")
                 return
             recipe_codes = active.recipe_codes
-        self.last_bridge_error = None
-        await self.report_indices(local_checks, active_slot=active, recipe_codes=recipe_codes)
+        order_codes: frozenset[int] = frozenset()
+        orders = self.selected_campaign().word_orders
+        if orders:
+            if active.completed_words is None:
+                self._bridge_warning("Word journal is malformed or unavailable; no Type-a-Word checks were reported.")
+            else:
+                order_codes = word_order_codes(active.completed_words, orders)
+        await self.report_indices(
+            local_checks, active_slot=active,
+            recipe_codes=recipe_codes, order_codes=order_codes,
+        )
 
     async def report_indices(
         self, indices: set[int], *, active_slot: ActiveSlot | None = None,
         recipe_codes: frozenset[int] = frozenset(),
+        order_codes: frozenset[int] = frozenset(),
     ) -> None:
         if self.connected_identity is None:
             self._bridge_warning("Connect to an Archipelago slot before reporting Word Factori checks.")
@@ -1074,11 +1115,15 @@ class WordFactoriContext(CommonContext):
             return
         if self.ensure_game_slot_binding(active_slot) is None:
             return
-        allowed_codes = {location.code for location in locations}
-        if self.slot_data.get("recipe_checks") is True:
-            allowed_codes.update(check.code for check in RECIPE_CHECKS)
+        allowed_codes = set(self.active_check_codes())
+        native_codes = (recipe_codes | order_codes) & allowed_codes
+        if native_codes and not self.native_checks_acknowledged():
+            native_codes = frozenset()
+            self._bridge_warning(
+                "Recipe and Type-a-Word checks are paused until the native enforcement acknowledgment matches this room."
+            )
         server_codes = frozenset(self.checked_locations) & allowed_codes
-        result = reconcile(self.bridge_state, [], observed_codes | recipe_codes, server_codes)
+        result = reconcile(self.bridge_state, [], observed_codes | native_codes, server_codes)
         if result.new_checks:
             location_ids = set(result.new_checks) - self.bridge_state.pending_checks
             if location_ids:
@@ -1103,7 +1148,12 @@ class WordFactoriContext(CommonContext):
             return
         if not self.compatible_campaign() or not self.bridge_state.pending_checks:
             return
-        pending_checks = self.bridge_state.pending_checks
+        campaign_codes = {location.code for location in self.active_locations()}
+        pending_checks = self.bridge_state.pending_checks & self.active_check_codes()
+        if not self.native_checks_acknowledged():
+            pending_checks &= campaign_codes
+        if not pending_checks:
+            return
         if self.ensure_game_slot_binding() is None:
             return
         if not self._connection_epoch_matches(expected_identity, expected_generation):
@@ -1145,6 +1195,46 @@ class WordFactoriContext(CommonContext):
         game_slot = "bound" if self.bridge_state.game_slot_id else "not bound"
         deliveries = max(0, len(self.bridge_state.applied) - 1)
         return f"AP mod: {selected}; campaign: {campaign}; game save: {game_slot}; received item deliveries: {deliveries}; bridge: {self.last_bridge_error or 'ready'}; overlay: {self.last_overlay_error or 'ready'}"
+
+    def words_text(self) -> str:
+        campaign = self.selected_campaign()
+        if campaign is None or not campaign.word_orders:
+            return "Type-a-Word orders are off for this room."
+        if self.connected_identity is None or self.server is None:
+            return "Connect to the Archipelago room to view Type-a-Word orders."
+        try:
+            active = read_active_slot(
+                find_save(self.factori_root.parent, Path("mods") / MOD_FOLDER)
+            )
+            completed = (
+                active.completed_words
+                if self.bridge_state.game_slot_id in (None, active.random_id)
+                else None
+            )
+        except (OSError, ValueError, KeyError, TypeError):
+            completed = None
+        view = inventory_view(self.network_items())
+        lines = ["Type-a-Word orders:"]
+        for order in campaign.word_orders:
+            if order.code in self.checked_locations:
+                status = "server"
+            elif order.code in self.bridge_state.pending_checks:
+                status = "pending"
+            elif completed is None:
+                status = "journal unavailable"
+            elif order.word in completed:
+                status = "completed"
+            else:
+                status = "open"
+            missing = missing_machine_options(order.word, view.owned_machines)
+            if any(not option for option in missing):
+                machines = "ready"
+            else:
+                machines = " or ".join(
+                    " + ".join(sorted(option)) for option in missing
+                )
+            lines.append(f"{order.name} — {order.word}: {status}; machines: {machines}")
+        return "\n".join(lines)
 
     def overlay_status_text(self) -> str:
         if not self.overlay_preferences.enabled:
