@@ -325,6 +325,9 @@ class WorldLayoutTests(unittest.TestCase):
             self.assertEqual(expected, len(world.multiworld.itempool))
             self.assertEqual(30 if level_set == 0 else 40, slot["level_count"])
             self.assertEqual(expected, sum(len(region.locations) for region in world.multiworld.regions) - 1)
+            ordinary_i = next(location for location in world.selected_locations() if location.stable_key == "complete-i")
+            self.assertEqual(0, ordinary_i.page_index)
+            self.assertEqual((), ordinary_i.module_limits)
 
     def test_slot_data_is_seed_deterministic_and_changes_across_seeds(self):
         first = self.make_world(65537).fill_slot_data()

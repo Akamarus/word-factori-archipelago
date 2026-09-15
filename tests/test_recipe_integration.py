@@ -34,6 +34,16 @@ class RecipeIntegrationTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 resolve_room_campaign({**self.slot(), **change})
 
+    def test_legacy_room_cannot_bypass_recipe_contract_validation(self):
+        manifest = campaign_for_level_set("discovery_labs")
+        legacy = {"campaign_id": manifest.campaign_id, "manifest_version": manifest.version,
+                  "manifest_digest": __import__("word_factori.campaign", fromlist=["campaign_digest"]).campaign_digest(manifest),
+                  "level_count": len(manifest.levels)}
+        for change in ({"recipe_checks": True, "recipe_catalog_digest": RECIPE_CATALOG_DIGEST},
+                       {"recipe_checks": 1}, {"recipe_catalog_digest": RECIPE_CATALOG_DIGEST}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                resolve_room_campaign({**legacy, **change})
+
     def test_recipe_ids_are_not_native_slots_or_victory(self):
         recipe_ids = {check.code for check in RECIPE_CHECKS}
         self.assertFalse(goal_reached(0, 25, recipe_ids))

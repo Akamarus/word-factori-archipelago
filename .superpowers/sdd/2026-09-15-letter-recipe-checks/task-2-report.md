@@ -39,3 +39,21 @@ victory isolation, journal parsing, and fresh-binding protection.
   ordinary `complete-i` factory, which enhanced layout anchors on page zero.
 - Release metadata version remains unchanged; no install, push, merge, or release
   action was performed.
+
+## Review fixes
+
+- Moved recipe-contract validation ahead of the legacy-room return. Focused RED
+  tests demonstrated that legacy payloads previously accepted `recipe_checks:
+  true`, non-boolean values, and a stray catalog digest; all are now rejected.
+- Added real `WordFactoriContext` polling tests backed by temporary native save
+  files. They cover combined level/recipe reporting, no second send after server
+  acknowledgment, queued offline discovery replay after reconnect, wrong bound
+  saves, malformed journals, recipe-disabled journal ignoring, and unchanged
+  level-only reporting.
+- Added direct assertions that the ordinary `complete-i` factory is on page zero
+  and has no intrinsic module limits.
+- Focused GREEN command: `python -m unittest tests.test_recipe_integration
+  tests.test_client_lifecycle tests.test_world_layout tests.test_publication
+  tests.test_verify_generation_matrix` — 164 tests in 12.686s, OK.
+- Fresh package command: `python tools/build_release.py` — exit 0, APWorld SHA-256
+  `14a9cebb4969552fc620ce71f1377d47c6d375ac8fdbacb223290414743b6f4a`.

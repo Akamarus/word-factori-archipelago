@@ -382,13 +382,14 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.save_path.parent.mkdir(parents=True)
         self.write_active_slot("game-slot-A", set())
 
-    def write_active_slot(self, random_id, beaten_indices):
+    def write_active_slot(self, random_id, beaten_indices, recipes=None):
         self.save_path.write_text(json.dumps({
             "slots": {
                 "0": {
                     "slot_is_active": 1,
                     "random_id": random_id,
                     "beaten_levels": {str(index): 1 for index in beaten_indices},
+                    **({"recipes": recipes} if recipes is not None else {}),
                 }
             }
         }), encoding="utf-8")
@@ -410,6 +411,22 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         }
         write_campaign_identity(self.ctx.campaign_path, manifest, layout)
         return manifest, layout, locations
+
+    def install_recipe_room(self):
+        from word_factori.layout import build_layout
+        from word_factori.recipe_checks import RECIPE_CATALOG_DIGEST
+        manifest = campaign_for_level_set("discovery_labs")
+        layout = build_layout(manifest, "discovery_labs", "shuffled_pages", random.Random(47),
+                              integration_mode="enhanced", machine_only=True, recipe_checks=True)
+        locations = locations_for_layout(manifest, layout)
+        self.ctx.slot_data = {**self.ctx.slot_data, **layout_slot_data(layout),
+            "level_set": "discovery_labs", "campaign_id": manifest.campaign_id,
+            "manifest_version": manifest.version, "manifest_digest": layout.digest,
+            "level_count": len(locations), "recipe_checks": True,
+            "recipe_catalog_digest": RECIPE_CATALOG_DIGEST}
+        write_campaign_identity(self.ctx.campaign_path, manifest, layout)
+        self.ctx.connected_identity = self.ctx.current_identity()
+        return locations
 
     def capture_scheduled_task(self, callback):
         before = asyncio.all_tasks()
@@ -2057,6 +2074,64 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         ]
         self.assertEqual(1, len(checks))
         self.assertEqual((LOCATIONS[0].code,), checks[0]["locations"])
+
+    async def test_recipe_room_scan_reports_level_and_recipe_once_then_ack_suppresses_replay(self):
+        from word_factori.recipe_checks import RECIPE_CHECKS
+        locations = self.install_recipe_room()
+        self.install_test_patch_receipt()
+        recipe = next(check for check in RECIPE_CHECKS if check.machine == "oBend" and check.inputs == ("I",) and check.output == "C")
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.ctx.missing_locations = {locations[0].code, recipe.code}
+        self.write_active_slot("game-slot-A", {0}, {"oBend": {"I": "C"}})
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        packets = [m for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks"]
+        self.assertEqual(1, len(packets))
+        self.assertEqual({locations[0].code, recipe.code}, set(packets[0]["locations"]))
+        self.ctx.checked_locations = {locations[0].code, recipe.code}
+        self.ctx.on_package("RoomUpdate", {})
+        self.ctx.sent_messages.clear()
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        self.assertFalse(any(m["cmd"] == "LocationChecks" for m in self.ctx.sent_messages))
+
+    async def test_recipe_room_replays_offline_pending_after_reconnect(self):
+        from word_factori.recipe_checks import RECIPE_CHECKS
+        self.install_recipe_room()
+        self.install_test_patch_receipt()
+        recipe = RECIPE_CHECKS[0]
+        self.ctx.server = None
+        self.ctx.missing_locations = set()
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.write_active_slot("game-slot-A", set(), {recipe.machine: {" ".join(recipe.inputs): recipe.output}})
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        self.assertIn(recipe.code, self.ctx.bridge_state.pending_checks)
+        self.assertFalse(any(m["cmd"] == "LocationChecks" for m in self.ctx.sent_messages))
+        self.ctx.server = object()
+        self.ctx.missing_locations = {recipe.code}
+        await self.ctx._resend_pending_checks(self.ctx.connected_identity, self.ctx._connection_generation)
+        self.assertTrue(any(recipe.code in m["locations"] for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks"))
+
+    async def test_recipe_scan_wrong_bound_save_and_malformed_journal_report_nothing(self):
+        self.install_recipe_room()
+        self.install_test_patch_receipt()
+        self.ctx.bridge_state = BridgeState(game_slot_id="other-slot")
+        from word_factori.recipe_checks import RECIPE_CHECKS
+        self.ctx.missing_locations = {check.code for check in RECIPE_CHECKS}
+        self.write_active_slot("game-slot-A", set(), {"oBend": {"I": "C"}})
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        self.assertFalse(any(m["cmd"] == "LocationChecks" for m in self.ctx.sent_messages))
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.write_active_slot("game-slot-A", set(), {"oBend": []})
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        self.assertFalse(any(m["cmd"] == "LocationChecks" for m in self.ctx.sent_messages))
+
+    async def test_recipe_journal_is_ignored_by_option_false_level_room(self):
+        self.ctx.missing_locations = {LOCATIONS[0].code}
+        self.ctx.bridge_state = BridgeState(game_slot_id="game-slot-A")
+        self.write_active_slot("game-slot-A", {0}, {"oBend": {"I": "C"}})
+        await self.ctx.scan_once(ignore_selection_guard=True)
+        packet = next(m for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks")
+        self.assertEqual((LOCATIONS[0].code,), packet["locations"])
 
     async def test_discovery_check_is_queued_once_and_acknowledged(self):
         location_id = LOCATIONS[30].code
