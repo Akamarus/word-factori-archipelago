@@ -50,6 +50,10 @@ def validate_probe_paths(cli: Path, original: Path, runtime: Path, output: Path)
     if output.exists() or not output.parent.is_dir():
         raise ValueError("Output must be unused beneath an existing scratch directory")
     destination = output.resolve()
+    for ancestor in destination.parents:
+        marker = ancestor / ".git"
+        if marker.is_dir() or marker.is_file():
+            raise ValueError(f"Output is inside a repository/worktree: {ancestor}")
     for protected in (runtime.resolve(), original.resolve(), original.parent.resolve(), ROOT):
         if destination == protected or destination.is_relative_to(protected) or protected.is_relative_to(destination):
             raise ValueError(f"Output overlaps protected input/repository: {protected}")
@@ -100,8 +104,17 @@ def build_probe(cli: Path, original: Path, runtime: Path, output: Path) -> dict:
     cli, original, runtime, output = (p.resolve() for p in (cli, original, runtime, output))
 
     def run(*args: object) -> None:
-        result = subprocess.run([str(cli), *map(str, args)], cwd=output,
-                                capture_output=True, text=True, timeout=180)
+        try:
+            result = subprocess.run([str(cli), *map(str, args)], cwd=output,
+                                    capture_output=True, text=True, timeout=180)
+        except subprocess.TimeoutExpired as failure:
+            with (output / "build.log").open("a", encoding="utf-8") as log:
+                # TimeoutExpired can carry bytes even with text=True.
+                for captured in (failure.stdout, failure.stderr):
+                    log.write(captured.decode("utf-8", errors="replace")
+                              if isinstance(captured, bytes) else captured or "")
+                log.write("\nNative CLI timed out; partial diagnostics preserved.\n")
+            raise
         with (output / "build.log").open("a", encoding="utf-8") as log:
             log.write(result.stdout + result.stderr)
         if result.returncode:

@@ -1,6 +1,8 @@
 """Real filesystem safety checks for the development-only native probe."""
 import importlib
+import hashlib
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -58,6 +60,31 @@ class TypeWordProbePaths(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.validate(self.scratch / "missing" / "probe")
 
+    def test_output_inside_another_repository_is_rejected_without_writes(self):
+        checkout = self.tmp / "another-checkout"
+        (checkout / ".git").mkdir(parents=True)
+        nested = checkout / "nested"
+        nested.mkdir()
+        destination = nested / "new-probe"
+        with self.assertRaises(ValueError):
+            self.validate(destination)
+        self.assertFalse(destination.exists())
+        self.assertTrue((checkout / ".git").is_dir())
+
+    def test_output_inside_gitfile_worktree_is_rejected_without_writes(self):
+        checkout = self.tmp / "another-worktree"
+        checkout.mkdir()
+        gitfile = checkout / ".git"
+        gitfile.write_text("gitdir: ../main/.git/worktrees/another-worktree\n", encoding="utf-8")
+        nested = checkout / "nested"
+        nested.mkdir()
+        destination = nested / "new-probe"
+        with self.assertRaises(ValueError):
+            self.validate(destination)
+        self.assertFalse(destination.exists())
+        self.assertEqual(gitfile.read_text(encoding="utf-8"),
+                         "gitdir: ../main/.git/worktrees/another-worktree\n")
+
     def test_missing_input_is_rejected(self):
         self.cli = self.tmp / "missing.exe"
         with self.assertRaises(ValueError):
@@ -83,6 +110,20 @@ class TypeWordProbePaths(unittest.TestCase):
         (self.runtime / "ambiguous.exe").write_bytes(b"not executed")
         with self.assertRaises(ValueError):
             self.probe.discover_executable(self.runtime)
+
+    def test_cli_timeout_preserves_captured_stdout_and_stderr(self):
+        fixture_hash = hashlib.sha256(self.original.read_bytes()).hexdigest()
+        timeout = subprocess.TimeoutExpired([str(self.cli), "dump"], 180,
+                                            output=b"partial native dump\n",
+                                            stderr=b"native warning\n")
+        with patch("tools.enhanced_hooks.ORIGINAL_SHA256", fixture_hash), \
+                patch("subprocess.run", side_effect=timeout):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                self.probe.build_probe(self.cli, self.original, self.runtime, self.output)
+        log = self.output / "build.log"
+        self.assertTrue(log.is_file(), "timeout discarded native CLI diagnostics")
+        self.assertIn("partial native dump", log.read_text(encoding="utf-8"))
+        self.assertIn("native warning", log.read_text(encoding="utf-8"))
 
     def test_function_extraction_preserves_nested_body_and_rejects_missing(self):
         extract = getattr(self.probe, "extract_function", None)
