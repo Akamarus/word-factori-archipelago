@@ -144,3 +144,142 @@ and timeout/error logs are also retained, without weakening the native win gate.
 Full repository suite: `python -m unittest discover -s tests -q` ran 518 tests
 in 68.821 seconds, OK with 2 skips (the baseline skip plus symlink privilege).
 This change adds only authored development tooling, safety tests and this note.
+
+## Native enforcement gate (Task 2)
+
+The isolated candidate compiled, reopened, and exited 0 on 2026-09-15.
+Final scratch: `typeword-enforcement-20260915-r6` under the same external
+`probe-tools` directory. The nonce-bound result reports
+`enforcement_supported: true`, **50/50 assertions: 40 native_function and
+10 native_production**. Patched test SHA256:
+`b8ed830420aa4375c385733d01b14e7671e858a31e26c722fff341393e1008f5`.
+This is feasibility evidence for review; no distributable patch or production
+APWorld, client, runtime snapshot, receipt, or installation changed.
+
+Add `--enforcement` to the reproduction command above. The runner uses the same
+verified original, fresh output, GeneralInfo namespace, empty identity,
+service isolation, native JSON nonce transport, and exact-process timeout rules.
+Missing or false enforcement results fail the runner, even if the test list
+otherwise reports success. Reopened output includes all three guarded global
+source entries, as well as the harness and native control functions.
+
+### Controls, production, and saved layouts
+
+| Scenario | Observed native result |
+|---|---|
+| Stock mode 3 with Bender-only limit structure | Merger2 count is -1 (unlimited) |
+| Candidate free-word entry, Bender-only snapshot | Bend and I are -1; rotation, reflection, Merger2/3/4 are 0 |
+| Locked Merger2 graph built from serialized template | 60 native ticks, zero completed words, no V recipe or word journal entry |
+| Same graph after Merger2 receipt and native `setLevel` re-entry | Ten VV words at total tick 79; V recipe and VV scores recorded; no campaign credit |
+| Saved graph through lock/unlock | Original serialized layout unchanged; the same native merger Building instance resumes |
+| Native custom factory while AP disabled | Produces V; real native timing cache returns 3 ticks for cycle key 400 |
+| Same warmed custom factory under AP, full inventory | Repeated native `produce(400)` returns no output; cached timing path and recipe previews blocked; saved template unchanged |
+
+The saved/import fixture is authored JSON with the native template fields
+`uuid`, `buildings`, `pipes`, `module`, `tag`, `topo_index`, `from`, `to`, and
+`dist`. Native `makeBuildingsFromTemplate` constructs eight actual Buildings
+and six LetterPipes: four I sources, two Merger2 machines, and two V goals.
+Native source consume/produce creates every I. Native pipes supply both inputs
+to each merger, which produces V through the native recipe lookup. Native
+`oControl.doTick`, goal production, and `try_win_condition` reach ten VV words
+and call native `beatLevel`. No successful letters, goal counts, win flags,
+statistics, or journal entries are injected. The loop calls the native tick and
+win functions synchronously; this is not a UI save-file load/import playthrough.
+Visual line-score objects are still omitted, so cycles 0 remains the Task 1
+simulation limitation.
+
+The custom fixture uses native `Building(oCustomBuilding, uuid)`,
+`Misc.tagAsState`, `getBuildingTemplateFromUUID`, and
+`makeBuildingsFromTemplate`, followed by real nested simulation and cache
+population. Cached output was tested after its native warm-up, not manufactured
+by setting a countdown or queued letter. Custom production and previews are
+**unavailable in AP even with every family owned**. The candidate does not
+validate individual custom trees or claim support for unrestricted custom
+factories. This conservative restriction preserves their saved layouts and must
+be disclosed before any eventual release or installation.
+
+The r2 native RED control used no-op candidate helpers and the same original
+simulation. It compiled/reopened/exited 0 but failed 34 of 46 assertions,
+reporting `enforcement_supported: false`. Its supposedly locked imported graph
+produced 28 VV words in 60 ticks and wrote the V recipe; its warmed custom
+factory continued emitting V. This demonstrates that the acceptance detects
+the native bypass, not only toolbar presentation. r1 failed compilation due to
+an authored array-literal accessor; r3 was the initial 46/46 GREEN and r4 added
+integer-token and campaign-cap checks. Controller clarification established
+Bender as guaranteed precollected starting equipment. r5 added the fallback
+assertion and failed ten native tests; r6 changed safe fallback to I plus Bender
+and passed all 50. Only r6 is the final acceptance result.
+
+### Minimal confirmed native hook surface
+
+Seven hook names are reported in the native result:
+
+- `LevelFuncs.get_level_module_counts`: refreshes explicit probe inventory on
+  native factory entry; supplies complete limits for negative-index factories.
+- `LevelFuncs.get_current_module_count`: removes the mode bypass for AP and
+  returns zero for an unowned family even if imported instances already exist.
+  Existing finite campaign limits still use native counting.
+- `Building.consume`: blocks locked machines before input consumption and both
+  native recipe-discovery paths.
+- `Building.getRecipe`: blocks recipe/template traversal before its independent
+  native journal writes. A blocked result is the native invalid Letter `?`.
+- `Building.produce`: blocks cached/queued production, including custom output.
+- `Building.getTicksTillProduce`: blocks custom timing/cache traversal under AP.
+- `Misc.getModuleRecipe`: blocks direct previews and custom template resolution
+  before their native recipe lookup. `tagAsState` and serialized construction
+  remain native and unchanged.
+
+The toolbar and production checks use exactly the family module names from
+`word_factori.mod.MODULES`. Native rotation/reflection objects map their tag to
+the corresponding family variant. I and final-word goal consumption remain
+available. Native `getModuleRecipe` returns a Letter with `?` for an invalid
+recipe; returning undefined from guarded Building preview calls would violate
+the native caller's `.toString()` expectation.
+
+Native assertions cover missing/non-struct snapshots, stale revision, wrong
+room/layout, missing family, malformed count, missing context, old word contract,
+and old acknowledgment. Invalid snapshots retain a validated snapshot only for
+the same room/layout/contract; a new room receives safe I-plus-Bender limits,
+preserving guaranteed precollected equipment. The previous-room test first
+unlocks Merger2, then proves that unlock cannot leak into the new room. Parsed
+client integer tokens for count 0/-1 and revision 9000000001 were accepted.
+Finite campaign Bend cap 2 survives; a native Merger2 cap cannot grant its locked
+family. Noncampaign modes 0, 1, 3, 5, and 7 obey the same restrictions. AP-off,
+vanilla, and another mod retain the native count behavior. The final
+recipes-on/orders-off fixture remains restricted. These are explicit native
+mode/function cases, not online daily/shared launch-service acceptance.
+
+### Required production migration and remaining limits
+
+The helper accepts an explicit probe-owned gate with context, payload, and last
+validated snapshot. It reuses existing `schema`, `mode`, `room`, `layout`, and
+`revision` conventions. `probe_family_counts`, `probe_contract`, and `probe_ack`
+are deliberately test-only fields. The harness owns its AP-enabled switch and
+folder identity. Its `enabled` field is a harness baseline switch only and must
+not become an externally supplied production bypass. No production sidecar
+loader, automatic room binding, or receipt writer is added or inferred from that
+fixture.
+
+A later reviewed implementation must add authoritative per-family inventory and
+the word/recipe contract to the existing runtime snapshot, validate its room and
+layout before use, preserve campaign caps, and retain safe same-room state on
+read/replacement failures. Factory entry is the refresh boundary; no per-tick
+disk read is needed. Receipt/native acknowledgment must explicitly advertise
+free-word production and recipe enforcement. An older generic enhanced
+acknowledgment cannot authorize order reporting or new-client recipe-only
+reporting. The player-facing custom-factory restriction belongs in that migration.
+
+Native disk-save/restart persistence, ordinary UI entry/import, connected item
+delivery/client checks, tracker play, and Linux/Proton remain separate acceptance
+work. Task 1's service limitations are unchanged: automatic **SteamAPI_Init
+attempted and failed**, despite cleared callbacks; it is not a successful login
+or a stubbed SDK call. No authentication or cloud write occurred. Task 2 adds
+only a notification-UI stub around native `saveRecipe`; native recipe writes and
+refresh logic remain intact. Normal module presentation forwards to native
+Building production; no injected win logic substitutes for production.
+
+Python TDD: four new expected failures before enforcement runner implementation;
+then 19 focused tests passed with one symlink-privilege skip. Native r2 RED and
+r6 GREEN evidence above is retained outside all Git repositories.
+Final full suite after the starting-equipment correction: 525 tests in
+58.949 seconds, OK with two skips. No production artifacts were changed.

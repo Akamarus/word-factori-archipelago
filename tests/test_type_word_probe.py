@@ -145,6 +145,63 @@ class TypeWordProbePaths(unittest.TestCase):
         result = parser('noise\nWF_TYPEWORD_RESULT:new:{"schema":1,"tests":[],"failure":"native error"}\n', "new")
         self.assertEqual(result, {"schema":1,"tests":[],"failure":"native error"})
 
+    def test_enforcement_cli_dispatches_and_keeps_original_verification(self):
+        parser = getattr(self.probe, "argument_parser", None)
+        self.assertIsNotNone(parser, "enforcement CLI dispatch missing")
+        args = parser().parse_args(["--cli", str(self.cli), "--original", str(self.original),
+                                   "--runtime", str(self.runtime), "--output", str(self.output), "--enforcement"])
+        self.assertTrue(args.enforcement)
+        with patch("subprocess.run", side_effect=AssertionError("subprocess reached")):
+            with self.assertRaises(ValueError):
+                self.probe.build_probe(args.cli, args.original, args.runtime, args.output, enforcement=True)
+        self.assertFalse(self.output.exists())
+
+    def enforcement_sources(self):
+        return {
+            "gml_GlobalScript_LevelFuncs": "function get_level_module_counts(arg0) { return original_counts(); }\n"
+                "function get_current_module_count(arg0) { if (current_level_mode != UnknownEnum.Value_1 || missing()) return -1; return native_count(); }\nfunction untouched() { return 9; }",
+            "gml_GlobalScript_Building": "\n".join("static " + name + " = function(" + args + ")\n{\n    native_" + name + "();\n};"
+                for name, args in [("consume", ""), ("getRecipe", "arg0, arg1 = false"),
+                                   ("produce", "arg0 = undefined"), ("getTicksTillProduce", "arg0")]),
+            "gml_GlobalScript_Misc": "function getModuleRecipe(arg0, arg1, arg2, arg3 = false, arg4 = true) { return native_recipe(); }",
+            "unrelated": "function unrelated() { return original(); }",
+        }
+
+    def test_enforcement_transform_preserves_native_bodies_and_unrelated_entries(self):
+        transform = getattr(self.probe, "transform_enforcement", None)
+        self.assertIsNotNone(transform, "enforcement source transform missing")
+        source = self.enforcement_sources()
+        output = transform(source, "// authored helper")
+        self.assertEqual(source, self.enforcement_sources())
+        self.assertEqual(output["unrelated"], source["unrelated"])
+        self.assertIn("function untouched() { return 9; }", output["gml_GlobalScript_LevelFuncs"])
+        self.assertIn("if ((!wf_tw_active() && current_level_mode != UnknownEnum.Value_1) || missing())", output["gml_GlobalScript_LevelFuncs"])
+        self.assertIn("if (!wf_tw_allowed(module, tag)) return new Letter(\"?\");\n    native_getRecipe();", output["gml_GlobalScript_Building"])
+        self.assertIn("if (!wf_tw_allowed(module, tag)) { queued_produce_letter = undefined; return undefined; }\n    native_produce();", output["gml_GlobalScript_Building"])
+
+    def test_enforcement_transform_rejects_missing_duplicate_and_already_hooked_sources(self):
+        transform = getattr(self.probe, "transform_enforcement", None)
+        self.assertIsNotNone(transform, "enforcement source transform missing")
+        for mutation in ("missing", "duplicate", "already"):
+            source = self.enforcement_sources()
+            if mutation == "missing":
+                source["gml_GlobalScript_Building"] = ""
+            elif mutation == "duplicate":
+                source["gml_GlobalScript_Misc"] *= 2
+            else:
+                source["gml_GlobalScript_LevelFuncs"] += "function wf_tw_active() {}"
+            with self.assertRaises(ValueError):
+                transform(source, "// helper")
+
+    def test_enforcement_result_cannot_pass_with_missing_or_false_gate(self):
+        validate = getattr(self.probe, "validate_native_assertions", None)
+        self.assertIsNotNone(validate, "enforcement result validation missing")
+        for gate in (None, False, "true"):
+            with self.assertRaises(RuntimeError):
+                validate({"tests": [{"passed": True}], "enforcement_supported": gate}, enforcement=True)
+        validate({"tests": [{"passed": True}], "enforcement_supported": True}, enforcement=True)
+        validate({"tests": [{"passed": True}]}, enforcement=False)
+
 
 if __name__ == "__main__":
     unittest.main()
