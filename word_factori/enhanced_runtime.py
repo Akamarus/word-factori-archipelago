@@ -14,6 +14,9 @@ from .platform_paths import InstallationPaths, validate_installation, validate_a
 ORIGINAL_SHA256 = "d40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978"
 PATCH_PROTOCOL = "enhanced_v1"
 PATCHED_SHA256 = "5a964d5155f8f7acc63fd90bc81882a0559c4586f5de4fd9a0657badd8594194"
+ENFORCEMENT_CAPABILITY = "free_word_machine_enforcement_v1"
+RUNTIME_SCHEMA = 2
+MAX_REVISION = 2**53 - 1
 RUNTIME_NAME = "archipelago_runtime.json"
 RECEIPT_NAME = "archipelago_enhanced_install.json"
 ALLOWED_MODULES = frozenset(module for modules in MODULES.values() for module in modules) | {"IFactory"}
@@ -86,9 +89,26 @@ def patch_ready(mod_folder: Path, installation: InstallationPaths | None = None)
     return patch_readiness(mod_folder, installation).ready
 
 
-def publish_runtime(path: Path, room: str, layout: str, levels: list[dict]) -> bool:
-    if not valid_digest(room) or not valid_digest(layout):
-        raise ValueError("Enhanced runtime requires complete room and layout identities")
+def machine_counts_for_view(view) -> dict[str, int]:
+    owned = set(view.owned_machines) | {"Bender Access"}
+    return {"IFactory": -1, **{module: -1 if item in owned else 0
+            for item, modules in MODULES.items() for module in modules}}
+
+
+def runtime_context(room: str, layout: str, checks_contract: str) -> dict:
+    if not all(valid_digest(value) for value in (room, layout, checks_contract)):
+        raise ValueError("Enhanced runtime requires complete room, layout and checks identities")
+    return {"schema": RUNTIME_SCHEMA, "mode": "enhanced", "room": room, "layout": layout,
+            "checks_contract": checks_contract, "capability": ENFORCEMENT_CAPABILITY}
+
+
+def publish_runtime(path: Path, room: str, layout: str, levels: list[dict], *,
+                    machine_counts: dict, checks_contract: str) -> bool:
+    context = runtime_context(room, layout, checks_contract)
+    if (not isinstance(machine_counts, dict) or set(machine_counts) != ALLOWED_MODULES
+            or any(type(count) is not int or count not in (0, -1) for count in machine_counts.values())
+            or machine_counts["IFactory"] != -1):
+        raise ValueError("Enhanced runtime requires complete machine inventory")
     if not isinstance(levels, list) or not levels:
         raise ValueError("Enhanced runtime requires levels")
     for entry in levels:
@@ -97,11 +117,11 @@ def publish_runtime(path: Path, room: str, layout: str, levels: list[dict]) -> b
         for name, count in entry["module_counts"].items():
             if name not in ALLOWED_MODULES or type(count) is not int or not 0 <= count <= 10000:
                 raise ValueError("Invalid runtime machine limit")
-    payload = {"schema": 1, "mode": "enhanced", "room": room, "layout": layout, "levels": levels}
+    payload = {**context, "levels": levels, "machine_counts": machine_counts}
     try:
         previous = json.loads(path.read_text(encoding="utf-8"))
         revision = previous.get("revision") if isinstance(previous, dict) else None
-        if type(revision) is not int or not 0 <= revision < 2**53 - 1:
+        if type(revision) is not int or not 0 <= revision <= MAX_REVISION:
             previous, revision = {}, 0
     except (OSError, ValueError, TypeError):
         previous, revision = {}, 0
@@ -110,5 +130,7 @@ def publish_runtime(path: Path, room: str, layout: str, levels: list[dict]) -> b
     # Millisecond epoch also recovers after a lost/corrupt sidecar; persisted
     # revision orders rapid updates and clock rollback across reconnects.
     payload["revision"] = max(time.time_ns() // 1_000_000, revision + 1)
+    if payload["revision"] > MAX_REVISION:
+        raise ValueError("Enhanced runtime revision exhausted")
     _write_json(path, payload)
     return True

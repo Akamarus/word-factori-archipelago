@@ -291,3 +291,72 @@ Final full suite after the starting-equipment correction: 525 tests in
 The review strengthening changed only the native acceptance fixture and this
 evidence: focused Python tests and native compile/reopen/run were repeated;
 the controller did not require another full-suite run for that fixture change.
+
+## Shared production enforcement migration (Task 3)
+
+The production core is now `tools/native_machine_access.gml`. Both the isolated
+gate and production builder call the same `transform_enforcement` implementation
+in `tools/enhanced_hooks.py`. The gate's small adapter supplies the marker,
+runtime object and loaded levels; it does not replace enforcement logic.
+Production providers read the loaded AP marker and read the runtime file only
+during native factory entry. No probe enable flag exists in the production core.
+
+Schema 2 binds mode, room, layout, checks contract and capability
+`free_word_machine_enforcement_v1`. All three identities are lowercase SHA256
+hex strings. A complete nine-module inventory carries only 0 or -1, with I always
+available. Safe fallback grants I and the precollected Bender. Finite campaign
+counts are checked against immutable loaded caps. Runtime revisions must be
+integral in 0..9007199254740991; conflicting equal revisions are rejected.
+A private validated snapshot can survive missing/invalid/stale payloads only
+within the same validated context. Observing a context change discards that
+cache, including if the original marker reappears before factory re-entry.
+
+On 2026-09-15, the final isolated gate compiled, reopened and exited 0:
+scratch `typeword-production-20260915-r3` under the external `probe-tools`
+directory described above. Its nonce-bound result reports **66/66 assertions:
+56 native_function and 10 native_production**, with enforcement supported.
+Test binary SHA256:
+`51a198ef3b47bc9554df232fbf553f26963af8d786a16526d1b56191690be686`.
+
+The original 51 behavioral cases are preserved using production field names and
+real mod selection for stock controls. Additions exercise mode 4 at function
+entry, tagged rotation/reflection previews, fractional/oversized/negative/boolean
+revision rejection, conflicting same-revision data, wrong checks contract,
+uppercase digest rejection, extra machine keys, level/cap validation, and context
+changes between factory entries. Saved graph unlock/re-entry, native output and
+journal checks, custom output/cache blocking, and layout preservation remain
+actual native production assertions.
+
+The preceding `typeword-production-20260915-r2` is a native RED run. It compiled,
+reopened and exited 0, but exactly one assertion failed:
+`invalidated cache cannot revive without entry`. The fix clears the private
+cache when a changed/invalid context is observed. The unchanged assertion passes
+in r3; the runner rejects r2 through its enforcement result gate.
+
+Separately, the complete production providers plus all five modified code
+entries compiled and reopened in
+`typeword-production-provider-20260915-r2/production.win`. Its SHA256 is
+`33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161`.
+That artifact is an inspection copy outside Git, never installed. This proves
+production-provider compilation and hook presence; the 66 native runtime
+assertions use isolated providers. It does not establish native sidecar disk
+write/read or restart acceptance.
+
+The runtime publisher, campaign marker and native acknowledgment now use schema
+2. Receipt protocol/readiness and distributable patch hashes remain deliberately
+unchanged in Task 3, pending Task 5's coordinated artifact and installer promotion.
+No intermediate package is delivered. Native custom production and previews
+remain unavailable in the AP mod even with full inventory; saved layouts remain
+intact and ordinary factories resume once their families unlock.
+
+The prior service limitations remain: automatic SteamAPI initialization attempts
+and fails in the isolated runner. Native disk-save/restart, ordinary UI
+entry/import, connected item delivery/client checks, UT play and Linux/Proton
+acceptance remain separate. Mode 4 is a native function case, not online
+daily-service acceptance. Raw results, extracted code, binaries and save
+namespaces remain outside Git.
+
+Python verification: new runtime API tests first failed on the missing inventory
+and contract interface; shared-transform tests first failed on the old candidate
+hooks. Focused runtime, transform, probe-safety and client-lifecycle tests passed.
+Full discovery ran 557 tests in 63.051 seconds, OK with two pre-existing skips.

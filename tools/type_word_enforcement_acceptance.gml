@@ -17,22 +17,23 @@ try {
     global.mods={folder:"mods/word factori archipelago"};
     global.feature_flags={rotated_outputs:false};
     recipes=loadB64JsonFileAsStruct("recipes.data",true);
-    levels=["VV"]; word_list=[]; histograms={}; latest_score={}; prev_score={}; urls={sgg:"disabled"};
+    levels=[{text:"VV",module_counts:{},wf_ap_caps:{}}]; word_list=[]; histograms={}; latest_score={}; prev_score={}; urls={sgg:"disabled"};
     var identity=instance_create_depth(0,0,0,oIdentity);
     full_recipe_list=[]; refreshRecipeList();
     var input=instance_create_depth(0,0,0,oInput);
     var slot=variable_struct_get(identity.save_data.slots,"0");
-    wf_probe_gate={enabled:false,context:undefined,payload:undefined,last:undefined};
-    // Existing enhanced keys; probe_* fields are proposed test-only extensions.
-    var context=json_parse("{\"schema\":1,\"mode\":\"enhanced\",\"room\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"layout\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"probe_contract\":\"native-enforcement-1\",\"probe_ack\":\"native-enforcement-1\"}");
-    var payload=clone(context); payload.revision=1;
-    payload.probe_family_counts={Bend:-1,Rotate_cw:0,Rotate_ccw:0,Reflect_hor:0,Reflect_vert:0,Merger2:0,Merger3:0,Merger4:0,IFactory:-1};
+    wf_probe_gate={context:undefined,payload:undefined}; wf_access_last=undefined;
+    global.mods.folder="";
+    // Exact production marker and runtime shapes, supplied by isolated providers.
+    var context=json_parse("{\"schema\":2,\"mode\":\"enhanced\",\"room\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"layout\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"checks_contract\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capability\":\"free_word_machine_enforcement_v1\"}");
+    var payload=clone(context); payload.revision=1; payload.levels=[{text:"VV",module_counts:{}}];
+    payload.machine_counts={Bend:-1,Rotate_cw:0,Rotate_ccw:0,Reflect_hor:0,Reflect_vert:0,Merger2:0,Merger3:0,Merger4:0,IFactory:-1};
     wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload);
     enter_probe();
     // Stock control: the candidate hooks delegate to the unchanged native path.
-    current_module_counts=clone(payload.probe_family_counts);
+    current_module_counts=clone(payload.machine_counts);
     record_test("stock free word ignores Bender-only limits",get_current_module_count("Merger2")==-1,"native_function");
-    wf_probe_gate.enabled=true; enter_probe();
+    global.mods.folder="mods/word factori archipelago"; enter_probe();
     record_test("free-word locked merger",get_current_module_count("Merger2")==0,"native_function");
     record_test("I remains available",get_current_module_count("IFactory")==-1,"native_function");
     record_test("Bender usable",get_current_module_count("Bend")==-1,"native_function");
@@ -43,30 +44,30 @@ try {
     }
     snapshot("bender_only",current_module_counts);
     // Client JSON uses integer tokens; GameMaker's own writer uses decimals.
-    wf_probe_gate.payload.probe_family_counts=json_parse("{\"Bend\":-1,\"Rotate_cw\":0,\"Rotate_ccw\":0,\"Reflect_hor\":0,\"Reflect_vert\":0,\"Merger2\":0,\"Merger3\":0,\"Merger4\":0,\"IFactory\":-1}");
+    wf_probe_gate.payload.machine_counts=json_parse("{\"Bend\":-1,\"Rotate_cw\":0,\"Rotate_ccw\":0,\"Reflect_hor\":0,\"Reflect_vert\":0,\"Merger2\":0,\"Merger3\":0,\"Merger4\":0,\"IFactory\":-1}");
     wf_probe_gate.payload.revision=json_parse("9000000001"); enter_probe();
-    record_test("client integer JSON revision and counts accepted",limits_are_safe() && get_current_module_count("Bend")==-1 && wf_probe_gate.last.revision==9000000001,"native_function");
-    snapshot("client_integer_snapshot",wf_probe_gate.last);
+    record_test("client integer JSON revision and counts accepted",limits_are_safe() && get_current_module_count("Bend")==-1 && wf_access_last.revision==9000000001,"native_function");
+    snapshot("client_integer_snapshot",wf_access_last);
     var bad_names=["missing","malformed","stale","wrong room","wrong layout","old contract","old acknowledgment","missing family","unlimited locked source"];
     for(var bad=0;bad<array_length(bad_names);bad++) {
-        wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_probe_gate.last=undefined;
+        wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_access_last=undefined;
         switch(bad) {
             case 0: wf_probe_gate.payload=undefined; break;
             case 1: wf_probe_gate.payload="bad JSON value"; break;
             case 2: enter_probe(); wf_probe_gate.payload.revision=0; break;
             case 3: variable_struct_set(wf_probe_gate.payload,"room",string_repeat("c",64)); break;
             case 4: wf_probe_gate.payload.layout=string_repeat("d",64); break;
-            case 5: wf_probe_gate.payload.probe_contract="old"; break;
-            case 6: wf_probe_gate.context.probe_ack="enhanced"; break;
-            case 7: variable_struct_remove(wf_probe_gate.payload.probe_family_counts,"Merger2"); break;
-            case 8: wf_probe_gate.payload.probe_family_counts.Merger2="-1"; break;
+            case 5: wf_probe_gate.payload.schema=1; break;
+            case 6: wf_probe_gate.context.capability="enhanced"; break;
+            case 7: variable_struct_remove(wf_probe_gate.payload.machine_counts,"Merger2"); break;
+            case 8: wf_probe_gate.payload.machine_counts.Merger2="-1"; break;
         }
         enter_probe(); record_test("fail closed "+bad_names[bad],limits_are_safe(),"native_function");
     }
     wf_probe_gate.context=undefined; enter_probe();
     record_test("missing context fails closed",limits_are_safe(),"native_function");
-    wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_probe_gate.last=undefined;
-    wf_probe_gate.payload.probe_family_counts.Merger2=-1; enter_probe();
+    wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_access_last=undefined;
+    wf_probe_gate.payload.machine_counts.Merger2=-1; enter_probe();
     record_test("same-room cache starts with Merger2 unlocked",get_current_module_count("Merger2")==-1,"native_function");
     wf_probe_gate.payload=undefined; enter_probe();
     record_test("validated same-room inventory retained",get_current_module_count("Merger2")==-1
@@ -74,25 +75,60 @@ try {
         && get_current_module_count("Rotate_cw")==0,"native_function");
     snapshot("retained_same_room",current_module_counts);
     wf_probe_gate.payload=clone(payload); wf_probe_gate.payload.revision=2;
-    wf_probe_gate.payload.probe_family_counts.Merger2=-1; enter_probe();
+    wf_probe_gate.payload.machine_counts.Merger2=-1; enter_probe();
     record_test("previous room has Merger2 unlocked",get_current_module_count("Merger2")==-1,"native_function");
     wf_probe_gate.payload=undefined;
     variable_struct_set(wf_probe_gate.context,"room",string_repeat("e",64)); enter_probe();
     record_test("previous room inventory never reused",limits_are_safe(),"native_function");
-    wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_probe_gate.last=undefined;
-    levels[0]={text:"VV",module_counts:{Bend:2,Merger2:3}};
+    wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_access_last=undefined;
+    // Invalid newer snapshots must retain a previously accepted same-context unlock.
+    wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_access_last=undefined;
+    wf_probe_gate.payload.machine_counts.Merger2=-1; enter_probe();
+    var invalid_cases=["fractional revision","oversized revision","negative revision","boolean revision","same revision conflict","wrong checks contract","uppercase digest","extra family","bad level text","missing cap"];
+    for(var invalid=0;invalid<array_length(invalid_cases);invalid++) {
+        wf_probe_gate.payload=clone(payload); wf_probe_gate.payload.revision=2;
+        switch(invalid) {
+            case 0: wf_probe_gate.payload.revision=1.5; break;
+            case 1: wf_probe_gate.payload.revision=9007199254740992; break;
+            case 2: wf_probe_gate.payload.revision=-1; break;
+            case 3: wf_probe_gate.payload.revision=true; break;
+            case 4: wf_probe_gate.payload.revision=1; break;
+            case 5: wf_probe_gate.payload.checks_contract=string_repeat("d",64); break;
+            case 6: variable_struct_set(wf_probe_gate.payload,"room",string_repeat("A",64)); break;
+            case 7: wf_probe_gate.payload.machine_counts.Extra=0; break;
+            case 8: wf_probe_gate.payload.levels[0].text="XX"; break;
+            case 9: levels[0].wf_ap_caps={Bend:2}; break;
+        }
+        enter_probe();
+        // A changed native cap invalidates the entire retained snapshot as well.
+        record_test("reject "+invalid_cases[invalid],get_current_module_count("Merger2")==(invalid==9 ? 0 : -1),"native_function");
+    }
+    levels[0].wf_ap_caps={};
+    wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_access_last=undefined;
+    wf_probe_gate.payload.machine_counts.Merger2=-1; enter_probe();
+    wf_probe_gate.context.checks_contract=string_repeat("d",64);
+    record_test("context change invalidates between entries",get_current_module_count("Merger2")==0,"native_function");
+    wf_probe_gate.context=clone(context);
+    record_test("invalidated cache cannot revive without entry",get_current_module_count("Merger2")==0,"native_function");
+    wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_access_last=undefined;
+    enter_probe();
+    record_test("tagged rotation preview remains locked",getModuleRecipe(oRotate,"cw",[new Letter("I")]).toString()=="?","native_function");
+    record_test("tagged reflection preview remains locked",getModuleRecipe(oReflect,"vert",[new Letter("I")]).toString()=="?","native_function");
+    levels[0]={text:"VV",module_counts:{Bend:2,Merger2:3},wf_ap_caps:{Bend:2,Merger2:3}};
+    wf_probe_gate.payload.levels[0].module_counts={Bend:2,Merger2:0};
     setLevel("VV",0,1,false);
     record_test("campaign finite cap retained",get_current_module_count("Bend")==2,"native_function");
     record_test("campaign native cap cannot grant locked family",get_current_module_count("Merger2")==0,"native_function");
-    levels[0]="VV";
-    var replay_modes=[0,1,3,5,7];
-    for(var mode_index=0;mode_index<5;mode_index++) {
+    levels[0]={text:"VV",module_counts:{},wf_ap_caps:{}};
+    wf_probe_gate.payload=clone(payload); wf_access_last=undefined;
+    var replay_modes=[0,1,3,4,5,7];
+    for(var mode_index=0;mode_index<array_length(replay_modes);mode_index++) {
         var replay_mode=replay_modes[mode_index]; setLevel("VV",-1,replay_mode,false);
         record_test("noncampaign replay mode "+string(replay_mode),limits_are_safe(),"native_function");
     }
-    wf_probe_gate.enabled=false; enter_probe();
-    record_test("AP disabled keeps native behavior",get_current_module_count("Merger2")==-1,"native_function");
-    wf_probe_gate.enabled=true; global.mods.folder="mods/another mod"; enter_probe();
+    global.mods.folder=""; enter_probe();
+    record_test("AP unselected keeps native behavior",get_current_module_count("Merger2")==-1,"native_function");
+    global.mods.folder="mods/word factori archipelago"; global.mods.folder="mods/another mod"; enter_probe();
     record_test("other mod keeps native behavior",get_current_module_count("Merger2")==-1,"native_function");
     global.mods.folder=""; enter_probe();
     record_test("vanilla keeps native behavior",get_current_module_count("Merger2")==-1,"native_function");
@@ -126,7 +162,7 @@ try {
     record_test("locked graph emits no queued merger output",graph[2].queued_produce_letter==undefined && graph[3].queued_produce_letter==undefined,"native_production");
     snapshot("locked_import",{counts:current_module_counts,slot:slot,words:goal.num_words_completed,ticks:control.cycle_count});
     // Inventory refresh comes from actual setLevel -> get_level_module_counts.
-    wf_probe_gate.payload.revision=2; wf_probe_gate.payload.probe_family_counts.Merger2=-1;
+    wf_probe_gate.payload.revision=2; wf_probe_gate.payload.machine_counts.Merger2=-1;
     record_test("item waits for factory entry",get_current_module_count("Merger2")==0,"native_function");
     enter_probe();
     record_test("re-entry applies Merger2 without restart",get_current_module_count("Merger2")==-1,"native_function");
@@ -146,17 +182,17 @@ try {
         pipes:[{from:1,to:0,dist:2},{from:2,to:0,dist:2}]};
     slot.templates=[custom_template];
     var custom_layout_before=json_stringify(slot.templates);
-    wf_probe_gate.enabled=false; enter_probe();
+    global.mods.folder=""; enter_probe();
     var custom=new Building(oCustomBuilding,"probe-custom-v");
     var warm_output=undefined;
     for(var warm_tick=0;warm_tick<30 && warm_output==undefined;warm_tick++) warm_output=custom.produce(400);
     var cached_ticks=custom.getTicksTillProduce(400);
     record_test("stock custom emits native template output",warm_output!=undefined && warm_output.toString()=="V" && cached_ticks<10000,"native_production");
     // Full inventory is deliberately insufficient for unsupported custom factories.
-    wf_probe_gate.enabled=true;
+    global.mods.folder="mods/word factori archipelago";
     wf_probe_gate.payload.revision=3;
-    var family_names=variable_struct_get_names(wf_probe_gate.payload.probe_family_counts);
-    for(var f=0;f<array_length(family_names);f++) variable_struct_set(wf_probe_gate.payload.probe_family_counts,family_names[f],-1);
+    var family_names=variable_struct_get_names(wf_probe_gate.payload.machine_counts);
+    for(var f=0;f<array_length(family_names);f++) variable_struct_set(wf_probe_gate.payload.machine_counts,family_names[f],-1);
     enter_probe();
     var any_custom_output=false;
     for(var blocked_tick=0;blocked_tick<30;blocked_tick++) if(custom.produce(400)!=undefined) any_custom_output=true;

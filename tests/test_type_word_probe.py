@@ -175,9 +175,9 @@ class TypeWordProbePaths(unittest.TestCase):
         self.assertEqual(source, self.enforcement_sources())
         self.assertEqual(output["unrelated"], source["unrelated"])
         self.assertIn("function untouched() { return 9; }", output["gml_GlobalScript_LevelFuncs"])
-        self.assertIn("if ((!wf_tw_active() && current_level_mode != UnknownEnum.Value_1) || missing())", output["gml_GlobalScript_LevelFuncs"])
-        self.assertIn("if (!wf_tw_allowed(module, tag)) return new Letter(\"?\");\n    native_getRecipe();", output["gml_GlobalScript_Building"])
-        self.assertIn("if (!wf_tw_allowed(module, tag)) { queued_produce_letter = undefined; return undefined; }\n    native_produce();", output["gml_GlobalScript_Building"])
+        self.assertIn("if ((!wf_access_active() && current_level_mode != UnknownEnum.Value_1) || missing())", output["gml_GlobalScript_LevelFuncs"])
+        self.assertIn("if (!wf_access_allowed(module, tag)) return new Letter(\"?\");\n    native_getRecipe();", output["gml_GlobalScript_Building"])
+        self.assertIn("if (!wf_access_allowed(module, tag)) { queued_produce_letter = undefined; return undefined; }\n    native_produce();", output["gml_GlobalScript_Building"])
 
     def test_enforcement_transform_rejects_missing_duplicate_and_already_hooked_sources(self):
         transform = getattr(self.probe, "transform_enforcement", None)
@@ -189,7 +189,7 @@ class TypeWordProbePaths(unittest.TestCase):
             elif mutation == "duplicate":
                 source["gml_GlobalScript_Misc"] *= 2
             else:
-                source["gml_GlobalScript_LevelFuncs"] += "function wf_tw_active() {}"
+                source["gml_GlobalScript_LevelFuncs"] += "function wf_access_active() {}"
             with self.assertRaises(ValueError):
                 transform(source, "// helper")
 

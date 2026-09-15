@@ -19,8 +19,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.enhanced_hooks import ORIGINAL_SHA256, verify_original, insert_function_guard
-from word_factori.mod import MODULES
+from tools.enhanced_hooks import ORIGINAL_SHA256, verify_original, transform_enforcement
 
 SAVE_NAMESPACE = "wf_ap_typeword_probe_20260915"
 CODE_ENTRIES = (
@@ -38,37 +37,6 @@ ENFORCEMENT_HOOKS = ["LevelFuncs.get_level_module_counts", "LevelFuncs.get_curre
                      "Building.consume", "Building.getRecipe", "Building.produce",
                      "Building.getTicksTillProduce", "Misc.getModuleRecipe"]
 
-
-def transform_enforcement(sources: dict[str, str], helper: str) -> dict[str, str]:
-    """Apply exact, development-only guards; never emit extracted source into the repo."""
-    if any("wf_tw_active" in source for source in sources.values()):
-        raise ValueError("Enforcement hooks are already present")
-    result = dict(sources)
-    level = insert_function_guard(result["gml_GlobalScript_LevelFuncs"], "get_level_module_counts",
-                                  "    if (wf_tw_active()) { var wf_counts = wf_tw_entry_counts(); if (arg0 < 0) return wf_counts; }")
-    level = insert_function_guard(level, "get_current_module_count",
-                                  "    if (wf_tw_active() && wf_tw_limit(arg0) == 0) return 0;")
-    needle = "current_level_mode != UnknownEnum.Value_1 ||"
-    if level.count(needle) != 1:
-        raise ValueError("Expected exactly one native mode bypass")
-    result["gml_GlobalScript_LevelFuncs"] = level.replace(
-        needle, "(!wf_tw_active() && current_level_mode != UnknownEnum.Value_1) ||") + "\n" + helper
-    building = result["gml_GlobalScript_Building"]
-    guards = {
-        "consume": "if (!wf_tw_allowed(module, tag)) { queued_produce_letter = undefined; exit; }",
-        "getRecipe": 'if (!wf_tw_allowed(module, tag)) return new Letter("?");',
-        "produce": "if (!wf_tw_allowed(module, tag)) { queued_produce_letter = undefined; return undefined; }",
-        "getTicksTillProduce": "if (!wf_tw_allowed(module, tag)) return 10000;",
-    }
-    for name, guard in guards.items():
-        pattern = re.compile(r"(\bstatic " + name + r" = function\([^)]*\)\s*\{)")
-        if len(pattern.findall(building)) != 1:
-            raise ValueError(f"Expected exactly one Building.{name} hook")
-        building = pattern.sub(lambda match: match[0] + "\n    " + guard, building, count=1)
-    result["gml_GlobalScript_Building"] = building
-    result["gml_GlobalScript_Misc"] = insert_function_guard(result["gml_GlobalScript_Misc"],
-        "getModuleRecipe", '    if (!wf_tw_allowed(arg0, arg1)) return new Letter("?");')
-    return result
 
 
 def validate_native_assertions(result: dict, *, enforcement: bool = False) -> None:
@@ -182,7 +150,7 @@ def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enfor
 
     if enforcement:
         helper = (ROOT / "tools/type_word_enforcement_probe.gml").read_text(encoding="utf-8")
-        helper = helper.replace("PROBE_MODULE_NAMES", json.dumps([name for names in MODULES.values() for name in names]))
+        helper += "\n" + (ROOT / "tools/native_machine_access.gml").read_text(encoding="utf-8")
         transformed = transform_enforcement(sources, helper)
         for entry in ("gml_GlobalScript_Building", "gml_GlobalScript_Misc"):
             stage(entry, transformed[entry])
@@ -218,6 +186,7 @@ def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enfor
     nonce = uuid.uuid4().hex
     harness = harness.replace("NATIVE_SOURCE_HASHES", json.dumps(hashes)).replace("NATIVE_NONCE", nonce)
     harness = harness.replace("NATIVE_ENFORCEMENT_HOOKS", json.dumps(ENFORCEMENT_HOOKS))
+    harness = harness.replace(SAVE_NAMESPACE + "/", SAVE_NAMESPACE + "_" + nonce + "/")
     stage("gml_Object_oPersistent_Create_0", harness)
     script = output / "compile.csx"
     script.write_text(
@@ -226,7 +195,7 @@ def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enfor
         'foreach(var code in Data.Code) { if(code.ParentEntry == null && code.Name.Content.StartsWith("gml_Object_")) group.QueueReplace(code.Name.Content, ""); }\n'
         f'foreach(var file in Directory.GetFiles({json.dumps(str(imports))}, "*.gml")) group.QueueReplace(Path.GetFileNameWithoutExtension(file), File.ReadAllText(file));\n'
         'group.Import();\nforeach(var extension in Data.Extensions) foreach(var file in extension.Files) { file.InitScript=Data.Strings.MakeString(""); file.CleanupScript=Data.Strings.MakeString(""); }\n'
-        f'Data.GeneralInfo.Name.Content = "{SAVE_NAMESPACE}";\n', encoding="utf-8")
+        f'Data.GeneralInfo.Name.Content = "{SAVE_NAMESPACE}_{nonce}";\n', encoding="utf-8")
     game = output / "game"
     game.mkdir()
     # Only base runtime files: no installed data.win, mod tree or save is copied.

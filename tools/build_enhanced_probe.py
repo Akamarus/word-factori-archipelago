@@ -16,21 +16,14 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.enhanced_hooks import ORIGINAL_SHA256, transform_sources, verify_original
-
-CODE_ENTRIES = (
-    "gml_Object_oLevelButton_Create_0",
-    "gml_GlobalScript_MenuFuncs",
-    "gml_GlobalScript_LevelFuncs",
-)
+from tools.enhanced_hooks import ORIGINAL_SHA256, transform_sources, verify_original, CODE_ENTRIES, runtime_helpers
 
 
 def build_probe(cli: Path, original: Path, output: Path) -> dict:
     if output.exists() or output.with_suffix(".json").exists():
         raise ValueError("Probe output already exists; choose a fresh destination")
     verify_original(original.read_bytes())
-    helper_path = ROOT / "tools/enhanced_runtime.gml"
-    helpers = helper_path.read_text(encoding="utf-8")
+    helpers = runtime_helpers(ROOT)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="wf-enhanced-probe-") as temporary:
         scratch = Path(temporary)
@@ -66,6 +59,8 @@ def build_probe(cli: Path, original: Path, output: Path) -> dict:
             CODE_ENTRIES[0]: "wf_ap_enabled()",
             CODE_ENTRIES[1]: "wf_ap_enabled()",
             CODE_ENTRIES[2]: "wf_ap_counts(arg0)",
+            CODE_ENTRIES[3]: "wf_access_allowed(module, tag)",
+            CODE_ENTRIES[4]: "wf_access_allowed(arg0, arg1)",
         }
         for entry, call in required_calls.items():
             decompiled = (inspected / "CodeEntries" / (entry + ".gml")).read_text(encoding="utf-8")
@@ -79,7 +74,7 @@ def build_probe(cli: Path, original: Path, output: Path) -> dict:
             "status": "Compiled and reopened; live acceptance and installer integration pending",
             "original_sha256": ORIGINAL_SHA256,
             "patched_sha256": hashlib.sha256(patched).hexdigest(),
-            "helper_sha256": hashlib.sha256(helper_path.read_bytes()).hexdigest(),
+            "helper_sha256": hashlib.sha256(helpers.encode("utf-8")).hexdigest(),
             "hooks": list(CODE_ENTRIES),
             "installed": False,
         }

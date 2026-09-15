@@ -32,6 +32,7 @@ from .bridge import (
     save_state,
 )
 from .client_core import (
+    InventoryView,
     ResolvedCampaign,
     campaign_compatible,
     goal_reached,
@@ -60,7 +61,8 @@ from .dispatch_store import (
 )
 from .mod import render_levels, write_campaign_identity, write_levels
 from .capabilities import FULL
-from .enhanced_runtime import RUNTIME_NAME, patch_readiness, publish_runtime
+from .enhanced_runtime import RUNTIME_NAME, patch_readiness, publish_runtime, machine_counts_for_view, runtime_context
+from .word_orders import checks_contract_digest
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
 from .overlay_preferences import OverlayPreferences, load_preferences
 from .platform_paths import InstallationPaths, load_installation, selected_proton_mod, validate_state_target
@@ -853,7 +855,9 @@ class WordFactoriContext(CommonContext):
                 raise ValueError(readiness.message)
             levels = render_levels(owned_machines, world_access, locations=locations)
             room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
-            return publish_runtime(self.mod_folder / RUNTIME_NAME, room, campaign.layout.digest, levels)
+            return publish_runtime(self.mod_folder / RUNTIME_NAME, room, campaign.layout.digest, levels,
+                machine_counts=machine_counts_for_view(InventoryView(owned_machines, world_access)),
+                checks_contract=checks_contract_digest(self.slot_data))
         signature = (tuple(sorted(owned_machines)), world_access)
         if signature == self.last_render_signature:
             return False
@@ -892,7 +896,7 @@ class WordFactoriContext(CommonContext):
         if self.slot_data.get("integration_mode") == "enhanced" and self.overlay_state.reload_required:
             try:
                 loaded = json.loads((self.mod_folder / "archipelago_native_status.json").read_text(encoding="utf-8"))
-                expected = {"schema": 1, "mode": "enhanced", "room": hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest(), "layout": self.slot_data["layout_digest"]}
+                expected = runtime_context(hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest(), self.slot_data["layout_digest"], checks_contract_digest(self.slot_data))
                 if loaded == expected:
                     self.overlay_state = apply_action(self.overlay_state, OverlayAction("reload-required", "false"))
                     self.publish_overlay(self.connected_identity)
@@ -951,7 +955,7 @@ class WordFactoriContext(CommonContext):
             )
             if campaign.layout is not None and campaign.layout.integration_mode == "enhanced":
                 room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
-                marker = {"schema": 1, "mode": "enhanced", "room": room, "layout": campaign.layout.digest}
+                marker = runtime_context(room, campaign.layout.digest, checks_contract_digest(self.slot_data))
                 try:
                     installed = json.loads(self.levels_path.read_text(encoding="utf-8"))
                     same = isinstance(installed, list) and len(installed) == len(campaign.locations) and installed[0].get("wf_ap") == marker

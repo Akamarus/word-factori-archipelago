@@ -12,7 +12,10 @@ class EnhancedHookTests(unittest.TestCase):
         return {
             "gml_Object_oLevelButton_Create_0": "return (level_index == 0 || native_unlock()) && secret_guard();",
             "gml_GlobalScript_MenuFuncs": "function getPageUnlockThresh(arg0) { return native_threshold(arg0); }",
-            "gml_GlobalScript_LevelFuncs": "function get_level_module_counts(arg0) { return native_limits(arg0); }",
+            "gml_GlobalScript_LevelFuncs": "function get_level_module_counts(arg0) { return native_limits(arg0); }\n"
+                "function get_current_module_count(arg0) { if (current_level_mode != UnknownEnum.Value_1 || missing()) return -1; return native_count(); }",
+            "gml_GlobalScript_Building": "\n".join("static " + name + " = function() { native_body(); }" for name in ("consume", "getRecipe", "produce", "getTicksTillProduce")),
+            "gml_GlobalScript_Misc": "function getModuleRecipe(arg0, arg1) { return native_recipe(); }",
         }
 
     def test_unknown_binary_is_refused(self):
@@ -59,6 +62,26 @@ class EnhancedHookTests(unittest.TestCase):
         patched = transform_sources(self.sources(), "function wf_ap_context() {}")
         with self.assertRaisesRegex(ValueError, "already present"):
             transform_sources(patched, "")
+
+    def test_every_enforcement_surface_requires_exactly_one_native_occurrence(self):
+        targets = (
+            ("gml_GlobalScript_LevelFuncs", "function get_level_module_counts"),
+            ("gml_GlobalScript_LevelFuncs", "function get_current_module_count"),
+            ("gml_GlobalScript_LevelFuncs", "current_level_mode != UnknownEnum.Value_1 ||"),
+            ("gml_GlobalScript_Building", "static consume = function"),
+            ("gml_GlobalScript_Building", "static getRecipe = function"),
+            ("gml_GlobalScript_Building", "static produce = function"),
+            ("gml_GlobalScript_Building", "static getTicksTillProduce = function"),
+            ("gml_GlobalScript_Misc", "function getModuleRecipe"),
+        )
+        for entry, target in targets:
+            with self.subTest(target=target):
+                missing = self.sources()
+                missing[entry] = missing[entry].replace(target, "renamed_native_surface")
+                with self.assertRaises(ValueError): transform_sources(missing, "// helpers")
+                duplicate = self.sources()
+                duplicate[entry] += "\n" + duplicate[entry]
+                with self.assertRaises(ValueError): transform_sources(duplicate, "// helpers")
 
 
 if __name__ == "__main__":
