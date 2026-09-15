@@ -1,0 +1,3878 @@
+{
+  "digest": "7b07e1975fab1b1cf06c7ff7e32681e6dc25594b7e8aeded86ea6073d532750f",
+  "recipes": [
+    {
+      "machine": "oBend",
+      "inputs": [
+        "201"
+      ],
+      "output": "S",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302000,
+      "name": "Bender: [201] -> S"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "221"
+      ],
+      "output": "S",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302001,
+      "name": "Bender: [221] -> S"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "5"
+      ],
+      "output": "S",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302002,
+      "name": "Bender: [5] -> S"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "52"
+      ],
+      "output": "S",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302003,
+      "name": "Bender: [52] -> S"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "D"
+      ],
+      "output": "O",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302004,
+      "name": "Bender: [D] -> O"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "H"
+      ],
+      "output": "A",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302005,
+      "name": "Bender: [H] -> A"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "I"
+      ],
+      "output": "C",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access"
+        ]
+      ],
+      "code": 975302006,
+      "name": "Bender: [I] -> C"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "I1"
+      ],
+      "output": "U",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302007,
+      "name": "Bender: [I1] -> U"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "J"
+      ],
+      "output": "S",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access"
+        ]
+      ],
+      "code": 975302008,
+      "name": "Bender: [J] -> S"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "J2"
+      ],
+      "output": "S",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302009,
+      "name": "Bender: [J2] -> S"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "K"
+      ],
+      "output": "X",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302010,
+      "name": "Bender: [K] -> X"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "K1"
+      ],
+      "output": "X",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302011,
+      "name": "Bender: [K1] -> X"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "K2"
+      ],
+      "output": "X",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302012,
+      "name": "Bender: [K2] -> X"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "K3"
+      ],
+      "output": "X",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302013,
+      "name": "Bender: [K3] -> X"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "L01"
+      ],
+      "output": "J",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302014,
+      "name": "Bender: [L01] -> J"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "M2"
+      ],
+      "output": "W",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302015,
+      "name": "Bender: [M2] -> W"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "N11"
+      ],
+      "output": "S",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302016,
+      "name": "Bender: [N11] -> S"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "T"
+      ],
+      "output": "Y",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access"
+        ]
+      ],
+      "code": 975302017,
+      "name": "Bender: [T] -> Y"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "V"
+      ],
+      "output": "U",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access"
+        ]
+      ],
+      "code": 975302018,
+      "name": "Bender: [V] -> U"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "V3"
+      ],
+      "output": "C",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302019,
+      "name": "Bender: [V3] -> C"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "W2"
+      ],
+      "output": "M",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302020,
+      "name": "Bender: [W2] -> M"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "X"
+      ],
+      "output": "K",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302021,
+      "name": "Bender: [X] -> K"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "Y"
+      ],
+      "output": "T",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access"
+        ]
+      ],
+      "code": 975302022,
+      "name": "Bender: [Y] -> T"
+    },
+    {
+      "machine": "oBend",
+      "inputs": [
+        "Z01"
+      ],
+      "output": "S",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302023,
+      "name": "Bender: [Z01] -> S"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "(2",
+        "I"
+      ],
+      "output": "D",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302024,
+      "name": "Merger2: [(2, I] -> D"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "(2",
+        "P"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302025,
+      "name": "Merger2: [(2, P] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "(2",
+        "P21"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302026,
+      "name": "Merger2: [(2, P21] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "3",
+        "I"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302027,
+      "name": "Merger2: [3, I] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "4",
+        "I"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302028,
+      "name": "Merger2: [4, I] -> H"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "=",
+        "I"
+      ],
+      "output": "F",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302029,
+      "name": "Merger2: [=, I] -> F"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "=",
+        "L"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302030,
+      "name": "Merger2: [=, L] -> E"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "=",
+        "L21"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302031,
+      "name": "Merger2: [=, L21] -> E"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "=1",
+        "C1"
+      ],
+      "output": "U",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302032,
+      "name": "Merger2: [=1, C1] -> U"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "=1",
+        "I1"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302033,
+      "name": "Merger2: [=1, I1] -> H"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C",
+        "C2"
+      ],
+      "output": "O",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302034,
+      "name": "Merger2: [C, C2] -> O"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C",
+        "L2"
+      ],
+      "output": "G",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302035,
+      "name": "Merger2: [C, L2] -> G"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C1",
+        "C3"
+      ],
+      "output": "O",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302036,
+      "name": "Merger2: [C1, C3] -> O"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C1",
+        "I"
+      ],
+      "output": "J",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302037,
+      "name": "Merger2: [C1, I] -> J"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C1",
+        "R"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302038,
+      "name": "Merger2: [C1, R] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C1",
+        "U2"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302039,
+      "name": "Merger2: [C1, U2] -> H"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C2",
+        "F"
+      ],
+      "output": "P",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302040,
+      "name": "Merger2: [C2, F] -> P"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C2",
+        "I"
+      ],
+      "output": "D",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302041,
+      "name": "Merger2: [C2, I] -> D"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C2",
+        "J2"
+      ],
+      "output": "P",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302042,
+      "name": "Merger2: [C2, J2] -> P"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C2",
+        "P"
+      ],
+      "output": "B",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302043,
+      "name": "Merger2: [C2, P] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C2",
+        "P21"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302044,
+      "name": "Merger2: [C2, P21] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C2",
+        "Y2"
+      ],
+      "output": "R",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302045,
+      "name": "Merger2: [C2, Y2] -> R"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C3",
+        "K"
+      ],
+      "output": "R",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302046,
+      "name": "Merger2: [C3, K] -> R"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "C3",
+        "U"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302047,
+      "name": "Merger2: [C3, U] -> H"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "D",
+        "D"
+      ],
+      "output": "B",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302048,
+      "name": "Merger2: [D, D] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "D",
+        "I"
+      ],
+      "output": "P",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302049,
+      "name": "Merger2: [D, I] -> P"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "D",
+        "V2"
+      ],
+      "output": "R",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302050,
+      "name": "Merger2: [D, V2] -> R"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "F",
+        "I"
+      ],
+      "output": "A",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302051,
+      "name": "Merger2: [F, I] -> A"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "F",
+        "I1"
+      ],
+      "output": "E",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302052,
+      "name": "Merger2: [F, I1] -> E"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "F",
+        "L"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302053,
+      "name": "Merger2: [F, L] -> E"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "F",
+        "U1"
+      ],
+      "output": "P",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302054,
+      "name": "Merger2: [F, U1] -> P"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "F21",
+        "I1"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302055,
+      "name": "Merger2: [F21, I1] -> E"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "H",
+        "I1"
+      ],
+      "output": "A",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302056,
+      "name": "Merger2: [H, I1] -> A"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "I"
+      ],
+      "output": "V",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access"
+        ]
+      ],
+      "code": 975302057,
+      "name": "Merger2: [I, I] -> V"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "I1"
+      ],
+      "output": "L",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302058,
+      "name": "Merger2: [I, I1] -> L"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "J"
+      ],
+      "output": "U",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access"
+        ],
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302059,
+      "name": "Merger2: [I, J] -> U"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "J01"
+      ],
+      "output": "U",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302060,
+      "name": "Merger2: [I, J01] -> U"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "L"
+      ],
+      "output": "U",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302061,
+      "name": "Merger2: [I, L] -> U"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "L01"
+      ],
+      "output": "U",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302062,
+      "name": "Merger2: [I, L01] -> U"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "M3"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302063,
+      "name": "Merger2: [I, M3] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "N"
+      ],
+      "output": "M",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access"
+        ],
+        [
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302064,
+      "name": "Merger2: [I, N] -> M"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "O"
+      ],
+      "output": "Q",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302065,
+      "name": "Merger2: [I, O] -> Q"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "P"
+      ],
+      "output": "R",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302066,
+      "name": "Merger2: [I, P] -> R"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "Q"
+      ],
+      "output": "R",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302067,
+      "name": "Merger2: [I, Q] -> R"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "T1"
+      ],
+      "output": "H",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302068,
+      "name": "Merger2: [I, T1] -> H"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "T3"
+      ],
+      "output": "H",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302069,
+      "name": "Merger2: [I, T3] -> H"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "U"
+      ],
+      "output": "J",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access"
+        ],
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302070,
+      "name": "Merger2: [I, U] -> J"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "U1"
+      ],
+      "output": "D",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302071,
+      "name": "Merger2: [I, U1] -> D"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "U3"
+      ],
+      "output": "F",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302072,
+      "name": "Merger2: [I, U3] -> F"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "V"
+      ],
+      "output": "Y",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access"
+        ]
+      ],
+      "code": 975302073,
+      "name": "Merger2: [I, V] -> Y"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "V2"
+      ],
+      "output": "N",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302074,
+      "name": "Merger2: [I, V2] -> N"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "V3"
+      ],
+      "output": "K",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302075,
+      "name": "Merger2: [I, V3] -> K"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I",
+        "W1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302076,
+      "name": "Merger2: [I, W1] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I1",
+        "L"
+      ],
+      "output": "C",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302077,
+      "name": "Merger2: [I1, L] -> C"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I1",
+        "L2"
+      ],
+      "output": "T",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302078,
+      "name": "Merger2: [I1, L2] -> T"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I1",
+        "L21"
+      ],
+      "output": "T",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302079,
+      "name": "Merger2: [I1, L21] -> T"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I1",
+        "O"
+      ],
+      "output": "Q",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302080,
+      "name": "Merger2: [I1, O] -> Q"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I1",
+        "T1"
+      ],
+      "output": "F",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302081,
+      "name": "Merger2: [I1, T1] -> F"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I1",
+        "U2"
+      ],
+      "output": "A",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302082,
+      "name": "Merger2: [I1, U2] -> A"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I1",
+        "V1"
+      ],
+      "output": "Z",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302083,
+      "name": "Merger2: [I1, V1] -> Z"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I1",
+        "V2"
+      ],
+      "output": "A",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302084,
+      "name": "Merger2: [I1, V2] -> A"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "I1",
+        "V3"
+      ],
+      "output": "Z",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302085,
+      "name": "Merger2: [I1, V3] -> Z"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "J",
+        "J01"
+      ],
+      "output": "U",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302086,
+      "name": "Merger2: [J, J01] -> U"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "J1",
+        "P21"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302087,
+      "name": "Merger2: [J1, P21] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "J1",
+        "T1"
+      ],
+      "output": "P",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302088,
+      "name": "Merger2: [J1, T1] -> P"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "J11",
+        "L21"
+      ],
+      "output": "P",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302089,
+      "name": "Merger2: [J11, L21] -> P"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "J11",
+        "P"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302090,
+      "name": "Merger2: [J11, P] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "L",
+        "L01"
+      ],
+      "output": "U",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302091,
+      "name": "Merger2: [L, L01] -> U"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "L2",
+        "L21"
+      ],
+      "output": "T",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302092,
+      "name": "Merger2: [L2, L21] -> T"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "L21",
+        "L21"
+      ],
+      "output": "F",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302093,
+      "name": "Merger2: [L21, L21] -> F"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "L21",
+        "L3"
+      ],
+      "output": "F",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302094,
+      "name": "Merger2: [L21, L3] -> F"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "L21",
+        "T1"
+      ],
+      "output": "F",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302095,
+      "name": "Merger2: [L21, T1] -> F"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "L3",
+        "L3"
+      ],
+      "output": "F",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302096,
+      "name": "Merger2: [L3, L3] -> F"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "L3",
+        "T1"
+      ],
+      "output": "F",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302097,
+      "name": "Merger2: [L3, T1] -> F"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "P",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302098,
+      "name": "Merger2: [P, U1] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "P21",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302099,
+      "name": "Merger2: [P21, U1] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "R",
+        "U"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302100,
+      "name": "Merger2: [R, U] -> B"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "T1",
+        "T3"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302101,
+      "name": "Merger2: [T1, T3] -> H"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "U",
+        "U"
+      ],
+      "output": "W",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access"
+        ],
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302102,
+      "name": "Merger2: [U, U] -> W"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "U",
+        "U2"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302103,
+      "name": "Merger2: [U, U2] -> H"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "U1",
+        "U3"
+      ],
+      "output": "S",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302104,
+      "name": "Merger2: [U1, U3] -> S"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "U3",
+        "U3"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302105,
+      "name": "Merger2: [U3, U3] -> E"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "V",
+        "V"
+      ],
+      "output": "W",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access"
+        ]
+      ],
+      "code": 975302106,
+      "name": "Merger2: [V, V] -> W"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "V",
+        "V2"
+      ],
+      "output": "X",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302107,
+      "name": "Merger2: [V, V2] -> X"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "V1",
+        "V3"
+      ],
+      "output": "X",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302108,
+      "name": "Merger2: [V1, V3] -> X"
+    },
+    {
+      "machine": "oMerger2",
+      "inputs": [
+        "V2",
+        "V2"
+      ],
+      "output": "M",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Reflection Access"
+        ],
+        [
+          "Merger2 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302109,
+      "name": "Merger2: [V2, V2] -> M"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "(2",
+        "(2",
+        "I"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302110,
+      "name": "Merger3: [(2, (2, I] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "(2",
+        "C2",
+        "I"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302111,
+      "name": "Merger3: [(2, C2, I] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "(2",
+        "D",
+        "I"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302112,
+      "name": "Merger3: [(2, D, I] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "(2",
+        "I",
+        "I"
+      ],
+      "output": "P",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302113,
+      "name": "Merger3: [(2, I, I] -> P"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "(2",
+        "I",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302114,
+      "name": "Merger3: [(2, I, U1] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "3",
+        "I",
+        "I"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302115,
+      "name": "Merger3: [3, I, I] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "=",
+        "I",
+        "I1"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302116,
+      "name": "Merger3: [=, I, I1] -> E"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C",
+        "C2",
+        "I"
+      ],
+      "output": "Q",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302117,
+      "name": "Merger3: [C, C2, I] -> Q"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C",
+        "C2",
+        "I1"
+      ],
+      "output": "Q",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302118,
+      "name": "Merger3: [C, C2, I1] -> Q"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C",
+        "I",
+        "I1"
+      ],
+      "output": "G",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302119,
+      "name": "Merger3: [C, I, I1] -> G"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C1",
+        "C3",
+        "I"
+      ],
+      "output": "Q",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302120,
+      "name": "Merger3: [C1, C3, I] -> Q"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C1",
+        "C3",
+        "I1"
+      ],
+      "output": "Q",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302121,
+      "name": "Merger3: [C1, C3, I1] -> Q"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C1",
+        "C3",
+        "K"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302122,
+      "name": "Merger3: [C1, C3, K] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C1",
+        "I",
+        "I"
+      ],
+      "output": "U",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302123,
+      "name": "Merger3: [C1, I, I] -> U"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C1",
+        "K",
+        "U2"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302124,
+      "name": "Merger3: [C1, K, U2] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C2",
+        "C2",
+        "E"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302125,
+      "name": "Merger3: [C2, C2, E] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C2",
+        "C2",
+        "I"
+      ],
+      "output": "B",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302126,
+      "name": "Merger3: [C2, C2, I] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C2",
+        "D",
+        "I"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302127,
+      "name": "Merger3: [C2, D, I] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C2",
+        "E",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302128,
+      "name": "Merger3: [C2, E, U1] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C2",
+        "I",
+        "I"
+      ],
+      "output": "P",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302129,
+      "name": "Merger3: [C2, I, I] -> P"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C2",
+        "I",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302130,
+      "name": "Merger3: [C2, I, U1] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C2",
+        "I",
+        "V2"
+      ],
+      "output": "R",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302131,
+      "name": "Merger3: [C2, I, V2] -> R"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "C3",
+        "K",
+        "U"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302132,
+      "name": "Merger3: [C3, K, U] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "D",
+        "I",
+        "I"
+      ],
+      "output": "R",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302133,
+      "name": "Merger3: [D, I, I] -> R"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "D",
+        "I",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302134,
+      "name": "Merger3: [D, I, U1] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "E",
+        "U1",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302135,
+      "name": "Merger3: [E, U1, U1] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I",
+        "I"
+      ],
+      "output": "N",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger3 Access"
+        ]
+      ],
+      "code": 975302136,
+      "name": "Merger3: [I, I, I] -> N"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I",
+        "I1"
+      ],
+      "output": "H",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302137,
+      "name": "Merger3: [I, I, I1] -> H"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I",
+        "M3"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302138,
+      "name": "Merger3: [I, I, M3] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I",
+        "U"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302139,
+      "name": "Merger3: [I, I, U] -> H"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I",
+        "U1"
+      ],
+      "output": "P",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302140,
+      "name": "Merger3: [I, I, U1] -> P"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I",
+        "V"
+      ],
+      "output": "M",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access"
+        ]
+      ],
+      "code": 975302141,
+      "name": "Merger3: [I, I, V] -> M"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I",
+        "V2"
+      ],
+      "output": "W",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302142,
+      "name": "Merger3: [I, I, V2] -> W"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I",
+        "W1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger3 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302143,
+      "name": "Merger3: [I, I, W1] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I1",
+        "I1"
+      ],
+      "output": "F",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302144,
+      "name": "Merger3: [I, I1, I1] -> F"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I1",
+        "J1"
+      ],
+      "output": "P",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302145,
+      "name": "Merger3: [I, I1, J1] -> P"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I1",
+        "J11"
+      ],
+      "output": "P",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302146,
+      "name": "Merger3: [I, I1, J11] -> P"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I1",
+        "L2"
+      ],
+      "output": "A",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302147,
+      "name": "Merger3: [I, I1, L2] -> A"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I1",
+        "L21"
+      ],
+      "output": "A",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302148,
+      "name": "Merger3: [I, I1, L21] -> A"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I1",
+        "T1"
+      ],
+      "output": "A",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302149,
+      "name": "Merger3: [I, I1, T1] -> A"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "I1",
+        "T3"
+      ],
+      "output": "A",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302150,
+      "name": "Merger3: [I, I1, T3] -> A"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "N"
+      ],
+      "output": "M",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger3 Access"
+        ]
+      ],
+      "code": 975302151,
+      "name": "Merger3: [I, N] -> M"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "U1",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": false,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302152,
+      "name": "Merger3: [I, U1, U1] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "U1",
+        "V2"
+      ],
+      "output": "R",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302153,
+      "name": "Merger3: [I, U1, V2] -> R"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "V1",
+        "V1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302154,
+      "name": "Merger3: [I, V1, V1] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I",
+        "Z1"
+      ],
+      "output": "M",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302155,
+      "name": "Merger3: [I, Z1] -> M"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I1",
+        "I1",
+        "I1"
+      ],
+      "output": "Z",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302156,
+      "name": "Merger3: [I1, I1, I1] -> Z"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I1",
+        "I1",
+        "K"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302157,
+      "name": "Merger3: [I1, I1, K] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I1",
+        "I1",
+        "L"
+      ],
+      "output": "E",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302158,
+      "name": "Merger3: [I1, I1, L] -> E"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I1",
+        "I1",
+        "L21"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302159,
+      "name": "Merger3: [I1, I1, L21] -> E"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I1",
+        "I1",
+        "T1"
+      ],
+      "output": "E",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302160,
+      "name": "Merger3: [I1, I1, T1] -> E"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I1",
+        "L",
+        "L21"
+      ],
+      "output": "E",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302161,
+      "name": "Merger3: [I1, L, L21] -> E"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "I1",
+        "L2",
+        "L21"
+      ],
+      "output": "A",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302162,
+      "name": "Merger3: [I1, L2, L21] -> A"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "J1",
+        "J11",
+        "T1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302163,
+      "name": "Merger3: [J1, J11, T1] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "J11",
+        "J11",
+        "L21"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302164,
+      "name": "Merger3: [J11, J11, L21] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "K",
+        "U",
+        "U2"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access"
+        ]
+      ],
+      "code": 975302165,
+      "name": "Merger3: [K, U, U2] -> B"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "L",
+        "L21",
+        "T1"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302166,
+      "name": "Merger3: [L, L21, T1] -> E"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "L",
+        "L3",
+        "T1"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302167,
+      "name": "Merger3: [L, L3, T1] -> E"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "L21",
+        "L31",
+        "T1"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302168,
+      "name": "Merger3: [L21, L31, T1] -> E"
+    },
+    {
+      "machine": "oMerger3",
+      "inputs": [
+        "L3",
+        "L31",
+        "T1"
+      ],
+      "output": "E",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger3 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302169,
+      "name": "Merger3: [L3, L31, T1] -> E"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "C2",
+        "C2",
+        "I",
+        "I"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302170,
+      "name": "Merger4: [C2, C2, I, I] -> B"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "C2",
+        "I",
+        "I",
+        "I"
+      ],
+      "output": "R",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302171,
+      "name": "Merger4: [C2, I, I, I] -> R"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "C2",
+        "I",
+        "I",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302172,
+      "name": "Merger4: [C2, I, I, U1] -> B"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "I"
+      ],
+      "output": "W",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger4 Access"
+        ]
+      ],
+      "code": 975302173,
+      "name": "Merger4: [I, I, I, I] -> W"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "L"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302174,
+      "name": "Merger4: [I, I, I, L] -> H"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "L01"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302175,
+      "name": "Merger4: [I, I, I, L01] -> H"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "L1"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302176,
+      "name": "Merger4: [I, I, I, L1] -> H"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "L11"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302177,
+      "name": "Merger4: [I, I, I, L11] -> H"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "L2"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302178,
+      "name": "Merger4: [I, I, I, L2] -> H"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "L21"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302179,
+      "name": "Merger4: [I, I, I, L21] -> H"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "L3"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302180,
+      "name": "Merger4: [I, I, I, L3] -> H"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "L31"
+      ],
+      "output": "H",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302181,
+      "name": "Merger4: [I, I, I, L31] -> H"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "I",
+        "U1"
+      ],
+      "output": "R",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302182,
+      "name": "Merger4: [I, I, I, U1] -> R"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "U1",
+        "U1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Bender Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ],
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302183,
+      "name": "Merger4: [I, I, U1, U1] -> B"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I",
+        "V1",
+        "V1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302184,
+      "name": "Merger4: [I, I, V1, V1] -> B"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I1",
+        "I1",
+        "I1"
+      ],
+      "output": "E",
+      "hidden": false,
+      "requirements": [
+        [
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302185,
+      "name": "Merger4: [I, I1, I1, I1] -> E"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I1",
+        "J1",
+        "J1"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302186,
+      "name": "Merger4: [I, I1, J1, J1] -> B"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I1",
+        "J1",
+        "J11"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302187,
+      "name": "Merger4: [I, I1, J1, J11] -> B"
+    },
+    {
+      "machine": "oMerger4",
+      "inputs": [
+        "I",
+        "I1",
+        "J11",
+        "J11"
+      ],
+      "output": "B",
+      "hidden": true,
+      "requirements": [
+        [
+          "Merger2 Access",
+          "Merger4 Access",
+          "Reflection Access",
+          "Rotation Access"
+        ]
+      ],
+      "code": 975302188,
+      "name": "Merger4: [I, I1, J11, J11] -> B"
+    }
+  ]
+}
