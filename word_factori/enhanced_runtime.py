@@ -9,7 +9,7 @@ import re
 import time
 
 from .mod import MODULES, _write_json
-from .platform_paths import InstallationPaths, validate_installation
+from .platform_paths import InstallationPaths, validate_installation, validate_ap_worlds
 
 ORIGINAL_SHA256 = "d40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978"
 PATCH_PROTOCOL = "enhanced_v1"
@@ -59,9 +59,11 @@ def patch_readiness(mod_folder: Path, installation: InstallationPaths | None = N
                     or receipt.get("prefix") != str(installation.prefix)
                     or receipt.get("factori_root") != str(installation.factori_root)):
                 raise ValueError("receipt does not match selected installation")
-            worlds = Path(receipt.get("ap_worlds", ""))
-            if not worlds.is_absolute() or worlds.name != "custom_worlds" or not worlds.is_dir():
-                raise ValueError("receipt has no native Archipelago worlds directory")
+            try:
+                validate_ap_worlds(installation, Path(receipt.get("ap_worlds", "")))
+            except (OSError, ValueError, TypeError) as error:
+                return PatchReadiness(False, "receipt_invalid",
+                                      f"Native Archipelago directory is invalid: {error}. Rerun the Linux installer.")
             backup = installation.game_data.with_name("data.wf-ap-original.win")
             if not backup.is_file() or _digest(backup) != ORIGINAL_SHA256:
                 return PatchReadiness(False, "backup_invalid", "Native patch backup is missing or invalid; rerun the installer.")

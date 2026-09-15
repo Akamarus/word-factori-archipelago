@@ -19,7 +19,7 @@ class RuntimeTests(unittest.TestCase):
     def test_linux_receipt_must_match_selected_installation_and_patched_game(self):
         from word_factori.platform_paths import InstallationPaths
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             game = root / "game" / "data.win"
             game.parent.mkdir()
             game.write_bytes(b"patched fixture")
@@ -42,6 +42,24 @@ class RuntimeTests(unittest.TestCase):
                 receipt["patched_sha256"] = runtime.PATCHED_SHA256
                 (mod / runtime.RECEIPT_NAME).write_text(json.dumps(receipt))
                 self.assertTrue(runtime.patch_readiness(mod, paths).ready)
+                native_worlds = root / "worlds"
+                native_worlds.mkdir()
+                receipt["ap_worlds"] = str(native_worlds.resolve())
+                (mod / runtime.RECEIPT_NAME).write_text(json.dumps(receipt))
+                result = runtime.patch_readiness(mod, paths)
+                self.assertTrue(result.ready, result.message)
+                bad_receipt = dict(receipt, ap_worlds=str(root))
+                (mod / runtime.RECEIPT_NAME).write_text(json.dumps(bad_receipt))
+                result = runtime.patch_readiness(mod, paths)
+                self.assertFalse(result.ready)
+                self.assertIn("Archipelago", result.message)
+                from tests.test_platform_paths import PlatformPathsTests
+                alias = root / "AP Shortcut"
+                PlatformPathsTests.directory_alias(self, native_worlds, alias)
+                bad_receipt["ap_worlds"] = str(alias)
+                (mod / runtime.RECEIPT_NAME).write_text(json.dumps(bad_receipt))
+                self.assertFalse(runtime.patch_readiness(mod, paths).ready)
+                (mod / runtime.RECEIPT_NAME).write_text(json.dumps(receipt))
                 other_mod = root / "other" / "mods" / "word factori archipelago"
                 other_mod.mkdir(parents=True)
                 (other_mod / runtime.RECEIPT_NAME).write_text(json.dumps(receipt))

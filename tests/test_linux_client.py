@@ -24,7 +24,7 @@ class LinuxClientTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.platform = patch("word_factori.client.sys.platform", "linux")
         self.platform.start()
         self.addCleanup(self.platform.stop)
@@ -60,14 +60,14 @@ class LinuxClientTests(unittest.IsolatedAsyncioTestCase):
         ctx.connected_identity = ctx.current_identity()
         return layout
 
-    def install(self):
+    def install(self, worlds_name="custom_worlds"):
         save_installation(self.paths, self.config)
         mod = self.paths.mod_folder
         mod.mkdir(parents=True)
         digest = hashlib.sha256(self.game.read_bytes()).hexdigest()
         backup = self.game.with_name("data.wf-ap-original.win")
         backup.write_bytes(b"original fixture")
-        worlds = self.root / "custom_worlds"
+        worlds = self.root / worlds_name
         worlds.mkdir(exist_ok=True)
         (mod / RECEIPT_NAME).write_text(json.dumps({
             "protocol": PATCH_PROTOCOL, "original_sha256": hashlib.sha256(backup.read_bytes()).hexdigest(),
@@ -116,7 +116,13 @@ class LinuxClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("patch", ctx.last_bridge_error.lower())
 
     async def test_configured_paths_support_items_checks_reconnect_and_goal(self):
-        with self.install():
+        await self.check_client_lifecycle("custom_worlds")
+
+    async def test_worlds_paths_support_items_checks_reconnect_and_goal(self):
+        await self.check_client_lifecycle("worlds")
+
+    async def check_client_lifecycle(self, worlds_name):
+        with self.install(worlds_name):
             ctx = self.context()
             self.enhanced_room(ctx)
             account = self.factori / "account"

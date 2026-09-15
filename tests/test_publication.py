@@ -102,11 +102,11 @@ class PublicationTests(unittest.TestCase):
 
         metadata = json.loads((ROOT / "word_factori" / "archipelago.json").read_text(encoding="utf-8"))
 
-        self.assertEqual("1.4.1", VERSION)
+        self.assertEqual("1.4.2", VERSION)
         self.assertEqual(VERSION, metadata["world_version"])
         self.assertEqual("0.6.7", metadata["minimum_ap_version"])
         self.assertEqual("0.6.7", metadata["maximum_ap_version"])
-        self.assertEqual(11, metadata["version"])
+        self.assertEqual(12, metadata["version"])
         self.assertEqual(7, metadata["compatible_version"])
         self.assertEqual(f"word-factori-archipelago-{VERSION}.zip", build_release.RELEASE_ARCHIVE.name)
 

@@ -137,10 +137,9 @@ class LinuxInstaller:
     def __init__(self, paths, ap_worlds: Path, config: Path, package_root: Path = PACKAGE_ROOT,
                  process_reader=linux_processes):
         self.paths = paths_api.validate_installation(paths)
-        self.worlds, self.config, self.package = Path(ap_worlds), Path(config), Path(package_root)
+        self.worlds = paths_api.validate_ap_worlds(self.paths, Path(ap_worlds), resolve_root=True)
+        self.config, self.package = Path(config), Path(package_root)
         self.process_reader = process_reader
-        if not self.worlds.is_absolute() or not self.worlds.is_dir() or self.worlds.name != 'custom_worlds':
-            raise ValueError('Select the existing native Archipelago custom_worlds directory')
         self.backup = paths.game_data.with_name('data.wf-ap-original.win')
         self.receipt = paths.mod_folder / RECEIPT
         self.targets = {name: paths.mod_folder / name for name in MOD_FILES}
@@ -323,13 +322,13 @@ def main(argv=None):
         worlds = args.ap_worlds
         if worlds is None:
             if args.yes or not sys.stdin.isatty():
-                raise ValueError('Supply --ap-worlds with the existing native Archipelago custom_worlds directory')
-            worlds = Path(input('Native Archipelago custom_worlds directory: ').strip())
+                raise ValueError('Supply --ap-worlds with the existing native Archipelago worlds or custom_worlds directory')
+            worlds = Path(input('Native Archipelago worlds directory (worlds or custom_worlds): ').strip())
         setup = LinuxInstaller(paths, worlds, args.config)
         if args.operation != 'recover':
             setup.prepare(args.operation)
         print(f'Game: {paths.game_data}\nProton prefix: {paths.prefix}\nMod: {paths.mod_folder}\n'
-              f'APWorld: {worlds / "word_factori.apworld"}\nConfiguration: {args.config}')
+              f'APWorld: {setup.worlds / "word_factori.apworld"}\nConfiguration: {args.config}')
         if args.operation != 'verify' and not args.yes:
             if not sys.stdin.isatty() or input(f'Proceed with {args.operation}? [y/N] ').strip().lower() != 'y':
                 raise ValueError('Cancelled; no files changed')
