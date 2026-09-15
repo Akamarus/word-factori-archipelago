@@ -238,16 +238,17 @@ def resolve_game_slot_binding(
     word_checks: bool = False,
 ) -> str:
     if bound_id is None:
+        require_recipe_journal = recipe_checks or word_checks
         if (
             active.beaten_levels
-            or (recipe_checks and active.recipe_codes is not None and active.recipe_codes)
+            or (require_recipe_journal and active.recipe_codes is not None and active.recipe_codes)
             or (word_checks and active.completed_words is not None and active.completed_words)
         ):
             raise ValueError(
                 "The active Word Factori save has prior completions and cannot be auto-bound. "
                 "Select an empty save slot for this Archipelago room."
             )
-        if recipe_checks and active.recipe_codes is None:
+        if require_recipe_journal and active.recipe_codes is None:
             raise ValueError(
                 "The active Word Factori save has a malformed recipe journal and cannot be auto-bound."
             )

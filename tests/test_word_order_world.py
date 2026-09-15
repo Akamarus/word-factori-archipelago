@@ -52,8 +52,37 @@ class WordOrderWorldTests(unittest.TestCase):
         self.assertEqual((), options.TypeAWordWords.default)
         self.assertTrue({"type_a_word_checks", "type_a_word_count", "type_a_word_words"} <= fields)
 
-    def test_disabled_orders_ignore_an_invalid_or_empty_local_word_list(self):
-        world = self.make_world(type_a_word_checks=False, type_a_word_words="not-a-list")
+    def test_word_list_conversion_rejects_non_sequence_yaml_shapes(self):
+        invalid_values = (None, True, 7, "JACK", {"JACK": True}, {"JACK"})
+        for value in invalid_values:
+            for label, convert in (
+                ("from_any", fixtures.world_options.TypeAWordWords.from_any),
+                ("direct", fixtures.world_options.TypeAWordWords),
+            ):
+                with self.subTest(label=label, value=value):
+                    try:
+                        convert(value)
+                    except ValueError as error:
+                        self.assertRegex(
+                            str(error), r"type_a_word_words.*\[JACK, ISLAND\]"
+                        )
+                    except Exception as error:
+                        self.fail(f"wrong exception type: {type(error).__name__}: {error}")
+                    else:
+                        self.fail("invalid word-list shape was accepted")
+
+    def test_word_list_conversion_accepts_lists_tuples_and_empty_default(self):
+        for value, expected in (
+            (["JACK", "ISLAND"], ("JACK", "ISLAND")),
+            (("JACK", "ISLAND"), ("JACK", "ISLAND")),
+            (fixtures.world_options.TypeAWordWords.default, ()),
+        ):
+            with self.subTest(value=value):
+                converted = fixtures.world_options.TypeAWordWords.from_any(value)
+                self.assertEqual(expected, tuple(converted.value))
+
+    def test_disabled_orders_ignore_an_invalid_semantic_or_empty_local_word_list(self):
+        world = self.make_world(type_a_word_checks=False, type_a_word_words=["not-a-word"])
         world.create_regions()
 
         self.assertEqual((), world.word_orders)
@@ -68,7 +97,7 @@ class WordOrderWorldTests(unittest.TestCase):
         })
 
     def test_enabled_option_errors_name_the_option_and_player(self):
-        for count, words in ((2, ["JACK"]), (1, "JACK"), (21, TWENTY_WORDS), (True, ["JACK"])):
+        for count, words in ((2, ["JACK"]), (1, ["straße"]), (21, TWENTY_WORDS), (True, ["JACK"])):
             with self.subTest(count=count, words=words), self.assertRaisesRegex(
                 ValueError, r"Type-a-Word options for player 1.*invalid"
             ):

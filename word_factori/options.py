@@ -50,6 +50,22 @@ class TypeAWordWords(OptionList):
     display_name = "Type-a-Word Words"
     default = ()
 
+    @staticmethod
+    def _validate_shape(value: object) -> None:
+        if not isinstance(value, (list, tuple)):
+            raise ValueError(
+                "type_a_word_words must be a YAML list, for example: [JACK, ISLAND]"
+            )
+
+    def __init__(self, value):
+        self._validate_shape(value)
+        super().__init__(value)
+
+    @classmethod
+    def from_any(cls, value):
+        cls._validate_shape(value)
+        return super().from_any(value)
+
 
 @dataclass
 class WordFactoriOptions(PerGameCommonOptions):

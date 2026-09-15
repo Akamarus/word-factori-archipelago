@@ -118,6 +118,45 @@ class WordOrderBridgeTests(unittest.TestCase):
                 word_checks=True,
             )
 
+    def test_fresh_order_binding_requires_a_fresh_recipe_journal_even_when_recipe_checks_are_off(self):
+        for recipe_codes, message in (
+            (frozenset({975302000}), "prior completions"),
+            (None, "recipe journal"),
+        ):
+            active = ActiveSlot(
+                "0", "r", frozenset(), recipe_codes, frozenset()
+            )
+            with self.subTest(recipe_codes=recipe_codes), self.assertRaisesRegex(
+                ValueError, message
+            ):
+                resolve_game_slot_binding(
+                    None, active, recipe_checks=False, word_checks=True
+                )
+
+    def test_fresh_order_binding_accepts_empty_journals_and_preserves_legacy_and_bound_saves(self):
+        empty = ActiveSlot("0", "r", frozenset(), frozenset(), frozenset())
+        self.assertEqual(
+            "r",
+            resolve_game_slot_binding(
+                None, empty, recipe_checks=False, word_checks=True
+            ),
+        )
+
+        legacy = ActiveSlot(
+            "0", "r", frozenset(), frozenset({975302000}), None
+        )
+        self.assertEqual("r", resolve_game_slot_binding(None, legacy))
+
+        progressed = ActiveSlot(
+            "0", "r", frozenset({0}), frozenset({975302000}), frozenset({"II"})
+        )
+        self.assertEqual(
+            "r",
+            resolve_game_slot_binding(
+                "r", progressed, recipe_checks=False, word_checks=True
+            ),
+        )
+
     def test_old_or_orders_off_binding_does_not_require_word_journal(self):
         active = ActiveSlot("0", "r", frozenset(), frozenset(), None)
 

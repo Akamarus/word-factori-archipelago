@@ -2239,6 +2239,22 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         packets = [m for m in self.ctx.sent_messages if m["cmd"] == "LocationChecks"]
         self.assertEqual([{orders[0].code}], [set(m["locations"]) for m in packets])
 
+    async def test_unbound_word_order_scan_rejects_existing_recipe_progress(self):
+        _, orders = self.install_word_room()
+        self.install_test_patch_receipt()
+        self.assertTrue(self.ctx.prepare_selected_campaign())
+        self.ctx.missing_locations = {orders[0].code}
+        self.write_active_slot(
+            "game-slot-A", set(), recipes={"oBend": {"I": "C"}}, words={}
+        )
+
+        with self.assertLogs("WordFactoriTestClient", level="WARNING"):
+            await self.ctx.scan_once(ignore_selection_guard=True)
+
+        self.assertIsNone(self.ctx.bridge_state.game_slot_id)
+        self.assertFalse(any(m["cmd"] == "LocationChecks" for m in self.ctx.sent_messages))
+        self.assertIn("prior completions", self.ctx.last_bridge_error)
+
     async def test_malformed_selected_word_score_pauses_orders_with_visible_warning(self):
         _, orders = self.install_word_room()
         self.install_test_patch_receipt()
