@@ -39,6 +39,8 @@ class PublicationTests(unittest.TestCase):
         "word_factori/overlay_renderer.py",
         "word_factori/overlay_supervisor.py",
         "word_factori/recipe_graph.py",
+        "word_factori/recipe_checks.py",
+        "word_factori/letter_recipes.json",
         "word_factori/requirements.py",
         "word_factori/save.py",
         "word_factori/version.py",

@@ -122,9 +122,20 @@ def resolve_room_campaign(slot_data: Mapping[str, object]) -> ResolvedCampaign:
 
     if slot_data.get("progression_model") == "four_of_six_v1":
         raise ValueError("Unpublished beta room used incorrect native rules. Regenerate the room with the current APWorld.")
-    from .layout import MACHINE_MODELS
+    from .layout import MACHINE_MODELS, RECIPE_MODEL
     if slot_data.get("progression_model") not in {PROGRESSION_MODEL, "enhanced_four_of_six_v1", *MACHINE_MODELS}:
         raise ValueError("room progression model is unsupported")
+    recipe_setting = slot_data.get("recipe_checks", False)
+    if "recipe_checks" in slot_data and type(recipe_setting) is not bool:
+        raise ValueError("room recipe_checks must be a JSON boolean")
+    if (slot_data.get("progression_model") == RECIPE_MODEL) != (recipe_setting is True):
+        raise ValueError("room recipe setting does not match its progression model")
+    if recipe_setting:
+        from .recipe_checks import RECIPE_CATALOG_DIGEST
+        if slot_data.get("recipe_catalog_digest") != RECIPE_CATALOG_DIGEST:
+            raise ValueError("room recipe catalog digest does not match")
+    elif "recipe_catalog_digest" in slot_data:
+        raise ValueError("room recipe catalog digest requires recipe checks")
     layout_payload = {
         field: slot_data.get(field) for field in _LAYOUT_SLOT_DATA_FIELDS
     }
@@ -202,12 +213,16 @@ def campaign_compatible(
     )
 
 
-def resolve_game_slot_binding(bound_id: str | None, active: ActiveSlot) -> str:
+def resolve_game_slot_binding(bound_id: str | None, active: ActiveSlot, *, recipe_checks: bool = False) -> str:
     if bound_id is None:
-        if active.beaten_levels:
+        if active.beaten_levels or (recipe_checks and active.recipe_codes is not None and active.recipe_codes):
             raise ValueError(
                 "The active Word Factori save has prior completions and cannot be auto-bound. "
                 "Select an empty save slot for this Archipelago room."
+            )
+        if recipe_checks and active.recipe_codes is None:
+            raise ValueError(
+                "The active Word Factori save has a malformed recipe journal and cannot be auto-bound."
             )
         return active.random_id
     if bound_id != active.random_id:
@@ -298,6 +313,11 @@ def state_identity(
             progression_model=campaign.layout.progression_model,
             layout_algorithm=campaign.layout.algorithm,
         )
+        if slot_data.get("recipe_checks") is True:
+            contract.update(
+                recipe_checks=True,
+                recipe_catalog_digest=slot_data.get("recipe_catalog_digest"),
+            )
 
     room = {
         "seed_name": seed_name,
