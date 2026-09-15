@@ -1,4 +1,6 @@
 import importlib
+import copy
+import itertools
 import random
 import sys
 import types
@@ -53,10 +55,17 @@ class _World:
 
 
 class _Choice:
-    pass
+    def __init__(self, value):
+        self.value = value
+
+    @classmethod
+    def from_any(cls, value):
+        if isinstance(value, str):
+            value = getattr(cls, "option_" + value)
+        return cls(value)
 
 
-class _Range:
+class _Range(_Choice):
     pass
 
 
@@ -145,8 +154,10 @@ class _ReachabilityState:
 
 
 class WorldLayoutTests(unittest.TestCase):
-    def make_world(self, seed, *, campaign_layout=1, level_set=0, goal=0, integration_mode=0):
+    def make_world(self, seed, *, campaign_layout=1, level_set=0, goal=0, integration_mode=0, passthrough=None):
         multiworld = _MultiWorld(seed)
+        if passthrough is not None:
+            multiworld.re_gen_passthrough = passthrough
         world = word_factori.WordFactoriWorld(multiworld, 1)
         world.options = types.SimpleNamespace(
             campaign_layout=_OptionValue(campaign_layout),
@@ -157,6 +168,99 @@ class WorldLayoutTests(unittest.TestCase):
         )
         world.generate_early()
         return world
+
+    def test_tracker_restores_room_layout_options_and_ids_without_using_rng(self):
+        for level_set in (0, 1):
+            for goal in (0, 1):
+                with self.subTest(level_set=level_set, goal=goal):
+                    original = self.make_world(104729, level_set=level_set, goal=goal)
+                    original.options.campaign_count.value = 29
+                    slot = original.fill_slot_data()
+                    passthrough = word_factori.WordFactoriWorld.interpret_slot_data(slot)
+                    restored = self.make_world(65539, level_set=1-level_set, goal=1-goal,
+                                              passthrough={original.game: passthrough})
+                    self.assertTrue(restored.ut_can_gen_without_yaml)
+                    self.assertEqual(original.selected_locations(), restored.selected_locations())
+                    self.assertEqual(slot, restored.fill_slot_data())
+                    self.assertEqual(random.Random(65539).getstate(), restored.random.getstate())
+                    self.assertEqual(1, len(restored.multiworld.precollected))
+                    victory = self.victory_location(restored)
+                    campaign = [r.name for r in original._manifest.levels if r.kind != "discovery"]
+                    if goal == 0:
+                        self.assertFalse(victory.access_rule(_ReachabilityState(campaign[:28])))
+                        self.assertTrue(victory.access_rule(_ReachabilityState(campaign[:29])))
+                    else:
+                        final = next(r.name for r in original._manifest.levels if r.stable_key == "pitchfork-final")
+                        self.assertTrue(victory.access_rule(_ReachabilityState({final})))
+                        self.assertFalse(victory.access_rule(_ReachabilityState(set())))
+
+    def test_tracker_rejects_invalid_room_instead_of_shuffling_a_replacement(self):
+        slot = self.make_world(13).fill_slot_data()
+        for field, value in (("layout_digest", "bad"), ("manifest_digest", "bad"),
+                             ("level_order", []), ("goal", None), ("goal", True),
+                             ("goal", 2), ("campaign_count", 19), ("campaign_count", 31),
+                             ("campaign_count", True), ("level_set", None),
+                             ("progression_model", "enhanced_four_of_six_v1")):
+            with self.subTest(field=field, value=value):
+                invalid = {**slot, field: value}
+                with self.assertRaises(ValueError):
+                    word_factori.WordFactoriWorld.interpret_slot_data(invalid)
+                with self.assertRaises(ValueError):
+                    self.make_world(17, passthrough={word_factori.GAME: invalid})
+        for field in ("goal", "campaign_count", "level_set", "progression_model"):
+            invalid = {k: v for k, v in slot.items() if k != field}
+            with self.subTest(missing=field), self.assertRaises(ValueError):
+                word_factori.WordFactoriWorld.interpret_slot_data(invalid)
+
+    def test_tracker_payload_is_detached_and_other_games_do_not_affect_generation(self):
+        slot = self.make_world(31).fill_slot_data()
+        saved = copy.deepcopy(slot)
+        payload = word_factori.WordFactoriWorld.interpret_slot_data(slot)
+        payload["level_order"].reverse()
+        self.assertEqual(saved, slot)
+        self.assertEqual(saved, self.make_world(31, passthrough={"Other Game": {}}).fill_slot_data())
+
+    def test_tracker_and_generated_world_agree_for_every_machine_inventory(self):
+        for level_set in (0, 1):
+            original = self.make_world(43, level_set=level_set)
+            restored = self.make_world(71, passthrough={original.game: original.fill_slot_data()})
+            original.create_regions()
+            restored.create_regions()
+            machines = tuple(word_factori.MACHINE_ITEMS)
+            class State:
+                def __init__(self, world, owned):
+                    self.owned = owned
+                    self.locations = {loc.name: loc for reg in world.multiworld.regions for loc in reg.locations}
+                    self.cache = {}
+                def has_all(self, needs, player):
+                    return set(needs) <= self.owned
+                def can_reach_location(self, name, player):
+                    if name not in self.cache:
+                        self.cache[name] = self.locations[name].access_rule(self)
+                    return self.cache[name]
+            for mask in itertools.product((False, True), repeat=len(machines)):
+                owned = {machine for machine, enabled in zip(machines, mask) if enabled}
+                expected, actual = State(original, owned), State(restored, owned)
+                for name in expected.locations:
+                    with self.subTest(level_set=level_set, inventory=owned, location=name):
+                        self.assertEqual(expected.can_reach_location(name, 1), actual.can_reach_location(name, 1))
+
+    def test_every_page_requires_four_of_its_own_previous_page_not_four_anywhere(self):
+        for level_set in (0, 1):
+            world = self.make_world(47, level_set=level_set)
+            world.create_regions()
+            locations = world.selected_locations()
+            by_name = {loc.name: loc for reg in world.multiworld.regions for loc in reg.locations}
+            class State(_ReachabilityState):
+                def has_all(self, needs, player): return True
+            for page_start in range(6, len(locations), 6):
+                preceding = [loc.name for loc in locations[page_start-6:page_start]]
+                unrelated = {loc.name for loc in locations if loc.name not in preceding}
+                for chosen in itertools.combinations(preceding, 4):
+                    for target in locations[page_start:page_start+6]:
+                        rule = by_name[target.name].access_rule
+                        self.assertFalse(rule(State(unrelated | set(chosen[:3]))))
+                        self.assertTrue(rule(State(chosen)))
 
     def test_enhanced_room_emits_matching_rules_and_contract(self):
         world = self.make_world(29, integration_mode=1)

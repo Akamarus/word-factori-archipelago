@@ -40,6 +40,13 @@ Connect from the in-game panel (Windows only), regular client, or an `archipelag
 
 The client reads completed level indices but never writes Word Factori saves. It binds each room to one empty save slot and refuses checks if existing progress is present or the active slot changes. It also refuses checks and mod regeneration if the connected room and installed campaign identities differ.
 
+## Checks and tracker expectations
+
+- `Discover C — Bending Lab` and the other “Discover” locations mean **finish that named lab**. Producing the letter in another factory or discovering a journal recipe does not send that lab's check.
+- Universal Tracker's **in logic** means solvable after the required earlier puzzles, not necessarily unlocked on the game's current page. Four solvable preceding-page checks satisfy AP logic; four actual in-game completions open the next-page arrow. Visible factories may still require missing machines.
+- This source checkout includes a tracker reconstruction fix that uses the room's saved layout and goal. It is not in the published 1.4.2 ZIP linked above; a connected tracker playthrough remains pending before publication. The tracker must load the fixed Word Factori APWorld to benefit.
+- Manual check reports and `/send_location` affect the AP server, not the game save. They may count toward AP victory but do not unlock native pages. Use them for testing/recovery; complete four factories on the page in-game to advance normally.
+
 On Windows, received items appear as blue popups on the left side of Word Factori. Click **AP MAIL** or press **F8** for the integrated **Items** and **Chat** panel. It supports connection, disconnect, connection status, chat, hints, commands, and masked password entry. Enter sends text, Shift+Enter inserts a line, and Escape closes the panel and returns focus to the game. The display works in windowed and borderless modes; use the regular Word Factori Client in exclusive fullscreen. If it does not appear, use `/wf_overlay status` and `/wf_overlay restart`. Item delivery and check reporting continue if the optional overlay renderer stops.
 
 Only the bundled digest-verified `core_campaign` and `discovery_labs` manifests are selectable; arbitrary Workshop packs are not imported. An in-game missing-machine notice remains planned. Automated and isolated native-engine checks do not replace the pending connected in-game playthrough of this candidate.
