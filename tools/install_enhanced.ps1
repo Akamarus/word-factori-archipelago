@@ -10,7 +10,8 @@ $ErrorActionPreference = 'Stop'
 if (-not $PatchFile) { $PatchFile = Join-Path $PSScriptRoot 'enhanced.patch.gz' }
 $originalHash = 'd40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978'
 $legacyPatchedHash = '5a964d5155f8f7acc63fd90bc81882a0559c4586f5de4fd9a0657badd8594194'
-$patchedHash = '33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161'
+$previousPatchedHash = '33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161'
+$patchedHash = '39e48a5eb63924b970bc3e3907f62b0b659fc64ba5fa973c45f4e2dcf767c704'
 function Hash-Bytes([byte[]]$Bytes) {
     $hasher = [Security.Cryptography.SHA256]::Create()
     try { return ([BitConverter]::ToString($hasher.ComputeHash($Bytes))).Replace('-', '').ToLowerInvariant() }
@@ -48,7 +49,7 @@ $original = [IO.File]::ReadAllBytes($GameData)
 $currentHash = Hash-Bytes $original
 if ($null -ne $existingReceipt) {
     $legacyReceipt = $existingReceipt.protocol -eq 'enhanced_v1' -and $existingReceipt.patched_sha256 -eq $legacyPatchedHash
-    $currentReceipt = $existingReceipt.protocol -eq 'enhanced_v2' -and $existingReceipt.patched_sha256 -eq $patchedHash -and $existingReceipt.capability -eq 'free_word_machine_enforcement_v1'
+    $currentReceipt = $existingReceipt.protocol -eq 'enhanced_v2' -and $existingReceipt.patched_sha256 -in @($previousPatchedHash, $patchedHash) -and $existingReceipt.capability -eq 'free_word_machine_enforcement_v1'
     if ((-not $legacyReceipt -and -not $currentReceipt) -or $existingReceipt.original_sha256 -ne $originalHash -or ($currentHash -ne $originalHash -and $existingReceipt.patched_sha256 -ne $currentHash)) {
         throw 'Receipt hashes, protocol or enforcement capability are invalid; nothing changed.'
     }
@@ -58,7 +59,7 @@ if ([IO.Directory]::Exists($backup)) { throw 'The original backup path is a dire
 if ($Restore) {
     $saved = $null
     if ($currentHash -ne $originalHash) {
-        if ($currentHash -ne $patchedHash -and $currentHash -ne $legacyPatchedHash) { throw 'Game changed since patching. Refusing to overwrite an unknown build.' }
+        if ($currentHash -notin @($patchedHash, $previousPatchedHash, $legacyPatchedHash)) { throw 'Game changed since patching. Refusing to overwrite an unknown build.' }
         $saved = [IO.File]::ReadAllBytes($backup)
         if ((Hash-Bytes $saved) -ne $originalHash) { throw 'Backup does not match the verified original; nothing changed.' }
     }
@@ -77,7 +78,7 @@ if ($Restore) {
     Write-Host 'Original game restored. Your saves and the original backup were kept.'
     return
 }
-if ($currentHash -ne $originalHash -and $currentHash -ne $patchedHash -and $currentHash -ne $legacyPatchedHash) {
+if ($currentHash -notin @($originalHash, $patchedHash, $previousPatchedHash, $legacyPatchedHash)) {
     throw 'Unsupported or already modified Word Factori build. No files changed.'
 }
 $sourceOriginal = $original

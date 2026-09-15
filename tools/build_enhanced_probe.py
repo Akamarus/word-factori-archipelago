@@ -61,6 +61,8 @@ def build_probe(cli: Path, original: Path, output: Path) -> dict:
             CODE_ENTRIES[2]: "wf_ap_counts(arg0)",
             CODE_ENTRIES[3]: "wf_access_allowed(module, tag)",
             CODE_ENTRIES[4]: "wf_access_allowed(arg0, arg1)",
+            CODE_ENTRIES[5]: "wf_access_factory_allowed(buildings)",
+            CODE_ENTRIES[6]: "wf_access_poll()",
         }
         for entry, call in required_calls.items():
             decompiled = (inspected / "CodeEntries" / (entry + ".gml")).read_text(encoding="utf-8")

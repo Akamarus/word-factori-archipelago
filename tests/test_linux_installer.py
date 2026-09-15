@@ -24,6 +24,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.game.parent.mkdir()
         self.original, self.patched = b'original game bytes', b'original PATCHED game bytes'
         self.legacy = b'legacy patched game bytes'
+        self.previous = b'previous v2 patched game bytes'
         self.game.write_bytes(self.original)
         self.prefix = self.root / 'pfx'
         self.factori = self.prefix / 'drive_c/users/steamuser/AppData/Local/factori'
@@ -38,7 +39,7 @@ class LinuxInstallerTests(unittest.TestCase):
         for name in ('levels', 'recipes', 'tips', 'credits'):
             (mod / (name + '.json')).write_text('{}')
         (mod / 'archipelago_campaign.json').write_text(json.dumps({
-            'campaign_id': 'word-factori-hybrid', 'manifest_version': '1.2.0',
+            'campaign_id': 'word-factori-hybrid', 'manifest_version': '1.2.1',
             'level_count': 40, 'manifest_digest': 'a' * 64}))
         with zipfile.ZipFile(self.package / 'word_factori.apworld', 'w') as archive:
             archive.writestr('word_factori/__init__.py', '# fixture')
@@ -50,6 +51,7 @@ class LinuxInstallerTests(unittest.TestCase):
         compressed = gzip.compress(json.dumps(delta).encode())
         (self.package / 'tools/enhanced.patch.gz').write_bytes(compressed)
         for name, value in [('ORIGINAL_SHA256', original_hash), ('PATCHED_SHA256', patched_hash),
+                            ('PREVIOUS_PATCHED_SHA256', hashlib.sha256(self.previous).hexdigest()),
                             ('DELTA_SHA256', hashlib.sha256(compressed).hexdigest())]:
             override = patch.object(installer, name, value)
             override.start()
@@ -81,6 +83,24 @@ class LinuxInstallerTests(unittest.TestCase):
         receipt = json.loads(self.setup.receipt.read_text())
         self.assertEqual('enhanced_v2', receipt['protocol'])
         self.assertEqual('free_word_machine_enforcement_v1', receipt['capability'])
+        self.setup.run('restore')
+        self.assertEqual(self.original, self.game.read_bytes())
+
+    def test_previous_v2_upgrade_preserves_original_and_requires_capability(self):
+        self.legacy_installation()
+        self.game.write_bytes(self.previous)
+        receipt = json.loads(self.setup.receipt.read_text())
+        receipt.update(protocol='enhanced_v2', patched_sha256=installer.PREVIOUS_PATCHED_SHA256)
+        self.setup.receipt.write_text(json.dumps(receipt))
+        before = self.snapshot()
+        with self.assertRaisesRegex(ValueError, 'Receipt'):
+            self.setup.run('install')
+        self.assertEqual(before, self.snapshot())
+        receipt['capability']='free_word_machine_enforcement_v1'
+        self.setup.receipt.write_text(json.dumps(receipt))
+        self.setup.run('install')
+        self.assertEqual(self.patched, self.game.read_bytes())
+        self.assertEqual(self.original, self.setup.backup.read_bytes())
         self.setup.run('restore')
         self.assertEqual(self.original, self.game.read_bytes())
 

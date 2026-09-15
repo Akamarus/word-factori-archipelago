@@ -19,7 +19,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.enhanced_hooks import ORIGINAL_SHA256, verify_original, transform_enforcement
+from tools.enhanced_hooks import ORIGINAL_SHA256, verify_original, transform_enforcement, transform_quantity_control
 
 SAVE_NAMESPACE = "wf_ap_typeword_probe_20260915"
 CODE_ENTRIES = (
@@ -109,7 +109,9 @@ def parse_native_result(log: str, nonce: str) -> dict:
     return result
 
 
-def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enforcement: bool = False) -> dict:
+def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enforcement: bool = False, quantities: bool = False) -> dict:
+    if quantities and not enforcement:
+        raise ValueError('Quantity acceptance requires enforcement')
     validate_probe_paths(cli, original, runtime, output)
     verify_original(original.read_bytes())  # Mandatory pre-write/pre-subprocess boundary.
     executable = discover_executable(runtime)
@@ -168,6 +170,8 @@ def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enfor
     control = "cycle_count=0; floater_count=0; buildings=[]; win_stats=undefined; win_already_triggered=false;\n"
     control += native("gml_Object_oControl_Create_0", "doTick") + "\n"
     control += native("gml_Object_oControl_Create_0", "try_win_condition")
+    if enforcement:
+        control = transform_quantity_control(control)
     for call in ("tryStampUnlockAnim", "google_analytics_screenview"):
         control = re.sub(r"\b" + call + r"\(", "oPersistent.wf_probe_external(", control)
     stage("gml_Object_oControl_Create_0", control)
@@ -183,6 +187,9 @@ def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enfor
     stage("gml_Object_oInputBox_Step_0", input_step[input_step.index("with (oInput)"):input_step.index("interactable =")])
     harness_name = "type_word_enforcement_acceptance.gml" if enforcement else "type_word_completion_acceptance.gml"
     harness = (ROOT / "tools" / harness_name).read_text(encoding="utf-8")
+    if quantities:
+        harness = harness.replace('    var supported=array_all(tests,',
+            (ROOT / 'tools/quantity_machine_acceptance.gml').read_text(encoding='utf-8') + '\n    var supported=array_all(tests,')
     nonce = uuid.uuid4().hex
     harness = harness.replace("NATIVE_SOURCE_HASHES", json.dumps(hashes)).replace("NATIVE_NONCE", nonce)
     harness = harness.replace("NATIVE_ENFORCEMENT_HOOKS", json.dumps(ENFORCEMENT_HOOKS))
@@ -242,9 +249,10 @@ def argument_parser() -> argparse.ArgumentParser:
     for argument in ("cli", "original", "runtime", "output"):
         parser.add_argument("--" + argument, type=Path, required=True)
     parser.add_argument("--enforcement", action="store_true", help="Run development-only native enforcement gate")
+    parser.add_argument("--quantities", action="store_true", help="Include finite machine allowance acceptance")
     return parser
 
 
 if __name__ == "__main__":
     args = argument_parser().parse_args()
-    print(json.dumps(build_probe(args.cli, args.original, args.runtime, args.output, enforcement=args.enforcement), indent=2))
+    print(json.dumps(build_probe(args.cli, args.original, args.runtime, args.output, enforcement=args.enforcement, quantities=args.quantities), indent=2))

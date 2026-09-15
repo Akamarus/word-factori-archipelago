@@ -9,7 +9,7 @@ from typing import Iterable, Mapping
 import urllib.parse
 from pathlib import Path
 
-from .bridge import ReceivedItem
+from .bridge import ReceivedItem, BridgeState, reconcile
 from .campaign import CampaignManifest, campaign_digest, campaign_for_level_set
 from .data import (
     DEFAULT_LEVEL_SET,
@@ -22,6 +22,8 @@ from .data import (
 from .layout import CampaignLayout, PROGRESSION_MODEL, layout_from_slot_data
 from .save import ActiveSlot
 from .word_orders import WordOrder, orders_from_slot_data, orders_slot_data
+from .quantities import QUANTITY_MODEL, PROGRESSIVE_ITEMS, limits_for_counts
+from .quantity_contract import quantity_enabled, validate_quantity_contract
 
 
 _LAYOUT_SLOT_DATA_FIELDS = (
@@ -55,6 +57,7 @@ def game_font_path(executable: Path) -> Path | None:
 class InventoryView:
     owned_machines: set[str]
     world_access: int
+    machine_limits: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -64,9 +67,15 @@ class ResolvedCampaign:
     locations: tuple[LocationData, ...]
     legacy: bool
     word_orders: tuple[WordOrder, ...] = ()
+    progressive_machines: bool = False
 
 
-def inventory_view(received: Iterable[ReceivedItem]) -> InventoryView:
+def inventory_view(received: Iterable[ReceivedItem], *, progressive: bool = False) -> InventoryView:
+    if progressive:
+        counts = reconcile(BridgeState.empty(), received, set(), set(), authoritative=True).state.item_counts
+        limits = limits_for_counts(counts)
+        owned = {name.removeprefix('Progressive ') for name, limit in zip(PROGRESSIVE_ITEMS, limits) if limit != 0}
+        return InventoryView(owned, 0, limits)
     names = [item.name for item in received]
     owned = set(MACHINE_ITEMS).intersection(names)
     return InventoryView(owned, names.count("Progressive World Access"))
@@ -119,9 +128,10 @@ def resolve_room_campaign(slot_data: Mapping[str, object]) -> ResolvedCampaign:
     if "recipe_checks" in slot_data and type(recipe_setting) is not bool:
         raise ValueError("room recipe_checks must be a JSON boolean")
     progression_model = slot_data.get("progression_model")
-    if (progression_model == WORD_ORDER_MODEL) != bool(word_orders):
+    progressive = quantity_enabled(slot_data)
+    if not progressive and (progression_model == WORD_ORDER_MODEL) != bool(word_orders):
         raise ValueError("room Type-a-Word setting does not match its progression model")
-    if progression_model != WORD_ORDER_MODEL and (
+    if not progressive and progression_model != WORD_ORDER_MODEL and (
         (progression_model == RECIPE_MODEL) != (recipe_setting is True)
     ):
         raise ValueError("room recipe setting does not match its progression model")
@@ -158,12 +168,15 @@ def resolve_room_campaign(slot_data: Mapping[str, object]) -> ResolvedCampaign:
         raise ValueError(f"room campaign layout is invalid: {error}") from error
     if slot_data.get("manifest_digest") != layout.digest:
         raise ValueError("room manifest digest does not match the campaign layout")
+    locations = locations_for_layout(manifest, layout)
+    validate_quantity_contract(slot_data, locations, word_orders, recipe_setting)
     return ResolvedCampaign(
         manifest=manifest,
         layout=layout,
-        locations=locations_for_layout(manifest, layout),
+        locations=locations,
         legacy=False,
         word_orders=word_orders,
+        progressive_machines=progressive,
     )
 
 

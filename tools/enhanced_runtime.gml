@@ -1,4 +1,4 @@
-// Integration-authored production providers. Reads only on native factory entry.
+// Integration-authored providers. Quantity contexts additionally poll at bounded intervals.
 function wf_ap_read_json(path) {
     var handle=-1;
     try {
@@ -50,3 +50,4 @@ function wf_access_payload() {
     wf_ap_context();
     return wf_ap_read_json("mods/word factori archipelago/archipelago_runtime.json");
 }
+function wf_access_notice(message) { spawnNotification(message,true); }

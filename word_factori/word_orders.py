@@ -279,6 +279,11 @@ def checks_contract_digest(slot_data: Mapping) -> str:
     if orders:
         canonical.update(orders_slot_data(orders))
 
+    from .quantity_contract import quantity_enabled, FIELDS
+    if quantity_enabled(slot_data):
+        canonical.update({name: slot_data[name] for name in FIELDS})
+        canonical['progressive_machines'] = True
+
     encoded = json.dumps(
         canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")

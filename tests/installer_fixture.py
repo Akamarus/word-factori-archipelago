@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ORIGINAL = b"controlled original game fixture " * 400
 PATCHED = ORIGINAL[:4096] + b"native integration fixture" + ORIGINAL[5000:]
 LEGACY = ORIGINAL[:4096] + b"legacy integration fixture" + ORIGINAL[5000:]
+PREVIOUS = ORIGINAL[:4096] + b"previous v2 integration fixture" + ORIGINAL[5000:]
 
 
 class InstallerFixture(unittest.TestCase):
@@ -35,7 +36,7 @@ class InstallerFixture(unittest.TestCase):
         (self.distribution / "tools").mkdir()
         script = (ROOT / "tools/install_enhanced.ps1").read_text(encoding="utf-8-sig")
         # Test-only copies replace exact supported hashes; production has no bypass.
-        for field, data in (("originalHash", ORIGINAL), ("patchedHash", PATCHED)):
+        for field, data in (("originalHash", ORIGINAL), ("patchedHash", PATCHED), ("previousPatchedHash", PREVIOUS)):
             script, count = re.subn(rf"(\${field} = ')[0-9a-f]{{64}}(')",
                                    lambda match: match[1] + hashlib.sha256(data).hexdigest() + match[2], script)
             self.assertEqual(1, count)

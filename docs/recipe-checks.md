@@ -1,6 +1,6 @@
-# Optional Recipe Journal checks (development)
+# Optional Recipe Journal checks (1.5.0 tester prerelease)
 
-Optional Recipe Journal checks are implemented in the current development source. They are **not included in the published 1.4.2 player package**. A recipe-enabled room requires the matching development APWorld and client, a newly generated seed, and a fresh empty Word Factori mod save bound to that room. Nothing in this workflow changes the user's current room, installed APWorld, game, or save.
+Recipe Journal checks are included in the 1.5.0 tester prerelease. Use the matching APWorld/client/native patch, a newly generated seed, and a fresh empty mod save bound to that room. Keep earlier saves as backups.
 
 ## Enable or disable
 
@@ -11,9 +11,9 @@ Word Factori:
   recipe_checks: true
 ```
 
-`true` adds Recipe Journal locations. `false` disables the extra checks. The development APWorld defaults newly generated rooms to enabled; missing slot data means disabled so older rooms retain their original contract.
+`true` adds Recipe Journal locations. `false` disables the extra checks. The APWorld defaults newly generated rooms to enabled; missing slot data means disabled so older rooms retain their original contract.
 
-Changing a YAML file does not retrofit an existing seed. Generate a new seed with the desired value and use a fresh empty save with the matching development client and APWorld.
+Changing a YAML file does not retrofit an existing seed. Generate a new seed with the desired value and use a fresh empty save with the matching 1.5.0 client and APWorld.
 
 ## What is a recipe check?
 
@@ -40,7 +40,7 @@ Only working letter-output routes are included. The catalog excludes:
 - symbol outputs; and
 - the native Merger3 entries `I N -> M` and `I Z1 -> M`, which declare only two inputs and cannot be processed by a real Building/Letter Pipe.
 
-The repository contains only mechanics-derived normalized identities and minimal machine capability requirements. It does not contain or distribute the proprietary `recipes.data` file or complete raw recipe records.
+The repository contains mechanics-derived normalized identities, machine capability requirements and constructive factory quantity budgets. It does not contain or distribute the proprietary `recipes.data` file or complete raw recipe records.
 
 ## Save and reporting behavior
 
@@ -52,4 +52,4 @@ Updates are not necessarily instant. Isolated native probing found that Word Fac
 
 An isolated native fixture verified journal recording without modifying the live installation or save. Inspection of the native save alarm established the 60-step flush cadence; the fixture exited during creation and did not measure actual save-flush latency. Automated generation exercised 12 real Archipelago 0.6.7 cases covering `true`, `false`, and omitted values across both level sets and both goals. Exact location contracts, balanced fill, and replayed progression spheres passed. Separate unit tests exercise Universal Tracker reconstruction; the generation matrix does not establish a connected tracker playthrough. Generation time varies with the host and is recorded with the raw verification evidence rather than promised as a player-facing performance target.
 
-This is development evidence, not a published release claim. A full live recipe-enabled Word Factori/client/Universal Tracker session and Linux acceptance have not been performed. Do not install or publish this development package as 1.4.2, and do not use it with an existing room or progressed save.
+These are automated and isolated results, not a complete live playthrough. A full recipe-enabled game/client/Universal Tracker session and Linux acceptance remain pending. Use a new room and fresh save for this tester prerelease.

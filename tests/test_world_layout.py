@@ -141,6 +141,7 @@ def _install_archipelago_stubs():
     options.DefaultOnToggle = _DefaultOnToggle
     options.Toggle = _Toggle
     options.OptionList = _OptionList
+    options.StartInventoryPool = _Choice
 
     sys.modules.update({
         "BaseClasses": base_classes,
@@ -195,7 +196,7 @@ class WorldLayoutTests(unittest.TestCase):
 
     def make_world(self, seed, *, campaign_layout=1, level_set=0, goal=0, integration_mode=0,
                    recipe_checks=False, type_a_word_checks=False, type_a_word_count=5,
-                   type_a_word_words=(), passthrough=None):
+                   type_a_word_words=(), passthrough=None, progressive_machines=False):
         multiworld = _MultiWorld(seed)
         if passthrough is not None:
             multiworld.re_gen_passthrough = passthrough
@@ -210,6 +211,7 @@ class WorldLayoutTests(unittest.TestCase):
             type_a_word_checks=_OptionValue(type_a_word_checks),
             type_a_word_count=_OptionValue(type_a_word_count),
             type_a_word_words=_OptionValue(type_a_word_words),
+            progressive_machines=_OptionValue(progressive_machines),
         )
         world.generate_early()
         return world

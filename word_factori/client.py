@@ -64,6 +64,8 @@ from .mod import render_levels, write_campaign_identity, write_levels
 from .capabilities import FULL
 from .enhanced_runtime import RUNTIME_NAME, patch_readiness, publish_runtime, machine_counts_for_view, runtime_context
 from .word_orders import checks_contract_digest, missing_machine_options
+from .quantities import describe_allowances, describe_missing
+from .quantity_logic import budgets_for_word
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
 from .overlay_preferences import OverlayPreferences, load_preferences
 from .platform_paths import InstallationPaths, load_installation, selected_proton_mod, validate_state_target
@@ -840,7 +842,9 @@ class WordFactoriContext(CommonContext):
         self.publish_overlay(self.connected_identity)
 
     def network_items(self) -> list[ReceivedItem]:
-        received = [ReceivedItem(-1, "Bender Access")]
+        # items_handling includes starting inventory. Quantity mode must not
+        # synthesize a second starting Bender alongside the server's item.
+        received = [] if self.slot_data.get('progressive_machines') is True else [ReceivedItem(-1, "Bender Access")]
         for index, item in enumerate(self.items_received):
             received.append(ReceivedItem(index, self.item_names.lookup_in_game(item.item)))
         return received
@@ -854,11 +858,15 @@ class WordFactoriContext(CommonContext):
             readiness = patch_readiness(self.mod_folder, self.installation_paths)
             if not readiness.ready:
                 raise ValueError(readiness.message)
-            levels = render_levels(owned_machines, world_access, locations=locations)
+            view = (inventory_view(self.network_items(), progressive=True) if campaign.progressive_machines
+                    else InventoryView(owned_machines, world_access))
+            # Global family allowances travel separately from immutable challenge caps.
+            levels = render_levels(set(FULL) if campaign.progressive_machines else owned_machines,
+                                   5 if campaign.progressive_machines else world_access, locations=locations)
             room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
             return publish_runtime(self.mod_folder / RUNTIME_NAME, room, campaign.layout.digest, levels,
-                machine_counts=machine_counts_for_view(InventoryView(owned_machines, world_access)),
-                checks_contract=checks_contract_digest(self.slot_data))
+                machine_counts=machine_counts_for_view(view),
+                checks_contract=checks_contract_digest(self.slot_data), progressive=campaign.progressive_machines)
         signature = (tuple(sorted(owned_machines)), world_access)
         if signature == self.last_render_signature:
             return False
@@ -881,11 +889,14 @@ class WordFactoriContext(CommonContext):
         result = reconcile(self.bridge_state, self.network_items(), set(), set(), authoritative=True)
         self.bridge_state = result.state
         save_state(self.state_path(), self.bridge_state)
-        view = inventory_view(ReceivedItem(index, name) for index, name in self.bridge_state.applied.items())
+        view = inventory_view((ReceivedItem(index, name) for index, name in self.bridge_state.applied.items()),
+                              progressive=self.slot_data.get('progressive_machines') is True)
         if self.update_rendered_levels(
             view.owned_machines, view.world_access, self.active_locations(),
         ):
-            if self.slot_data.get("integration_mode") == "enhanced":
+            if self.slot_data.get('progressive_machines') is True:
+                logger.info("Word Factori machine allowances published for live application.")
+            elif self.slot_data.get("integration_mode") == "enhanced":
                 logger.info("Word Factori unlocks published. Return to Levels and enter a factory to apply them; no save reload is needed.")
             else:
                 logger.info("Word Factori unlocks updated. Reload the AP mod or reselect its save slot in game.")
@@ -897,7 +908,8 @@ class WordFactoriContext(CommonContext):
         if self.slot_data.get("integration_mode") == "enhanced" and self.overlay_state.reload_required:
             try:
                 loaded = json.loads((self.mod_folder / "archipelago_native_status.json").read_text(encoding="utf-8"))
-                expected = runtime_context(hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest(), self.slot_data["layout_digest"], checks_contract_digest(self.slot_data))
+                expected = runtime_context(hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest(), self.slot_data["layout_digest"], checks_contract_digest(self.slot_data),
+                                           progressive=self.slot_data.get('progressive_machines') is True)
                 if loaded == expected:
                     self.overlay_state = apply_action(self.overlay_state, OverlayAction("reload-required", "false"))
                     self.publish_overlay(self.connected_identity)
@@ -952,6 +964,7 @@ class WordFactoriContext(CommonContext):
             expected = runtime_context(
                 hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest(),
                 campaign.layout.digest, checks_contract_digest(self.slot_data),
+                progressive=campaign.progressive_machines,
             )
             loaded = json.loads(
                 (self.mod_folder / "archipelago_native_status.json").read_text(
@@ -978,20 +991,22 @@ class WordFactoriContext(CommonContext):
                 self._bridge_warning(readiness.message)
                 return False
         try:
-            view = inventory_view(self.network_items())
+            view = inventory_view(self.network_items(), progressive=campaign.progressive_machines)
             changed = self.update_rendered_levels(
                 view.owned_machines, view.world_access, campaign.locations,
             )
             if campaign.layout is not None and campaign.layout.integration_mode == "enhanced":
                 room = hashlib.sha256(self.current_identity().encode("utf-8")).hexdigest()
-                marker = runtime_context(room, campaign.layout.digest, checks_contract_digest(self.slot_data))
+                marker = runtime_context(room, campaign.layout.digest, checks_contract_digest(self.slot_data),
+                                         progressive=campaign.progressive_machines)
                 try:
                     installed = json.loads(self.levels_path.read_text(encoding="utf-8"))
                     same = isinstance(installed, list) and len(installed) == len(campaign.locations) and installed[0].get("wf_ap") == marker
                 except (OSError, ValueError, TypeError, AttributeError, IndexError):
                     same = False
                 if not same:
-                    levels = render_levels(view.owned_machines, view.world_access, locations=campaign.locations)
+                    levels = render_levels(set(FULL) if campaign.progressive_machines else view.owned_machines,
+                                           5 if campaign.progressive_machines else view.world_access, locations=campaign.locations)
                     caps = render_levels(set(FULL), 5, locations=campaign.locations)
                     for level, cap in zip(levels, caps):
                         level["wf_ap_caps"] = cap["module_counts"]
@@ -1101,6 +1116,9 @@ class WordFactoriContext(CommonContext):
             return
         expected_identity = self.connected_identity
         expected_generation = self._connection_generation
+        if self.slot_data.get('progressive_machines') is True and not self.native_checks_acknowledged():
+            self._bridge_warning('Progressive machine checks are paused until the quantity-capable game patch acknowledges this room.')
+            return
         if not self.compatible_campaign():
             self._bridge_warning(self._campaign_issue())
             return
@@ -1151,6 +1169,8 @@ class WordFactoriContext(CommonContext):
         campaign_codes = {location.code for location in self.active_locations()}
         pending_checks = self.bridge_state.pending_checks & self.active_check_codes()
         if not self.native_checks_acknowledged():
+            if self.slot_data.get('progressive_machines') is True:
+                return
             pending_checks &= campaign_codes
         if not pending_checks:
             return
@@ -1164,6 +1184,8 @@ class WordFactoriContext(CommonContext):
         self, expected_identity: str, expected_generation: int,
     ) -> None:
         if not self._connection_epoch_matches(expected_identity, expected_generation):
+            return
+        if self.slot_data.get('progressive_machines') is True and not self.native_checks_acknowledged():
             return
         if not self.compatible_campaign() or self.ensure_game_slot_binding() is None:
             return
@@ -1193,8 +1215,12 @@ class WordFactoriContext(CommonContext):
         issue = self._campaign_issue()
         campaign = "compatible" if issue is None else ("mismatched or missing" if issue == CAMPAIGN_MISMATCH else "setup or patch needed")
         game_slot = "bound" if self.bridge_state.game_slot_id else "not bound"
-        deliveries = max(0, len(self.bridge_state.applied) - 1)
-        return f"AP mod: {selected}; campaign: {campaign}; game save: {game_slot}; received item deliveries: {deliveries}; bridge: {self.last_bridge_error or 'ready'}; overlay: {self.last_overlay_error or 'ready'}"
+        progressive = self.slot_data.get('progressive_machines') is True
+        deliveries = max(0, len(self.bridge_state.applied) - (0 if progressive else 1))
+        result = f"AP mod: {selected}; campaign: {campaign}; game save: {game_slot}; received item deliveries: {deliveries}; bridge: {self.last_bridge_error or 'ready'}; overlay: {self.last_overlay_error or 'ready'}"
+        if progressive:
+            result += '\nMachine allowances: ' + describe_allowances(inventory_view(self.network_items(),progressive=True).machine_limits)
+        return result
 
     def words_text(self) -> str:
         campaign = self.selected_campaign()
@@ -1213,7 +1239,7 @@ class WordFactoriContext(CommonContext):
             )
         except (OSError, ValueError, KeyError, TypeError):
             completed = None
-        view = inventory_view(self.network_items())
+        view = inventory_view(self.network_items(), progressive=campaign.progressive_machines)
         lines = ["Type-a-Word orders:"]
         for order in campaign.word_orders:
             if order.code in self.checked_locations:
@@ -1233,6 +1259,8 @@ class WordFactoriContext(CommonContext):
                 machines = " or ".join(
                     " + ".join(sorted(option)) for option in missing
                 )
+            if view.machine_limits is not None:
+                machines = describe_missing(view.machine_limits, budgets_for_word(order.word))
             lines.append(f"{order.name} — {order.word}: {status}; machines: {machines}")
         return "\n".join(lines)
 

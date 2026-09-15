@@ -32,7 +32,7 @@ def transform_enforcement(sources: dict[str, str], helper: str) -> dict[str, str
     level = insert_function_guard(result["gml_GlobalScript_LevelFuncs"], "get_level_module_counts",
                                   "    if (wf_access_active()) { var wf_counts = wf_access_entry_counts(); if (arg0 < 0) return wf_counts; var wf_level = wf_ap_counts(arg0); if (is_struct(wf_level)) return wf_level; }")
     level = insert_function_guard(level, "get_current_module_count",
-                                  "    if (wf_access_active() && wf_access_limit(arg0) == 0) return 0;")
+                                  "    if (wf_access_quantity()) return wf_access_remaining(arg0);\n    if (wf_access_active() && wf_access_limit(arg0) == 0) return 0;")
     needle = "current_level_mode != UnknownEnum.Value_1 ||"
     if level.count(needle) != 1:
         raise ValueError("Expected exactly one native mode bypass")
@@ -56,9 +56,17 @@ def transform_enforcement(sources: dict[str, str], helper: str) -> dict[str, str
     return result
 
 
+def transform_quantity_control(source: str) -> str:
+    for name in ('doTick', 'try_win_condition'):
+        source = insert_function_guard(source, name,
+            '    wf_access_poll(); if (wf_access_quantity() && !wf_access_factory_allowed(buildings)) { wf_access_explain(buildings); return false; }')
+    return source
+
+
 
 CODE_ENTRIES = ("gml_Object_oLevelButton_Create_0", "gml_GlobalScript_MenuFuncs",
-                "gml_GlobalScript_LevelFuncs", "gml_GlobalScript_Building", "gml_GlobalScript_Misc")
+                "gml_GlobalScript_LevelFuncs", "gml_GlobalScript_Building", "gml_GlobalScript_Misc",
+                "gml_Object_oControl_Create_0", "gml_Object_oControl_Step_0")
 
 
 def runtime_helpers(root) -> str:
@@ -73,7 +81,7 @@ def transform_sources(sources: dict[str, str], helpers: str) -> dict[str, str]:
     button = "gml_Object_oLevelButton_Create_0"
     menu = "gml_GlobalScript_MenuFuncs"
     if set(sources) != set(CODE_ENTRIES):
-        raise ValueError("Expected exactly the five verified native code entries")
+        raise ValueError("Expected exactly the seven verified native code entries")
     # Keep native visibility, animation, paywall, mode and secret checks intact.
     needle = "return (level_index == 0 ||"
     if sources[button].count(needle) != 1:
@@ -84,4 +92,6 @@ def transform_sources(sources: dict[str, str], helpers: str) -> dict[str, str]:
         menu: insert_function_guard(sources[menu], "getPageUnlockThresh",
                                     "    if (wf_ap_enabled()) return 4;"),
     })
+    result['gml_Object_oControl_Create_0'] = transform_quantity_control(sources['gml_Object_oControl_Create_0'])
+    result['gml_Object_oControl_Step_0'] = 'wf_access_poll();\n' + sources['gml_Object_oControl_Step_0']
     return result

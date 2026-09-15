@@ -42,6 +42,12 @@ class PublicationTests(unittest.TestCase):
         "word_factori/recipe_checks.py",
         "word_factori/letter_recipes.json",
         "word_factori/requirements.py",
+        "word_factori/quantities.py",
+        "word_factori/quantity_graphs.py",
+        "word_factori/quantity_logic.py",
+        "word_factori/quantity_contract.py",
+        "word_factori/quantity_layout.py",
+        "word_factori/data/quantity_recipes.json",
         "word_factori/save.py",
         "word_factori/version.py",
         "word_factori/window_tracker.py",
@@ -107,7 +113,7 @@ class PublicationTests(unittest.TestCase):
         metadata = json.loads((ROOT / "word_factori" / "archipelago.json").read_text(encoding="utf-8"))
 
         self.assertEqual("1.5.0", VERSION)
-        self.assertEqual("UNRELEASED development", metadata["release_status"])
+        self.assertEqual("tester prerelease", metadata["release_status"])
         self.assertEqual(VERSION, metadata["world_version"])
         self.assertEqual("0.6.7", metadata["minimum_ap_version"])
         self.assertEqual("0.6.7", metadata["maximum_ap_version"])
@@ -174,6 +180,7 @@ class PublicationTests(unittest.TestCase):
                 "Install Word Factori Archipelago.cmd",
                 "LICENSE",
                 "README.md",
+                "CHANGELOG.md",
                 "docs/images/word-factori-archipelago-chat.png",
                 "docs/images/word-factori-discovery-lab-v.png",
                 "docs/enhanced-playtest.md",
@@ -185,6 +192,8 @@ class PublicationTests(unittest.TestCase):
                 "tools/enhanced_delta.py",
                 "examples/WordFactori.yaml",
                 "examples/WordFactoriTarget.yaml",
+                "examples/WordFactoriProgressive.yaml",
+                "examples/WordFactoriWords.yaml",
                 "game_mod/word factori archipelago/archipelago_campaign.json",
                 "game_mod/word factori archipelago/credits.json",
                 "game_mod/word factori archipelago/levels.json",

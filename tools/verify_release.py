@@ -106,6 +106,7 @@ def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | Non
             ROOT / name
             for name in (
                 "README.md",
+                "CHANGELOG.md",
                 "LICENSE",
                 "install.ps1",
                 "Install Word Factori Archipelago.cmd",
@@ -303,8 +304,11 @@ def main(*, verify_installed: bool = False) -> None:
         raise AssertionError(f"README local links are absent from the player package: {missing_links}")
     for required in (
         "Install Word Factori Archipelago.cmd",
+        "CHANGELOG.md",
         "examples/WordFactori.yaml",
         "examples/WordFactoriTarget.yaml",
+        "examples/WordFactoriProgressive.yaml",
+        "examples/WordFactoriWords.yaml",
         "docs/images/word-factori-archipelago-chat.png",
         "word_factori.apworld",
         "Restore Original Game.cmd",

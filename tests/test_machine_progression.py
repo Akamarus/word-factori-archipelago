@@ -71,7 +71,10 @@ class MachineProgressionTests(unittest.TestCase):
         counts = render_levels(state.owned, 0, locations=(lab,))[0]["module_counts"]
         self.assertNotIn("IFactory", counts)
         self.assertNotIn("Merger3", counts)
-        self.assertEqual(0, counts["Merger2"])
+        self.assertNotIn("Merger2", counts)
+        self.assertEqual(0, counts["Merger4"])
+        state.owned = state.owned - {"Merger2 Access"}
+        self.assertFalse(rule(state))
 
     def test_old_contracts_keep_tiers_and_digest_on_reconnect(self):
         manifest = campaign_for_level_set("discovery_labs")

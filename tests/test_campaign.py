@@ -24,7 +24,7 @@ class CampaignManifestTests(unittest.TestCase):
         self.assertEqual("word-factori-core", core.campaign_id)
         self.assertEqual("word-factori-hybrid", discovery.campaign_id)
         self.assertEqual("1.2.0", core.version)
-        self.assertEqual("1.2.0", discovery.version)
+        self.assertEqual("1.2.1", discovery.version)
         self.assertEqual(30, len(core.levels))
         self.assertEqual(40, len(discovery.levels))
         self.assertEqual(core.levels, discovery.levels[:30])

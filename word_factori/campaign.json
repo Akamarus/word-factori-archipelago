@@ -592,6 +592,7 @@
       "world_tier": 1,
       "kind": "discovery",
       "required_route": [
+        "Merger2 Access",
         "Merger3 Access"
       ]
     },

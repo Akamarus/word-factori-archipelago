@@ -144,7 +144,7 @@ class ModTests(unittest.TestCase):
             write_campaign_identity(path)
             payload = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual("word-factori-hybrid", payload["campaign_id"])
-        self.assertEqual("1.2.0", payload["manifest_version"])
+        self.assertEqual("1.2.1", payload["manifest_version"])
         self.assertEqual(CAMPAIGN_DIGEST, payload["manifest_digest"])
         self.assertEqual(40, payload["level_count"])
 

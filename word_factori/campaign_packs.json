@@ -10,7 +10,7 @@
     "discovery_labs": {
       "display_name": "Core Campaign + Discovery Labs",
       "campaign_id": "word-factori-hybrid",
-      "manifest_version": "1.2.0",
+      "manifest_version": "1.2.1",
       "packs": ["core", "discovery"]
     }
   },

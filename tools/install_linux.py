@@ -24,10 +24,11 @@ else:
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 ORIGINAL_SHA256 = 'd40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978'
 LEGACY_PATCHED_SHA256 = '5a964d5155f8f7acc63fd90bc81882a0559c4586f5de4fd9a0657badd8594194'
-PATCHED_SHA256 = '33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161'
+PREVIOUS_PATCHED_SHA256 = '33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161'
+PATCHED_SHA256 = '39e48a5eb63924b970bc3e3907f62b0b659fc64ba5fa973c45f4e2dcf767c704'
 PATCH_PROTOCOL = 'enhanced_v2'
 ENFORCEMENT_CAPABILITY = 'free_word_machine_enforcement_v1'
-DELTA_SHA256 = 'b698f7bd432fb5982a731188ab4a3c3a7e9e9cf41884a2c9e4696ff128e5adba'
+DELTA_SHA256 = 'c9ac2637268c94813d6c3be0c1ba19c0997968d6b75ba375c4816479f596c1cc'
 MOD_FILES = ('levels.json', 'recipes.json', 'tips.json', 'credits.json', 'archipelago_campaign.json')
 RECEIPT = 'archipelago_enhanced_install.json'
 
@@ -99,7 +100,7 @@ def check_campaign(files: dict[str, bytes]):
     if (not isinstance(campaign, dict)
             or (campaign.get('campaign_id'), campaign.get('level_count')) not in
                 (('word-factori-hybrid', 40), ('word-factori-core', 30))
-            or campaign.get('manifest_version') != '1.2.0'
+            or campaign.get('manifest_version') not in ('1.2.0', '1.2.1')
             or not isinstance(campaign.get('manifest_digest'), str)
             or not re.fullmatch('[0-9a-f]{64}', campaign['manifest_digest'])):
         raise ValueError('Mod does not identify the supported Word Factori campaign')
@@ -159,7 +160,7 @@ class LinuxInstaller:
         identity = dict(self.identity, ap_worlds=str(self.worlds), config=str(self.config))
         self.transaction = transaction.Transaction(paths.factori_root / 'archipelago/install-transactions',
                                                     self.targets, identity, self.check_closed,
-                                                    {'game': {ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PATCHED_SHA256},
+                                                    {'game': {ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PREVIOUS_PATCHED_SHA256, PATCHED_SHA256},
                                                      'backup': {None, ORIGINAL_SHA256}})
         for target in self.targets.values():
             transaction.safe_path(target)
@@ -179,7 +180,7 @@ class LinuxInstaller:
         paths_api.validate_installation(self.paths)
         snapshot = {key: transaction.read(path) for key, path in self.targets.items()}
         current = transaction.digest(snapshot['game'])
-        if current not in (ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PATCHED_SHA256):
+        if current not in (ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PREVIOUS_PATCHED_SHA256, PATCHED_SHA256):
             raise ValueError('Unsupported or modified game data; no files changed')
         if snapshot['backup'] is not None and transaction.digest(snapshot['backup']) != ORIGINAL_SHA256:
             raise ValueError('Original backup is unknown or damaged; no files changed')
@@ -193,7 +194,7 @@ class LinuxInstaller:
             legacy_receipt = (isinstance(receipt, dict) and receipt.get('protocol') == 'enhanced_v1'
                               and receipt.get('patched_sha256') == LEGACY_PATCHED_SHA256)
             current_receipt = (isinstance(receipt, dict) and receipt.get('protocol') == PATCH_PROTOCOL
-                               and receipt.get('patched_sha256') == PATCHED_SHA256
+                               and receipt.get('patched_sha256') in (PREVIOUS_PATCHED_SHA256, PATCHED_SHA256)
                                and receipt.get('capability') == ENFORCEMENT_CAPABILITY)
             if (not (legacy_receipt or current_receipt)
                     or receipt.get('original_sha256') != ORIGINAL_SHA256

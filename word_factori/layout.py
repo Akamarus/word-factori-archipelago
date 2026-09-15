@@ -8,6 +8,7 @@ from typing import Any
 
 from .campaign import CampaignManifest, CampaignRecord, campaign_digest
 from .capabilities import FULL, requirements_for_record, unavoidable_nonbootstrap_machines
+from .quantities import QUANTITY_MODEL
 
 
 PAGE_SIZE = 6
@@ -22,7 +23,7 @@ MACHINE_MODEL = "machines_tutorial_six_then_four_v1"
 ENHANCED_MACHINE_MODEL = "machines_enhanced_four_of_six_v1"
 RECIPE_MODEL = "machines_enhanced_recipes_v1"
 WORD_ORDER_MODEL = "machines_enhanced_words_v1"
-MACHINE_MODELS = frozenset({MACHINE_MODEL, ENHANCED_MACHINE_MODEL, RECIPE_MODEL, WORD_ORDER_MODEL})
+MACHINE_MODELS = frozenset({MACHINE_MODEL, ENHANCED_MACHINE_MODEL, RECIPE_MODEL, WORD_ORDER_MODEL, QUANTITY_MODEL})
 TUTORIAL_KEYS = (
     "complete-i", "complete-c", "complete-v", "complete-l", "complete-o", "complete-a",
 )
@@ -291,11 +292,13 @@ def shuffled_layout(
 def build_layout(
     manifest: CampaignManifest, level_set: str, mode: str, random_source: Any,
     *, integration_mode: str = "supported", machine_only: bool = False,
-    recipe_checks: bool = False, type_a_word_checks: bool = False,
+    recipe_checks: bool = False, type_a_word_checks: bool = False, progressive_machines: bool = False,
 ) -> CampaignLayout:
     if machine_only:
-        layout = build_layout(manifest, level_set, mode, random_source, integration_mode=integration_mode)
+        layout = build_layout(manifest, level_set, mode, random_source, integration_mode=integration_mode,
+                              progressive_machines=progressive_machines)
         layout = replace(layout, progression_model=(
+            QUANTITY_MODEL if integration_mode == "enhanced" and progressive_machines else
             WORD_ORDER_MODEL if integration_mode == "enhanced" and type_a_word_checks else
             RECIPE_MODEL if integration_mode == "enhanced" and recipe_checks else
             ENHANCED_MACHINE_MODEL if integration_mode == "enhanced" else MACHINE_MODEL
@@ -316,10 +319,17 @@ def build_layout(
                  if r.region != "Starter Workshop" and r.kind not in {"challenge", "final"}]
         if len(starters) < 2 or len(later) < 2:
             raise ValueError("Enhanced campaign has insufficient early/later candidates")
-        for _ in range(50):
-            first = ("complete-i", "complete-c", *random_source.sample(starters, 2), *random_source.sample(later, 2))
+        for _ in range(100 if progressive_machines else 50):
+            early_pair = ('complete-v','complete-l') if progressive_machines else random_source.sample(starters, 2)
+            first = ("complete-i", "complete-c", *early_pair, *random_source.sample(later, 2))
             try:
-                return shuffled_layout(manifest, level_set, random_source, enhanced_starter=first)
+                candidate = shuffled_layout(manifest, level_set, random_source, enhanced_starter=first)
+                if progressive_machines:
+                    from .quantity_layout import upgrade_path
+                    records = {record.stable_key:record for record in manifest.levels}
+                    if upgrade_path(tuple(records[key] for key in candidate.ordered_stable_keys)) is None:
+                        continue
+                return candidate
             except ValueError as error:
                 if "could not satisfy page constraints" not in str(error):
                     raise
@@ -337,7 +347,7 @@ def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
     enhanced = layout.integration_mode == "enhanced"
     if layout.algorithm not in ({ENHANCED_ALGORITHM} if enhanced else {FIXED_ALGORITHM, SHUFFLED_ALGORITHM}):
         raise ValueError("layout algorithm is invalid")
-    if layout.progression_model not in ({ENHANCED_MODEL, ENHANCED_MACHINE_MODEL, RECIPE_MODEL, WORD_ORDER_MODEL} if enhanced else {PROGRESSION_MODEL, MACHINE_MODEL}):
+    if layout.progression_model not in ({ENHANCED_MODEL, ENHANCED_MACHINE_MODEL, RECIPE_MODEL, WORD_ORDER_MODEL, QUANTITY_MODEL} if enhanced else {PROGRESSION_MODEL, MACHINE_MODEL}):
         raise ValueError("layout progression model is invalid")
     if layout.integration_mode not in {"supported", "enhanced"}:
         raise ValueError("layout integration mode is unsupported")
@@ -383,6 +393,8 @@ def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
                 for r in first
             ) < 4 or sum(r.region != "Starter Workshop" for r in first) != 2:
                 raise ValueError("Enhanced layout has invalid early-solvable first page")
+            if layout.progression_model == QUANTITY_MODEL and not {'complete-v','complete-l'}.issubset(pages[0]):
+                raise ValueError('Progressive layout has no finite-tier early outlet')
         if "pitchfork-final" not in pages[-1]:
             raise ValueError("balanced layout has invalid final-page anchor")
         for page_index, page in enumerate(pages):

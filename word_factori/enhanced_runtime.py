@@ -9,13 +9,16 @@ import re
 import time
 
 from .mod import MODULES, _write_json
+from .quantities import MODULE_FAMILIES, checked_vector
 from .platform_paths import InstallationPaths, validate_installation, validate_ap_worlds
 
 ORIGINAL_SHA256 = "d40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978"
 PATCH_PROTOCOL = "enhanced_v2"
-PATCHED_SHA256 = "33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161"
+PATCHED_SHA256 = "39e48a5eb63924b970bc3e3907f62b0b659fc64ba5fa973c45f4e2dcf767c704"
 ENFORCEMENT_CAPABILITY = "free_word_machine_enforcement_v1"
 RUNTIME_SCHEMA = 2
+QUANTITY_CAPABILITY = "progressive_machine_enforcement_v1"
+QUANTITY_SCHEMA = 3
 MAX_REVISION = 2**53 - 1
 RUNTIME_NAME = "archipelago_runtime.json"
 RECEIPT_NAME = "archipelago_enhanced_install.json"
@@ -91,25 +94,34 @@ def patch_ready(mod_folder: Path, installation: InstallationPaths | None = None)
 
 
 def machine_counts_for_view(view) -> dict[str, int]:
+    if view.machine_limits is not None:
+        limits = checked_vector(view.machine_limits, allowance=True)
+        return {"IFactory": -1, **{module: limits[family] for module, family in MODULE_FAMILIES.items()}}
     owned = set(view.owned_machines) | {"Bender Access"}
     return {"IFactory": -1, **{module: -1 if item in owned else 0
             for item, modules in MODULES.items() for module in modules}}
 
 
-def runtime_context(room: str, layout: str, checks_contract: str) -> dict:
+def runtime_context(room: str, layout: str, checks_contract: str, *, progressive: bool = False) -> dict:
+    if type(progressive) is not bool:
+        raise ValueError("progressive must be a boolean")
     if not all(valid_digest(value) for value in (room, layout, checks_contract)):
         raise ValueError("Enhanced runtime requires complete room, layout and checks identities")
-    return {"schema": RUNTIME_SCHEMA, "mode": "enhanced", "room": room, "layout": layout,
-            "checks_contract": checks_contract, "capability": ENFORCEMENT_CAPABILITY}
+    return {"schema": QUANTITY_SCHEMA if progressive else RUNTIME_SCHEMA, "mode": "enhanced", "room": room, "layout": layout,
+            "checks_contract": checks_contract, "capability": QUANTITY_CAPABILITY if progressive else ENFORCEMENT_CAPABILITY}
 
 
 def publish_runtime(path: Path, room: str, layout: str, levels: list[dict], *,
-                    machine_counts: dict, checks_contract: str) -> bool:
-    context = runtime_context(room, layout, checks_contract)
+                    machine_counts: dict, checks_contract: str, progressive: bool = False) -> bool:
+    context = runtime_context(room, layout, checks_contract, progressive=progressive)
+    allowed = (-1,0,1,2,3,4) if progressive else (-1,0)
     if (not isinstance(machine_counts, dict) or set(machine_counts) != ALLOWED_MODULES
-            or any(type(count) is not int or count not in (0, -1) for count in machine_counts.values())
+            or any(type(count) is not int or count not in allowed for count in machine_counts.values())
             or machine_counts["IFactory"] != -1):
         raise ValueError("Enhanced runtime requires complete machine inventory")
+    if progressive and (machine_counts['Rotate_cw'] != machine_counts['Rotate_ccw']
+                        or machine_counts['Reflect_hor'] != machine_counts['Reflect_vert']):
+        raise ValueError("Directional variants must share a family allowance")
     if not isinstance(levels, list) or not levels:
         raise ValueError("Enhanced runtime requires levels")
     for entry in levels:

@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 
 from .campaign import CampaignManifest, CampaignRecord, campaign_digest, campaign_for_level_set
 from .layout import CampaignLayout, MACHINE_MODELS, PAGE_SIZE, layout_entries
+from .quantities import PROGRESSIVE_ITEMS
 
 GAME = "Word Factori"
 BASE_ID = 975_300_000
@@ -94,7 +95,7 @@ STICKER_NAMES = (
     "I Sticker", "C Sticker", "CAT Sticker", "OWL Sticker", "DRAGON Sticker", "PITCHFORK Sticker",
 )
 NEW_ITEM_NAMES = ("Progressive World Access",) + STICKER_NAMES
-ITEM_NAMES = LEGACY_ITEM_NAMES + NEW_ITEM_NAMES
+ITEM_NAMES = LEGACY_ITEM_NAMES + NEW_ITEM_NAMES + PROGRESSIVE_ITEMS
 ITEM_NAME_TO_ID = {name: BASE_ID + index for index, name in enumerate(ITEM_NAMES, start=1)}
 PROGRESSION_ITEMS = MACHINE_ITEMS[1:]
 STICKER_ITEMS = tuple(sticker for sticker in STICKER_NAMES for _ in range(5))

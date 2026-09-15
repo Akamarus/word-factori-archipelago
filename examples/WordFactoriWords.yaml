@@ -1,0 +1,16 @@
+name: WordFactoriWords
+description: Tester prerelease with custom Type-a-Word orders
+game: Word Factori
+requires:
+  version: 0.6.7
+Word Factori:
+  accessibility: full
+  custom_level_set: discovery_labs
+  goal: campaign_count
+  campaign_count: 25
+  recipe_checks: true
+  progressive_machines: false
+  type_a_word_checks: true
+  type_a_word_count: 3
+  # 2-12 ASCII letters per word. Enough distinct words for the selected count.
+  type_a_word_words: [JACK, FACTORY, PUZZLE, ISLAND]

@@ -6,11 +6,13 @@ requires:
 Word Factori:
   progression_balancing: 50
   accessibility: items
-  # Development feature: add global Recipe Journal checks. Requires the matching
-  # development APWorld/client and a newly generated seed with a fresh empty save.
+  # 1.5.0: 187 global Recipe Journal checks; true by default.
+  # Use the matching package, a new room and a fresh empty save.
   recipe_checks: true
-  # UNRELEASED 1.5.0: optional Type-a-Word orders. Enable only in a fresh room
-  # using its matching development package. The default is false, count 5, [].
+  # Optional 1, 2, 3, 4, unlimited placement tiers (default false).
+  progressive_machines: false
+  # Optional Type-a-Word orders. Defaults: false, count 5, empty list.
+  # Count must not exceed the number of distinct words in the list.
   type_a_word_checks: false
   type_a_word_count: 3
   type_a_word_words: [JACK, FACTORY, PUZZLE, ISLAND]

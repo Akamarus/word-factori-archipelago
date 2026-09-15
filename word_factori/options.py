@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from Options import Choice, DefaultOnToggle, OptionList, PerGameCommonOptions, Range, Toggle
+from Options import Choice, DefaultOnToggle, OptionList, PerGameCommonOptions, Range, Toggle, StartInventoryPool
 
 
 class Goal(Choice):
@@ -37,6 +37,12 @@ class TypeAWordChecks(Toggle):
     default = 0
 
 
+class ProgressiveMachines(Toggle):
+    """Machine upgrades allow 1, 2, 3, 4, then unlimited placed machines per family."""
+    display_name = "Progressive Machines"
+    default = 0
+
+
 class TypeAWordCount(Range):
     """Number of Type-a-Word orders to add."""
     display_name = "Type-a-Word Count"
@@ -69,6 +75,7 @@ class TypeAWordWords(OptionList):
 
 @dataclass
 class WordFactoriOptions(PerGameCommonOptions):
+    start_inventory_from_pool: StartInventoryPool
     goal: Goal
     campaign_count: CampaignCount
     custom_level_set: CustomLevelSet
@@ -76,3 +83,4 @@ class WordFactoriOptions(PerGameCommonOptions):
     type_a_word_checks: TypeAWordChecks
     type_a_word_count: TypeAWordCount
     type_a_word_words: TypeAWordWords
+    progressive_machines: ProgressiveMachines

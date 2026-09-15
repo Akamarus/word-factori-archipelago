@@ -1,0 +1,16 @@
+name: WordFactoriProgressive
+description: Tester prerelease with finite machine progression
+game: Word Factori
+requires:
+  version: 0.6.7
+Word Factori:
+  progressive_machines: true
+  accessibility: full
+  custom_level_set: discovery_labs
+  goal: campaign_count
+  campaign_count: 25
+  recipe_checks: false
+  type_a_word_checks: false
+  # Optional: move extra starting upgrades out of the item pool.
+  # start_inventory_from_pool:
+  #   Progressive Rotation Access: 1

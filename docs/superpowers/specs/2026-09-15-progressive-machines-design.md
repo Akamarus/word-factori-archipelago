@@ -1,6 +1,6 @@
 # Optional progressive machines
 
-Status: written specification for review. The in-chat design was approved; implementation has not started.
+Status: implemented and packaged as an unpublished development candidate. Quantity-aware page selection approved and implemented, preserving tiers and four-completion page unlocks. All 16 real AP generation configurations, two failing-seed replays and two multiplayer rooms pass. Full suite: 643 tests, 2 skipped, no failures. Native quantity/legacy acceptance: 88 assertions pass. Connected gameplay, GUI manipulation, large-factory performance and Proton acceptance remain pending; no live installation or publication.
 
 ## Player experience and scope
 
@@ -87,5 +87,7 @@ Implement and verify in the existing isolated development checkout based on the 
 Success means a complete optional feature, not merely a YAML flag or a different item pool. If a required native enforcement path or conservative whole-word witness cannot be made reliable, report the concrete blocker and keep the feature unreleased rather than silently weakening enforcement or disabling another option.
 
 ## Spec self-review
+
+Approved correction during implementation: the M Triple Merge Lab also allows and requires Merger2. Merger3 alone reaches I/N but not M through physically usable native recipes. Its target/name/check ID stay unchanged; the hybrid manifest advances to 1.2.1 to identify the correction. This is the explicit exception to preserving previous level restrictions.
 
 Reviewed against the approved in-chat design and current boolean-access implementation. Defaults, tier meaning, item count, shared-direction accounting, off-mode compatibility, conservative logic, live updates, save preservation and release boundaries are explicit. Research minima are not mislabeled as a complete frontier. Whole-word and challenge validation remain mandatory implementation acceptance work, not assumed research results.

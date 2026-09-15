@@ -271,7 +271,7 @@ class WordOrderWorldTests(unittest.TestCase):
             "recipe_catalog_digest": RECIPE_CATALOG_DIGEST,
         }
         self.assertEqual(
-            "Recipe-team-0-slot-1-Player-contract-87edcaf76e8560cbc0046aeeb1adfd81d856c463d1aebfbffbe6e6e29ffab1ba",
+            "Recipe-team-0-slot-1-Player-contract-2deb738a2ff458131bebfefdef9f469c01a32b556d3b6bd8c28a7d7d61e40e44",
             state_identity("Recipe", 0, 1, "Player", recipe_slot),
         )
 

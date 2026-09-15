@@ -226,6 +226,41 @@ from word_factori.save import read_active_slot
 
 
 class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_progressive_inventory_publishes_distinct_counts_and_requires_new_ack(self):
+        from word_factori.layout import build_layout
+        from word_factori.quantity_contract import quantity_slot_data
+        from word_factori.enhanced_runtime import PatchReadiness, runtime_context
+        from word_factori.word_orders import checks_contract_digest
+        manifest = campaign_for_level_set('core_campaign')
+        layout = build_layout(manifest,'core_campaign','shuffled_pages',random.Random(42),
+                              integration_mode='enhanced',machine_only=True,progressive_machines=True)
+        locations = locations_for_layout(manifest,layout)
+        self.ctx.slot_data = {**self.ctx.slot_data, **layout_slot_data(layout),
+            'level_set':'core_campaign','campaign_id':manifest.campaign_id,
+            'manifest_version':manifest.version,'manifest_digest':layout.digest,
+            'level_count':len(locations),'recipe_checks':False,
+            **quantity_slot_data(True,locations,(),False)}
+        self.ctx.item_names = _NameLookup({1:'Progressive Bender Access',2:'Progressive Rotation Access'})
+        self.ctx.items_received = [make_network_item(item=i,location=0,player=1) for i in (1,2,2)]
+        self.assertEqual(3,len(self.ctx.network_items()))
+        with patch('word_factori.client.patch_readiness',return_value=PatchReadiness(True,'ready','')):
+            self.assertTrue(self.ctx.prepare_selected_campaign())
+        snapshot=json.loads((self.ctx.mod_folder/'archipelago_runtime.json').read_text())
+        self.assertEqual(3,snapshot['schema'])
+        self.assertEqual(1,snapshot['machine_counts']['Bend'])
+        self.assertEqual(2,snapshot['machine_counts']['Rotate_cw'])
+        expected=runtime_context(hashlib.sha256(self.ctx.current_identity().encode()).hexdigest(),
+                                 layout.digest,checks_contract_digest(self.ctx.slot_data),progressive=True)
+        status=self.ctx.mod_folder/'archipelago_native_status.json'
+        status.write_text(json.dumps({**expected,'schema':2,'capability':'free_word_machine_enforcement_v1'}))
+        self.assertFalse(self.ctx.native_checks_acknowledged())
+        self.ctx.connected_identity=self.ctx.current_identity()
+        with patch.object(self.ctx,'compatible_campaign',return_value=True), patch.object(self.ctx,'ensure_game_slot_binding',return_value=object()):
+            await self.ctx.report_indices({0})
+        self.assertFalse(self.ctx.bridge_state.pending_checks)
+        status.write_text(json.dumps(expected))
+        self.assertTrue(self.ctx.native_checks_acknowledged())
+
     def enhanced_room(self):
         from word_factori.layout import build_layout
         manifest = campaign_for_level_set("discovery_labs")

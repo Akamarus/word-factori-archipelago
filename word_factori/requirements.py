@@ -25,9 +25,14 @@ def previous_page_names(
 
 def access_rule_for(
     location: LocationData, locations: tuple[LocationData, ...], player: int,
-    *, integration_mode: str = "supported",
+    *, integration_mode: str = "supported", quantity_budgets=None,
 ):
     requirements = requirements_for(location)
+    if quantity_budgets is not None:
+        from .quantity_contract import quantity_rule
+        machine_rule = quantity_rule(quantity_budgets, player)
+    else:
+        machine_rule = lambda state: any(state.has_all(needs, player) for needs in requirements)
     predecessors = previous_page_names(location, locations)
     threshold = TUTORIAL_PAGE_UNLOCK_COUNT if location.page_index == 1 and integration_mode == "supported" else PAGE_UNLOCK_COUNT
     if integration_mode == "supported" and 0 < location.slot_index < PAGE_SIZE:
@@ -39,6 +44,6 @@ def access_rule_for(
             state.can_reach_location(name, player) for name in predecessors
         ) < threshold:
             return False
-        return any(state.has_all(needs, player) for needs in requirements)
+        return machine_rule(state)
 
     return rule

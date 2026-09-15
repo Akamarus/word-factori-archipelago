@@ -16,6 +16,8 @@ class EnhancedHookTests(unittest.TestCase):
                 "function get_current_module_count(arg0) { if (current_level_mode != UnknownEnum.Value_1 || missing()) return -1; return native_count(); }",
             "gml_GlobalScript_Building": "\n".join("static " + name + " = function() { native_body(); }" for name in ("consume", "getRecipe", "produce", "getTicksTillProduce")),
             "gml_GlobalScript_Misc": "function getModuleRecipe(arg0, arg1) { return native_recipe(); }",
+            "gml_Object_oControl_Create_0": "function doTick() { native_tick(); }\nfunction try_win_condition() { native_win(); }",
+            "gml_Object_oControl_Step_0": "native_step();",
         }
 
     def test_unknown_binary_is_refused(self):
@@ -63,6 +65,11 @@ class EnhancedHookTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already present"):
             transform_sources(patched, "")
 
+    def test_production_patch_covers_live_poll_tick_and_buffered_win(self):
+        output = transform_sources(self.sources(), '// helpers')
+        self.assertTrue(output['gml_Object_oControl_Step_0'].startswith('wf_access_poll();'))
+        self.assertEqual(2,output['gml_Object_oControl_Create_0'].count('!wf_access_factory_allowed(buildings)'))
+
     def test_every_enforcement_surface_requires_exactly_one_native_occurrence(self):
         targets = (
             ("gml_GlobalScript_LevelFuncs", "function get_level_module_counts"),
@@ -73,6 +80,8 @@ class EnhancedHookTests(unittest.TestCase):
             ("gml_GlobalScript_Building", "static produce = function"),
             ("gml_GlobalScript_Building", "static getTicksTillProduce = function"),
             ("gml_GlobalScript_Misc", "function getModuleRecipe"),
+            ("gml_Object_oControl_Create_0", "function doTick"),
+            ("gml_Object_oControl_Create_0", "function try_win_condition"),
         )
         for entry, target in targets:
             with self.subTest(target=target):
