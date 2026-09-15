@@ -20,7 +20,8 @@ ENHANCED_ALGORITHM = "enhanced_balanced_pages_v1"
 ENHANCED_MODEL = "enhanced_four_of_six_v1"
 MACHINE_MODEL = "machines_tutorial_six_then_four_v1"
 ENHANCED_MACHINE_MODEL = "machines_enhanced_four_of_six_v1"
-MACHINE_MODELS = frozenset({MACHINE_MODEL, ENHANCED_MACHINE_MODEL})
+RECIPE_MODEL = "machines_enhanced_recipes_v1"
+MACHINE_MODELS = frozenset({MACHINE_MODEL, ENHANCED_MACHINE_MODEL, RECIPE_MODEL})
 TUTORIAL_KEYS = (
     "complete-i", "complete-c", "complete-v", "complete-l", "complete-o", "complete-a",
 )
@@ -289,10 +290,12 @@ def shuffled_layout(
 def build_layout(
     manifest: CampaignManifest, level_set: str, mode: str, random_source: Any,
     *, integration_mode: str = "supported", machine_only: bool = False,
+    recipe_checks: bool = False,
 ) -> CampaignLayout:
     if machine_only:
         layout = build_layout(manifest, level_set, mode, random_source, integration_mode=integration_mode)
         layout = replace(layout, progression_model=(
+            RECIPE_MODEL if integration_mode == "enhanced" and recipe_checks else
             ENHANCED_MACHINE_MODEL if integration_mode == "enhanced" else MACHINE_MODEL
         ))
         layout = replace(layout, digest=_layout_digest(layout))
@@ -332,7 +335,7 @@ def validate_layout(manifest: CampaignManifest, layout: CampaignLayout) -> None:
     enhanced = layout.integration_mode == "enhanced"
     if layout.algorithm not in ({ENHANCED_ALGORITHM} if enhanced else {FIXED_ALGORITHM, SHUFFLED_ALGORITHM}):
         raise ValueError("layout algorithm is invalid")
-    if layout.progression_model not in ({ENHANCED_MODEL, ENHANCED_MACHINE_MODEL} if enhanced else {PROGRESSION_MODEL, MACHINE_MODEL}):
+    if layout.progression_model not in ({ENHANCED_MODEL, ENHANCED_MACHINE_MODEL, RECIPE_MODEL} if enhanced else {PROGRESSION_MODEL, MACHINE_MODEL}):
         raise ValueError("layout progression model is invalid")
     if layout.integration_mode not in {"supported", "enhanced"}:
         raise ValueError("layout integration mode is unsupported")

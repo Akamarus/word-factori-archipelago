@@ -12,6 +12,8 @@ Linux setup now accepts both native Archipelago user-world folder names (`worlds
 
 **[Download the 1.4.2 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.2).** One player ZIP now includes Windows and native Linux installers. Linux uses the regular Archipelago client while Steam runs Word Factori through Proton. Automated Windows and Ubuntu checks pass, but a real Linux/Proton playthrough has **not** been verified. This is a tester prerelease, not a stable release.
 
+> **Development-only recipe checks:** this source checkout can add optional Recipe Journal locations. They are **not included in the published 1.4.2 package**. A recipe-enabled seed needs the matching development APWorld and client, a newly generated room, and a fresh empty save bound to that room. Do not use the 1.4.2 download links above for such a seed.
+
 ### Current gameplay
 
 - **No World Access items in new seeds.** Your machines and recipe requirements determine which puzzles you can solve, alongside page progression.
@@ -131,7 +133,7 @@ Automated tests run on Ubuntu, including the extracted ZIP's shell installer. **
 1. Copy one of the example player files into your Archipelago `Players` folder:
    - `examples/WordFactori.yaml` for the normal Campaign Count goal.
    - `examples/WordFactoriTarget.yaml` for the Final Factory goal.
-2. Change the player `name` and any Word Factori options you want. Keep `custom_level_set: discovery_labs` for all 40 levels, or choose `core_campaign` for the focused 30-level set. Every room uses enhanced, shuffled, machine-only progression; the examples have no mode or layout selector.
+2. Change the player `name` and any Word Factori options you want. Keep `custom_level_set: discovery_labs` for all 40 levels, or choose `core_campaign` for the focused 30-level set. Every room uses enhanced, shuffled, machine-only progression; the examples have no mode or layout selector. In a matching development checkout, place `recipe_checks: true` under `Word Factori:` to add Recipe Journal checks; `false` disables them. Newly generated rooms default to enabled, while an older room with no field is treated as disabled for compatibility.
 3. Generate and host the room normally with Archipelago.
 4. Launch **Word Factori Client** from the Archipelago Launcher. Connect through the regular client, the in-game AP panel (Windows only), or an `archipelago://` launch link.
 5. Start Word Factori, select the Archipelago mod, and enter a new empty mod save slot.
@@ -140,6 +142,17 @@ Automated tests run on Ubuntu, including the extracted ZIP's shell installer. **
 Connect the Archipelago client **before** completing checks. An existing progressed slot is deliberately rejected until it has already been bound to that room.
 
 ## Checks and locations
+
+Factory-completion checks and optional Recipe Journal checks are separate. The existing 30- or 40-location campaign remains unchanged: complete factories to earn those checks, open later pages, and satisfy the victory goal. Recipe checks instead watch the bound save's global journal for a particular machine-and-input route. Discovering an alternate route—including a hidden route—earns its own location without completing a factory. Recipe checks do not add pages, raise page thresholds, or increase the number of factory completions required for victory.
+
+The development option is written exactly under `Word Factori:`:
+
+```yaml
+Word Factori:
+  recipe_checks: true
+```
+
+Set it to `false` to disable the extra checks. Enabled seeds add 187 working letter recipes, including 119 hidden alternatives: 217 total locations with the 30-level Core Campaign or 227 with the 40-level Discovery Labs. Disabled seeds remain at 30 or 40 locations. Source I and symbol-output recipes are excluded. Two native three-input Merger entries that contain only two inputs (`I N -> M` and `I Z1 -> M`) are also excluded because a real Building/Letter Pipe will not process them. See the [Recipe Journal checks guide](docs/recipe-checks.md) for notation, identity, save behavior, and current verification limits.
 
 The selected custom level set determines whether the seed has 30 or 40 stable locations:
 
@@ -179,7 +192,7 @@ Discovery Labs do not count toward Campaign Count.
 
 ## How the logic stays solvable
 
-Word Factori recipes form a deterministic graph. The project reads the locally installed `recipes.data` only during development verification, then calculates which combinations of machine capabilities can produce every required letter. Only the resulting capability names are stored in this repository.
+Word Factori recipes form a deterministic graph. The project reads the locally installed `recipes.data` only during development verification, then stores mechanics-only derived recipe identities and minimal capability requirements. It never stores or distributes the raw proprietary `recipes.data` file. Recipe identities normalize and sort inputs the same way the native Letter code does, so alternatives remain distinct without copying proprietary recipe records.
 
 New-seed Archipelago reachability combines machine and page rules:
 
@@ -224,6 +237,8 @@ On Linux, the same game files are read under the selected Proton prefix's `AppDa
 The installer separately modifies the verified game binary and preserves its original backup; it does not edit game saves.
 
 Each Archipelago room binds to the active empty Word Factori slot using that slot's stable `random_id`. A slot with previous completions is not auto-bound, and switching slots pauses check submission. This prevents unrelated progress from becoming false checks.
+
+For development recipe checks, the Recipe Journal follows the same strict slot binding. Reports are idempotent: rereading an already reported journal entry cannot send a duplicate check. Native isolated evidence shows that the game flushes the journal to disk on a 60-step alarm, so a newly discovered route may not appear in the client immediately; do not expect instant updates.
 
 Every curated set has an ID, version, stable level keys, and content digest. The client installs only a bundled set whose digest exactly matches the room. If the room and installed mod do not match, both automatic and manual reporting stop.
 
@@ -291,6 +306,7 @@ Complete any four levels on the current full page, including page one. If the th
 ## Current limitations
 
 - Version 1.4.2 is a tester prerelease; machine-only progression still needs a full connected in-game playthrough.
+- Optional Recipe Journal checks and the local Universal Tracker reconstruction fix are development-only and are not in published 1.4.2. Isolated native journal evidence passes, but a full live recipe-enabled game/client/Universal Tracker session and Linux acceptance have not been performed.
 - Linux setup and client behavior have automated Ubuntu coverage, but a real Linux/Proton playthrough remains unverified. Linux does not have the Windows in-game overlay.
 - Arbitrary Workshop packs are not imported into generated seeds.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.

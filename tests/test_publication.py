@@ -39,6 +39,8 @@ class PublicationTests(unittest.TestCase):
         "word_factori/overlay_renderer.py",
         "word_factori/overlay_supervisor.py",
         "word_factori/recipe_graph.py",
+        "word_factori/recipe_checks.py",
+        "word_factori/letter_recipes.json",
         "word_factori/requirements.py",
         "word_factori/save.py",
         "word_factori/version.py",
@@ -173,6 +175,7 @@ class PublicationTests(unittest.TestCase):
                 "docs/images/word-factori-discovery-lab-v.png",
                 "docs/enhanced-playtest.md",
                 "docs/linux-proton.md",
+                "docs/recipe-checks.md",
                 "Install Word Factori Archipelago.sh",
                 "tools/install_linux.py",
                 "tools/linux_transaction.py",
@@ -193,6 +196,17 @@ class PublicationTests(unittest.TestCase):
             },
             names,
         )
+
+    def test_player_release_contains_recipe_checks_guide_and_manifest_entry(self):
+        build_release.write_world()
+        build_release.write_release()
+
+        with zipfile.ZipFile(build_release.RELEASE_ARCHIVE) as archive:
+            names = set(archive.namelist())
+            manifest = json.loads(archive.read("release-manifest.json"))
+
+        self.assertIn("docs/recipe-checks.md", names)
+        self.assertIn("docs/recipe-checks.md", manifest["files"])
 
     def test_release_excludes_temporary_live_rooms(self):
         generated_room = ROOT / "tests" / "live-room-example" / "AP_seed.archipelago"

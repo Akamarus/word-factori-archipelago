@@ -68,6 +68,9 @@ class _Choice:
 class _Range(_Choice):
     pass
 
+class _DefaultOnToggle(_Choice):
+    default = 1
+
 
 class _PerGameCommonOptions:
     pass
@@ -105,6 +108,7 @@ def _install_archipelago_stubs():
     options.Choice = _Choice
     options.PerGameCommonOptions = _PerGameCommonOptions
     options.Range = _Range
+    options.DefaultOnToggle = _DefaultOnToggle
 
     sys.modules.update({
         "BaseClasses": base_classes,
@@ -154,7 +158,10 @@ class _ReachabilityState:
 
 
 class WorldLayoutTests(unittest.TestCase):
-    def make_world(self, seed, *, campaign_layout=1, level_set=0, goal=0, integration_mode=0, passthrough=None):
+    def test_recipe_checks_default_on(self):
+        self.assertEqual(1, world_options.RecipeChecks.default)
+
+    def make_world(self, seed, *, campaign_layout=1, level_set=0, goal=0, integration_mode=0, recipe_checks=False, passthrough=None):
         multiworld = _MultiWorld(seed)
         if passthrough is not None:
             multiworld.re_gen_passthrough = passthrough
@@ -165,6 +172,7 @@ class WorldLayoutTests(unittest.TestCase):
             goal=_OptionValue(goal),
             campaign_count=_OptionValue(25),
             integration_mode=_OptionValue(integration_mode),
+            recipe_checks=_OptionValue(recipe_checks),
         )
         world.generate_early()
         return world
@@ -288,6 +296,7 @@ class WorldLayoutTests(unittest.TestCase):
     def test_slot_data_describes_authoritative_native_layout(self):
         slot_data = self.make_world(104729).fill_slot_data()
 
+        self.assertIs(slot_data["recipe_checks"], False)
         self.assertEqual("machines_enhanced_four_of_six_v1", slot_data["progression_model"])
         self.assertEqual(6, slot_data["page_size"])
         self.assertEqual("enhanced", slot_data["integration_mode"])
@@ -306,6 +315,19 @@ class WorldLayoutTests(unittest.TestCase):
             slot_data["level_order"],
             [entry["stable_key"] for entry in slot_data["locations"]],
         )
+
+    def test_recipe_checks_add_187_locations_and_fillers_without_changing_native_count(self):
+        for level_set, expected in ((0, 217), (1, 227)):
+            world = self.make_world(104729, level_set=level_set, recipe_checks=True)
+            world.create_regions()
+            world.create_items()
+            slot = world.fill_slot_data()
+            self.assertEqual(expected, len(world.multiworld.itempool))
+            self.assertEqual(30 if level_set == 0 else 40, slot["level_count"])
+            self.assertEqual(expected, sum(len(region.locations) for region in world.multiworld.regions) - 1)
+            ordinary_i = next(location for location in world.selected_locations() if location.stable_key == "complete-i")
+            self.assertEqual(0, ordinary_i.page_index)
+            self.assertEqual((), ordinary_i.module_limits)
 
     def test_slot_data_is_seed_deterministic_and_changes_across_seeds(self):
         first = self.make_world(65537).fill_slot_data()

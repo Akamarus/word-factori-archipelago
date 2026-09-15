@@ -116,6 +116,7 @@ Word Factori:
   goal: {case.goal}
   campaign_count: 25
   custom_level_set: {case.level_set}
+  recipe_checks: false
 """
 
 

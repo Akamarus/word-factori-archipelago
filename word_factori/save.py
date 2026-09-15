@@ -10,6 +10,7 @@ class ActiveSlot:
     key: str
     random_id: str
     beaten_levels: frozenset[int]
+    recipe_codes: frozenset[int] | None = frozenset()
 
 
 def _selected_slot_key(previous: object) -> str:
@@ -48,10 +49,17 @@ def parse_active_slot(payload: dict) -> ActiveSlot:
     beaten = slot.get("beaten_levels", {})
     if not isinstance(beaten, dict):
         raise ValueError("active slot beaten_levels is not an object")
+    from .recipe_checks import discovered_recipe_codes
+    recipes = slot.get("recipes", {})
+    try:
+        recipe_codes = discovered_recipe_codes(recipes)
+    except ValueError:
+        recipe_codes = None
     return ActiveSlot(
         key=key,
         random_id=random_id,
         beaten_levels=frozenset(int(index) for index, value in beaten.items() if value),
+        recipe_codes=recipe_codes,
     )
 
 

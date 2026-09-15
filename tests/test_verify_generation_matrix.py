@@ -502,6 +502,7 @@ class PlayerYamlTests(unittest.TestCase):
         self.assertNotIn("integration_mode:", rendered)
         self.assertIn(f"  goal: {MATRIX_CASES[0].goal}\n", rendered)
         self.assertIn(f"  custom_level_set: {MATRIX_CASES[0].level_set}\n", rendered)
+        self.assertIn("  recipe_checks: false\n", rendered)
 
 
 class GeneratorInvocationTests(unittest.TestCase):

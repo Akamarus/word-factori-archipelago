@@ -73,6 +73,7 @@ from .overlay_protocol import (
 )
 from .overlay_supervisor import OverlayConfig, OverlaySupervisor
 from .save import ActiveSlot, find_save, read_active_slot
+from .recipe_checks import RECIPE_CHECKS
 
 MOD_FOLDER = "word factori archipelago"
 CAMPAIGN_MISMATCH = (
@@ -671,6 +672,8 @@ class WordFactoriContext(CommonContext):
             if checked_locations is None else frozenset(checked_locations)
         )
         local_ids = {location.code for location in self.active_locations()}
+        if self.slot_data.get("recipe_checks") is True:
+            local_ids.update(check.code for check in RECIPE_CHECKS)
         locations = sorted(checked_locations & local_ids)
         if locations and self._dispatch_room_matches(identity, connection_generation):
             await self.send_msgs([{
@@ -701,6 +704,8 @@ class WordFactoriContext(CommonContext):
         )
         try:
             local_ids = {location.code for location in self.active_locations()}
+            if self.slot_data.get("recipe_checks") is True:
+                local_ids.update(check.code for check in RECIPE_CHECKS)
             checked = checked_locations & local_ids
             async with self._dispatch_lock:
                 if not self._dispatch_room_matches(identity, connection_generation):
@@ -992,7 +997,10 @@ class WordFactoriContext(CommonContext):
                 active = read_active_slot(
                     find_save(self.factori_root.parent, Path("mods") / MOD_FOLDER)
                 )
-            resolved = resolve_game_slot_binding(self.bridge_state.game_slot_id, active)
+            resolved = resolve_game_slot_binding(
+                self.bridge_state.game_slot_id, active,
+                recipe_checks=self.slot_data.get("recipe_checks") is True,
+            )
         except (OSError, ValueError, KeyError, TypeError) as error:
             self._bridge_warning(f"Word Factori save binding paused: {error}")
             return None
@@ -1030,11 +1038,18 @@ class WordFactoriContext(CommonContext):
             return
         if self.ensure_game_slot_binding(active) is None:
             return
+        recipe_codes: frozenset[int] = frozenset()
+        if self.slot_data.get("recipe_checks") is True:
+            if active.recipe_codes is None:
+                self._bridge_warning("Recipe journal is malformed; no recipe checks were reported.")
+                return
+            recipe_codes = active.recipe_codes
         self.last_bridge_error = None
-        await self.report_indices(local_checks, active_slot=active)
+        await self.report_indices(local_checks, active_slot=active, recipe_codes=recipe_codes)
 
     async def report_indices(
         self, indices: set[int], *, active_slot: ActiveSlot | None = None,
+        recipe_codes: frozenset[int] = frozenset(),
     ) -> None:
         if self.connected_identity is None:
             self._bridge_warning("Connect to an Archipelago slot before reporting Word Factori checks.")
@@ -1055,10 +1070,11 @@ class WordFactoriContext(CommonContext):
             return
         if self.ensure_game_slot_binding(active_slot) is None:
             return
-        server_codes = frozenset(self.checked_locations) & {
-            location.code for location in locations
-        }
-        result = reconcile(self.bridge_state, [], observed_codes, server_codes)
+        allowed_codes = {location.code for location in locations}
+        if self.slot_data.get("recipe_checks") is True:
+            allowed_codes.update(check.code for check in RECIPE_CHECKS)
+        server_codes = frozenset(self.checked_locations) & allowed_codes
+        result = reconcile(self.bridge_state, [], observed_codes | recipe_codes, server_codes)
         if result.new_checks:
             location_ids = set(result.new_checks) - self.bridge_state.pending_checks
             if location_ids:

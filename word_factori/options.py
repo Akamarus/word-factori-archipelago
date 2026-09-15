@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from Options import Choice, PerGameCommonOptions, Range
+from Options import Choice, DefaultOnToggle, PerGameCommonOptions, Range
 
 
 class Goal(Choice):
@@ -26,9 +26,14 @@ class CustomLevelSet(Choice):
     option_discovery_labs = 1
     default = 1
 
+class RecipeChecks(DefaultOnToggle):
+    """Add checks for discovering validated letter recipes."""
+    display_name = "Recipe Checks"
+
 
 @dataclass
 class WordFactoriOptions(PerGameCommonOptions):
     goal: Goal
     campaign_count: CampaignCount
     custom_level_set: CustomLevelSet
+    recipe_checks: RecipeChecks
