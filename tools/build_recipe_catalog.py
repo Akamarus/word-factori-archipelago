@@ -13,7 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from word_factori.recipe_graph import MACHINE_CAPABILITIES, RecipeGraph
+from word_factori.recipe_graph import (
+    MACHINE_ARITIES,
+    MACHINE_CAPABILITIES,
+    RecipeGraph,
+    physical_recipe_payload,
+)
 
 
 FIRST_RECIPE_CODE = 975302000
@@ -23,16 +28,6 @@ MACHINE_NAMES = {
     "oMerger2": "Merger2",
     "oMerger3": "Merger3",
     "oMerger4": "Merger4",
-}
-MACHINE_ARITIES = {
-    "oBend": 1,
-    "oRotate_cw": 1,
-    "oRotate_ccw": 1,
-    "oReflect_hor": 1,
-    "oReflect_vert": 1,
-    "oMerger2": 2,
-    "oMerger3": 3,
-    "oMerger4": 4,
 }
 
 
@@ -89,16 +84,7 @@ def _native_token(token: str, payload: Mapping[str, object]) -> str:
 
 
 def build_catalog(payload: Mapping[str, object], output_path: Path) -> dict[str, object]:
-    mechanics_payload = dict(payload)
-    for machine, arity in MACHINE_ARITIES.items():
-        recipes = payload.get(machine, {})
-        if isinstance(recipes, dict):
-            mechanics_payload[machine] = {
-                raw_inputs: raw_output
-                for raw_inputs, raw_output in recipes.items()
-                if len(str(raw_inputs).split()) == arity
-            }
-    graph = RecipeGraph.from_payload(mechanics_payload)
+    graph = RecipeGraph.from_payload(physical_recipe_payload(payload))
     capabilities = tuple(sorted(set(MACHINE_CAPABILITIES.values())))
     subsets = tuple(
         frozenset(combination)

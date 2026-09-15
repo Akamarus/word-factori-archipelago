@@ -18,6 +18,16 @@ MACHINE_CAPABILITIES = {
     "oMerger3": "Merger3 Access",
     "oMerger4": "Merger4 Access",
 }
+MACHINE_ARITIES = {
+    "oBend": 1,
+    "oRotate_cw": 1,
+    "oRotate_ccw": 1,
+    "oReflect_hor": 1,
+    "oReflect_vert": 1,
+    "oMerger2": 2,
+    "oMerger3": 3,
+    "oMerger4": 4,
+}
 ORIENTATION_SUFFIXES = {
     (0, False): "", (1, False): "1", (2, False): "2", (3, False): "3",
     (0, True): "01", (1, True): "11", (2, True): "21", (3, True): "31",
@@ -123,6 +133,20 @@ class RecipeGraph:
                 if suffix == encoded:
                     return base, orientation[0], orientation[1]
         return None
+
+
+def physical_recipe_payload(payload: Mapping[str, object]) -> dict[str, object]:
+    """Return recipe data with definitions that cannot fill a machine removed."""
+    filtered = dict(payload)
+    for machine, arity in MACHINE_ARITIES.items():
+        recipes = payload.get(machine, {})
+        if isinstance(recipes, dict):
+            filtered[machine] = {
+                raw_inputs: raw_output
+                for raw_inputs, raw_output in recipes.items()
+                if len(str(raw_inputs).split()) == arity
+            }
+    return filtered
 
 
 def _clean_output(output: object) -> str:
