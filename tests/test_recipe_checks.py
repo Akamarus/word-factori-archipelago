@@ -1,4 +1,6 @@
 import base64
+import copy
+import hashlib
 import json
 import subprocess
 import sys
@@ -7,6 +9,7 @@ import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
+from unittest.mock import patch
 
 from word_factori.recipe_graph import MACHINE_CAPABILITIES
 
@@ -18,15 +21,15 @@ class RecipeCheckTests(unittest.TestCase):
     def test_catalog_covers_every_letter_recipe_with_explicit_stable_ids(self):
         from word_factori.recipe_checks import RECIPE_CHECKS
 
-        self.assertEqual(189, len(RECIPE_CHECKS))
+        self.assertEqual(187, len(RECIPE_CHECKS))
         self.assertEqual(
-            {"oBend": 24, "oMerger2": 86, "oMerger3": 60, "oMerger4": 19},
+            {"oBend": 24, "oMerger2": 86, "oMerger3": 58, "oMerger4": 19},
             Counter(check.machine for check in RECIPE_CHECKS),
         )
         self.assertTrue(all(len(check.output) == 1 and "A" <= check.output <= "Z" for check in RECIPE_CHECKS))
-        self.assertEqual(189, len({check.code for check in RECIPE_CHECKS}))
+        self.assertEqual(187, len({check.code for check in RECIPE_CHECKS}))
         self.assertTrue(all(check.code >= 975302000 for check in RECIPE_CHECKS))
-        self.assertEqual(189, len({check.name for check in RECIPE_CHECKS}))
+        self.assertEqual(187, len({check.name for check in RECIPE_CHECKS}))
 
     def test_distinct_oriented_bender_discoveries(self):
         from word_factori.recipe_checks import discovered_recipe_codes
@@ -62,6 +65,30 @@ class RecipeCheckTests(unittest.TestCase):
             {("oMerger2", ("(2", "I"), "D"), ("oMerger2", ("3", "I"), "B"), ("oMerger2", ("0", "I"), "E")},
             identities,
         )
+
+    def test_builder_excludes_recipes_that_cannot_fill_the_native_machine(self):
+        from tools.build_recipe_catalog import build_catalog
+
+        payload = {
+            "oIFactory": {"I": "I"},
+            "oMerger3": {"I N": "__M", "I I I": "N"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = build_catalog(payload, Path(directory) / "catalog.json")
+        self.assertEqual([("I", "I", "I")], [tuple(item["inputs"]) for item in catalog["recipes"]])
+
+    def test_invalid_arity_recipe_cannot_serve_as_a_reachability_intermediary(self):
+        from tools.build_recipe_catalog import build_catalog
+
+        payload = {
+            "oIFactory": {"I": "I"},
+            "oMerger3": {"I I": "M"},
+            "oBend": {"M": "A"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = build_catalog(payload, Path(directory) / "catalog.json")
+        downstream = next(item for item in catalog["recipes"] if item["output"] == "A")
+        self.assertEqual([], downstream["requirements"])
 
     def test_unknown_well_formed_recipe_and_output_are_ignored(self):
         from word_factori.recipe_checks import discovered_recipe_codes
@@ -108,6 +135,49 @@ class RecipeCheckTests(unittest.TestCase):
 
         self.assertEqual(64, len(RECIPE_CATALOG_DIGEST))
         int(RECIPE_CATALOG_DIGEST, 16)
+
+    def test_valid_digest_does_not_excuse_malformed_recipe_identity(self):
+        import word_factori.recipe_checks as recipe_checks
+
+        original = json.loads((ROOT / "word_factori" / "letter_recipes.json").read_text(encoding="utf-8"))
+
+        def bender_with_two_inputs(payload):
+            payload["recipes"][0]["inputs"] = ["I", "I"]
+
+        def token_with_embedded_whitespace(payload):
+            payload["recipes"][0]["inputs"] = ["I I"]
+
+        def noncanonical_token(payload):
+            payload["recipes"][0]["inputs"] = ["I0"]
+
+        def unsorted_merger_inputs(payload):
+            entry = next(item for item in payload["recipes"] if item["machine"] == "oMerger2")
+            entry["inputs"] = list(reversed(entry["inputs"]))
+            if entry["inputs"] == sorted(entry["inputs"]):
+                entry["inputs"] = ["Z", "A"]
+
+        def misleading_name(payload):
+            payload["recipes"][0]["name"] = "Bender recipe"
+
+        mutations = (
+            bender_with_two_inputs,
+            token_with_embedded_whitespace,
+            noncanonical_token,
+            unsorted_merger_inputs,
+            misleading_name,
+        )
+        for mutate in mutations:
+            payload = copy.deepcopy(original)
+            mutate(payload)
+            canonical = json.dumps(payload["recipes"], ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            payload["digest"] = hashlib.sha256(canonical).hexdigest()
+            with tempfile.TemporaryDirectory() as directory:
+                catalog_path = Path(directory) / "letter_recipes.json"
+                catalog_path.write_text(json.dumps(payload), encoding="utf-8")
+                resource = type("Resource", (), {"joinpath": lambda self, name: catalog_path})()
+                with self.subTest(mutation=mutate.__name__), patch.object(recipe_checks, "files", return_value=resource):
+                    with self.assertRaises(ValueError):
+                        recipe_checks._load_catalog()
 
     def test_builder_reuses_ids_for_unchanged_recipe_identities(self):
         from tools.build_recipe_catalog import build_catalog
@@ -160,7 +230,7 @@ class RecipeCheckTests(unittest.TestCase):
             sys.modules['worlds'] = worlds
             sys.modules['worlds.word_factori'] = package
             checks = importlib.import_module('worlds.word_factori.recipe_checks')
-            assert len(checks.RECIPE_CHECKS) == 189
+            assert len(checks.RECIPE_CHECKS) == 187
         """)
         completed = subprocess.run(
             [sys.executable, "-I", "-c", script],

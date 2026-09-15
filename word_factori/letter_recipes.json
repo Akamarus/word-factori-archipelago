@@ -1,5 +1,5 @@
 {
-  "digest": "7b07e1975fab1b1cf06c7ff7e32681e6dc25594b7e8aeded86ea6073d532750f",
+  "digest": "92068657b60b005e51123c8ed281be4fc93dac05a7548654755a5ccc381cc342",
   "recipes": [
     {
       "machine": "oBend",
@@ -344,16 +344,6 @@
         ],
         [
           "Bender Access",
-          "Merger3 Access",
-          "Reflection Access"
-        ],
-        [
-          "Bender Access",
-          "Merger3 Access",
-          "Rotation Access"
-        ],
-        [
-          "Bender Access",
           "Merger4 Access",
           "Reflection Access"
         ],
@@ -455,16 +445,6 @@
         [
           "Bender Access",
           "Merger2 Access",
-          "Rotation Access"
-        ],
-        [
-          "Bender Access",
-          "Merger3 Access",
-          "Reflection Access"
-        ],
-        [
-          "Bender Access",
-          "Merger3 Access",
           "Rotation Access"
         ],
         [
@@ -2276,11 +2256,6 @@
       "hidden": true,
       "requirements": [
         [
-          "Bender Access",
-          "Merger3 Access",
-          "Rotation Access"
-        ],
-        [
           "Merger2 Access",
           "Merger3 Access",
           "Rotation Access"
@@ -2290,6 +2265,12 @@
           "Merger2 Access",
           "Merger3 Access",
           "Reflection Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Merger4 Access",
+          "Rotation Access"
         ]
       ],
       "code": 975302115,
@@ -2817,7 +2798,14 @@
       "hidden": true,
       "requirements": [
         [
+          "Merger2 Access",
           "Merger3 Access",
+          "Rotation Access"
+        ],
+        [
+          "Bender Access",
+          "Merger3 Access",
+          "Merger4 Access",
           "Rotation Access"
         ]
       ],
@@ -2929,11 +2917,6 @@
       "output": "B",
       "hidden": true,
       "requirements": [
-        [
-          "Bender Access",
-          "Merger3 Access",
-          "Rotation Access"
-        ],
         [
           "Merger2 Access",
           "Merger3 Access",
@@ -3086,22 +3069,6 @@
       "machine": "oMerger3",
       "inputs": [
         "I",
-        "N"
-      ],
-      "output": "M",
-      "hidden": true,
-      "requirements": [
-        [
-          "Merger3 Access"
-        ]
-      ],
-      "code": 975302151,
-      "name": "Merger3: [I, N] -> M"
-    },
-    {
-      "machine": "oMerger3",
-      "inputs": [
-        "I",
         "U1",
         "U1"
       ],
@@ -3159,23 +3126,6 @@
       ],
       "code": 975302154,
       "name": "Merger3: [I, V1, V1] -> B"
-    },
-    {
-      "machine": "oMerger3",
-      "inputs": [
-        "I",
-        "Z1"
-      ],
-      "output": "M",
-      "hidden": true,
-      "requirements": [
-        [
-          "Merger3 Access",
-          "Rotation Access"
-        ]
-      ],
-      "code": 975302155,
-      "name": "Merger3: [I, Z1] -> M"
     },
     {
       "machine": "oMerger3",

@@ -24,6 +24,16 @@ MACHINE_NAMES = {
     "oMerger3": "Merger3",
     "oMerger4": "Merger4",
 }
+MACHINE_ARITIES = {
+    "oBend": 1,
+    "oRotate_cw": 1,
+    "oRotate_ccw": 1,
+    "oReflect_hor": 1,
+    "oReflect_vert": 1,
+    "oMerger2": 2,
+    "oMerger3": 3,
+    "oMerger4": 4,
+}
 
 
 def _identity(item: Mapping[str, object]) -> tuple[str, tuple[str, ...], str]:
@@ -79,7 +89,16 @@ def _native_token(token: str, payload: Mapping[str, object]) -> str:
 
 
 def build_catalog(payload: Mapping[str, object], output_path: Path) -> dict[str, object]:
-    graph = RecipeGraph.from_payload(payload)
+    mechanics_payload = dict(payload)
+    for machine, arity in MACHINE_ARITIES.items():
+        recipes = payload.get(machine, {})
+        if isinstance(recipes, dict):
+            mechanics_payload[machine] = {
+                raw_inputs: raw_output
+                for raw_inputs, raw_output in recipes.items()
+                if len(str(raw_inputs).split()) == arity
+            }
+    graph = RecipeGraph.from_payload(mechanics_payload)
     capabilities = tuple(sorted(set(MACHINE_CAPABILITIES.values())))
     subsets = tuple(
         frozenset(combination)
@@ -99,6 +118,8 @@ def build_catalog(payload: Mapping[str, object], output_path: Path) -> dict[str,
             if len(cleaned_output) != 1 or not ("A" <= cleaned_output <= "Z"):
                 continue
             inputs = tuple(sorted(_native_token(token, payload) for token in str(raw_inputs).split()))
+            if len(inputs) != MACHINE_ARITIES[machine]:
+                continue
             solutions = [
                 owned
                 for owned in subsets

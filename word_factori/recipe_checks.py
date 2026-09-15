@@ -2,11 +2,26 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from importlib.resources import files
 from typing import Mapping
 
 from .recipe_graph import MACHINE_CAPABILITIES
+
+
+_MACHINE_NAMES = {
+    "oBend": "Bender",
+    "oMerger2": "Merger2",
+    "oMerger3": "Merger3",
+    "oMerger4": "Merger4",
+}
+_MACHINE_ARITIES = {"oBend": 1, "oMerger2": 2, "oMerger3": 3, "oMerger4": 4}
+_CANONICAL_TOKEN = re.compile(r"\S(?:[123]|[0-3]1)?").fullmatch
+
+
+def _recipe_name(machine: str, inputs: tuple[str, ...], output: str) -> str:
+    return f"{_MACHINE_NAMES[machine]}: [{', '.join(inputs)}] -> {output}"
 
 
 @dataclass(frozen=True)
@@ -40,12 +55,20 @@ def _load_catalog() -> tuple[tuple[RecipeCheck, ...], str]:
         inputs, output, hidden, requirements = item["inputs"], item["output"], item["hidden"], item["requirements"]
         if not isinstance(code, int) or code < 975302000 or not isinstance(name, str) or not name:
             raise ValueError("recipe catalog code or name is invalid")
-        if machine not in {"oBend", "oMerger2", "oMerger3", "oMerger4"}:
+        if machine not in _MACHINE_NAMES:
             raise ValueError("recipe catalog machine is invalid")
-        if not isinstance(inputs, list) or not inputs or not all(isinstance(token, str) and token for token in inputs):
+        if (
+            not isinstance(inputs, list)
+            or len(inputs) != _MACHINE_ARITIES[machine]
+            or not all(isinstance(token, str) and _CANONICAL_TOKEN(token) is not None for token in inputs)
+            or inputs != sorted(inputs)
+        ):
             raise ValueError("recipe catalog inputs are invalid")
         if not isinstance(output, str) or len(output) != 1 or not ("A" <= output <= "Z") or not isinstance(hidden, bool):
             raise ValueError("recipe catalog output or visibility is invalid")
+        input_tuple = tuple(inputs)
+        if name != _recipe_name(machine, input_tuple, output):
+            raise ValueError("recipe catalog name does not match its identity")
         if not isinstance(requirements, list) or not requirements:
             raise ValueError("recipe catalog requirements are invalid")
         options: list[frozenset[str]] = []
@@ -60,17 +83,19 @@ def _load_catalog() -> tuple[tuple[RecipeCheck, ...], str]:
             options.append(frozen)
         if any(left < right for left in options for right in options):
             raise ValueError("recipe catalog requirements contain a non-minimal option")
-        checks.append(RecipeCheck(code, name, machine, tuple(inputs), output, tuple(options)))
+        checks.append(RecipeCheck(code, name, machine, input_tuple, output, tuple(options)))
         hidden_count += hidden
 
-    expected_counts = {"oBend": 24, "oMerger2": 86, "oMerger3": 60, "oMerger4": 19}
+    expected_counts = {"oBend": 24, "oMerger2": 86, "oMerger3": 58, "oMerger4": 19}
     actual_counts = {machine: sum(check.machine == machine for check in checks) for machine in expected_counts}
-    if len(checks) != 189 or actual_counts != expected_counts or hidden_count != 121:
+    if len(checks) != 187 or actual_counts != expected_counts or hidden_count != 119:
         raise ValueError("recipe catalog does not match the expected letter recipe inventory")
     if len({check.code for check in checks}) != len(checks) or len({check.name for check in checks}) != len(checks):
         raise ValueError("recipe catalog contains duplicate codes or names")
     if len({(check.machine, check.inputs, check.output) for check in checks}) != len(checks):
         raise ValueError("recipe catalog contains duplicate recipe identities")
+    if len({(check.machine, " ".join(check.inputs), check.output) for check in checks}) != len(checks):
+        raise ValueError("recipe catalog contains duplicate observation keys")
     return tuple(checks), digest
 
 
