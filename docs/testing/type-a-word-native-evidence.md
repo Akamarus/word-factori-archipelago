@@ -148,11 +148,11 @@ This change adds only authored development tooling, safety tests and this note.
 ## Native enforcement gate (Task 2)
 
 The isolated candidate compiled, reopened, and exited 0 on 2026-09-15.
-Final scratch: `typeword-enforcement-20260915-r6` under the same external
+Final scratch: `typeword-enforcement-20260915-r8` under the same external
 `probe-tools` directory. The nonce-bound result reports
-`enforcement_supported: true`, **50/50 assertions: 40 native_function and
+`enforcement_supported: true`, **51/51 assertions: 41 native_function and
 10 native_production**. Patched test SHA256:
-`b8ed830420aa4375c385733d01b14e7671e858a31e26c722fff341393e1008f5`.
+`d9f9aec4f974844aa10f000fc1ffdd99697562aeccfbc70edba34a452a305235`.
 This is feasibility evidence for review; no distributable patch or production
 APWorld, client, runtime snapshot, receipt, or installation changed.
 
@@ -208,7 +208,12 @@ an authored array-literal accessor; r3 was the initial 46/46 GREEN and r4 added
 integer-token and campaign-cap checks. Controller clarification established
 Bender as guaranteed precollected starting equipment. r5 added the fallback
 assertion and failed ten native tests; r6 changed safe fallback to I plus Bender
-and passed all 50. Only r6 is the final acceptance result.
+and passed all 50. Review then strengthened same-room cache retention: a
+received Merger2 must remain unlocked after its snapshot disappears, making the
+expectation distinct from safe fallback. In r7, temporarily disabling cache
+restoration caused exactly this assertion to fail (1/51 failures), with
+Merger2 returning 0. Restoring the unchanged helper passed 51/51 in r8, with
+Merger2 remaining -1. Only r8 is the final acceptance result.
 
 ### Minimal confirmed native hook surface
 
@@ -280,6 +285,9 @@ Building production; no injected win logic substitutes for production.
 
 Python TDD: four new expected failures before enforcement runner implementation;
 then 19 focused tests passed with one symlink-privilege skip. Native r2 RED and
-r6 GREEN evidence above is retained outside all Git repositories.
+r8 GREEN evidence above is retained outside all Git repositories.
 Final full suite after the starting-equipment correction: 525 tests in
 58.949 seconds, OK with two skips. No production artifacts were changed.
+The review strengthening changed only the native acceptance fixture and this
+evidence: focused Python tests and native compile/reopen/run were repeated;
+the controller did not require another full-suite run for that fixture change.

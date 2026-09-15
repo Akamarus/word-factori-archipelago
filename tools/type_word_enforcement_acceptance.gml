@@ -66,8 +66,13 @@ try {
     wf_probe_gate.context=undefined; enter_probe();
     record_test("missing context fails closed",limits_are_safe(),"native_function");
     wf_probe_gate.context=clone(context); wf_probe_gate.payload=clone(payload); wf_probe_gate.last=undefined;
-    enter_probe(); wf_probe_gate.payload=undefined; enter_probe();
-    record_test("validated same-room inventory retained",limits_are_safe() && get_current_module_count("Bend")==-1,"native_function");
+    wf_probe_gate.payload.probe_family_counts.Merger2=-1; enter_probe();
+    record_test("same-room cache starts with Merger2 unlocked",get_current_module_count("Merger2")==-1,"native_function");
+    wf_probe_gate.payload=undefined; enter_probe();
+    record_test("validated same-room inventory retained",get_current_module_count("Merger2")==-1
+        && get_current_module_count("IFactory")==-1 && get_current_module_count("Bend")==-1
+        && get_current_module_count("Rotate_cw")==0,"native_function");
+    snapshot("retained_same_room",current_module_counts);
     wf_probe_gate.payload=clone(payload); wf_probe_gate.payload.revision=2;
     wf_probe_gate.payload.probe_family_counts.Merger2=-1; enter_probe();
     record_test("previous room has Merger2 unlocked",get_current_module_count("Merger2")==-1,"native_function");
