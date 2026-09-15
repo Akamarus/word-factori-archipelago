@@ -1,6 +1,6 @@
-# Linux setup with Steam Proton (1.4.1, experimental)
+# Linux setup with Steam Proton (1.4.2, experimental)
 
-Download the **[1.4.1 player package](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.1)**,
+Download the **[1.4.2 player package](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.2)**,
 which includes **Install Word Factori Archipelago.sh** alongside the Windows installer.
 Automated Windows and Ubuntu checks pass, but Linux support has **not been validated
 in a real Linux/Proton playthrough**. Do not describe it as stable support yet.

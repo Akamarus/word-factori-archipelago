@@ -6,16 +6,18 @@ An experimental public beta for playing **Word Factori** with [Archipelago](http
 
 ![Word Factori with the integrated Archipelago Chat panel open](docs/images/word-factori-archipelago-chat.png)
 
-## New in 1.4.1: experimental Linux/Proton setup
+## New in 1.4.2: Linux installation fixes
 
-**[Download the 1.4.1 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.1).** One player ZIP now includes Windows and native Linux installers. Linux uses the regular Archipelago client while Steam runs Word Factori through Proton. Automated Windows and Ubuntu checks pass, but a real Linux/Proton playthrough has **not** been verified. This is a tester prerelease, not a stable release.
+Linux setup now accepts both native Archipelago user-world folder names (`worlds` and `custom_worlds`), resolves selected Archipelago directory shortcuts, and uses the same path validation in the installer and client. This fixes the folder rejection and the misleading patch-receipt error reported with 1.4.1. Close the game and Archipelago, extract the new ZIP into a separate folder, and rerun its unmodified installer. Do not delete your saves or original-game backup. Generation performance is unchanged.
+
+**[Download the 1.4.2 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.2).** One player ZIP now includes Windows and native Linux installers. Linux uses the regular Archipelago client while Steam runs Word Factori through Proton. Automated Windows and Ubuntu checks pass, but a real Linux/Proton playthrough has **not** been verified. This is a tester prerelease, not a stable release.
 
 ### Current gameplay
 
 - **No World Access items in new seeds.** Your machines and recipe requirements determine which puzzles you can solve, alongside page progression.
 - **I stays available in every level.** Discovery Labs still restrict machine types, and challenge factories retain their machine limits.
 - **Shuffled pages from the start.** The first page is randomized, all six levels on an unlocked page are selectable, and four completions advance. New machines apply when you return to Levels and re-enter a factory, without restarting the game.
-- **New rooms start with an empty mod save.** The 1.4.0 campaign contract is unchanged in 1.4.1, so an existing matching 1.4.0 room does not require a reset. Pre-1.4.0 rooms remain unsupported; updating does not convert them.
+- **New rooms start with an empty mod save.** The 1.4.0 campaign contract is unchanged in 1.4.2, so an existing matching 1.4.0 room does not require a reset. Pre-1.4.0 rooms remain unsupported; updating does not convert them.
 
 There is one integration: enhanced, shuffled, machine-only progression. The player package includes the APWorld, JSON mod, and required reversible native delta patch. There are no integration-mode or fixed-layout choices. Live acceptance remains pending, and in-game missing-machine notices are still planned.
 
@@ -68,11 +70,11 @@ Letters are always manufactured inside Word Factori. Archipelago never sends ind
 
 The required Word Factori depot is Steam build **12616577**, with the exact original `data.win` verified by the installer. Other builds and other binary modifications are rejected.
 
-For a new playthrough, generate a room with the matching APWorld and client and use a **fresh empty mod save**. Updating a matching 1.4.0 room to 1.4.1 does not require resetting its bound save. Pre-1.4.0 rooms and earlier development rooms with a different progression contract remain unsupported.
+For a new playthrough, generate a room with the matching APWorld and client and use a **fresh empty mod save**. Updating a matching 1.4.0 room to 1.4.2 does not require resetting its bound save. Pre-1.4.0 rooms and earlier development rooms with a different progression contract remain unsupported.
 
 ## Simple installation
 
-Download the single **[word-factori-archipelago-1.4.1.zip player package](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.1/word-factori-archipelago-1.4.1.zip)** for either platform. Use this ZIP, not GitHub's automatic source-code archives.
+Download the single **[word-factori-archipelago-1.4.2.zip player package](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.2/word-factori-archipelago-1.4.2.zip)** for either platform. Use this ZIP, not GitHub's automatic source-code archives.
 
 ### Windows
 
@@ -278,7 +280,7 @@ Complete any four levels on the current full page, including page one. If the th
 
 ## Current limitations
 
-- Version 1.4.1 is a tester prerelease; machine-only progression still needs a full connected in-game playthrough.
+- Version 1.4.2 is a tester prerelease; machine-only progression still needs a full connected in-game playthrough.
 - Linux setup and client behavior have automated Ubuntu coverage, but a real Linux/Proton playthrough remains unverified. Linux does not have the Windows in-game overlay.
 - Arbitrary Workshop packs are not imported into generated seeds.
 - Progressive machine quantities are deferred until a quantity-aware layout solver exists.

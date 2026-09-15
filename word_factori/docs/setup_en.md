@@ -1,13 +1,13 @@
 # Word Factori Experimental Multiworld Setup
 
-Version **[1.4.1 is a tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.1)** with a full connected playthrough still pending. It uses one integration: enhanced, shuffled, machine-only progression. There is no integration-mode or fixed-layout selector. New rooms need a **fresh empty mod save**. The 1.4.0 campaign contract is unchanged, so updating a matching 1.4.0 room does not require resetting its bound save. Pre-1.4.0 rooms remain unsupported.
+Version **[1.4.2 is a tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.2)** with a full connected playthrough still pending. It uses one integration: enhanced, shuffled, machine-only progression. There is no integration-mode or fixed-layout selector. New rooms need a **fresh empty mod save**. The 1.4.0 campaign contract is unchanged, so updating a matching 1.4.0 room does not require resetting its bound save. Pre-1.4.0 rooms remain unsupported.
 
 ## Install on Windows
 
 The same player ZIP supports Windows and experimental Linux/Proton setup.
 Linux instructions follow the Windows section below.
 
-1. Download and extract **[word-factori-archipelago-1.4.1.zip](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.1/word-factori-archipelago-1.4.1.zip)**, the single player package. Do not use GitHub's automatic source-code archives.
+1. Download and extract **[word-factori-archipelago-1.4.2.zip](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.4.2/word-factori-archipelago-1.4.2.zip)**, the single player package. Do not use GitHub's automatic source-code archives.
 2. Close Word Factori and Archipelago.
 3. Double-click the root **Install Word Factori Archipelago.cmd**. It installs the APWorld and mod, verifies the original game, preserves a backup, and applies the required native delta patch.
 4. If prompted, select `data.win` from your Word Factori installation (Steam → Manage → Browse local files).
@@ -28,7 +28,7 @@ For an update, close the game and Archipelago and double-click the same installe
 
 Use the regular native client for items, chat, hints, and connection status. The in-game overlay is Windows-only. Do not run the Windows installer through Wine or use sudo. To update, close the game and Archipelago and rerun the Linux command.
 
-See the bundled `docs/linux-proton.md` or [full Linux guide](https://github.com/Akamarus/word-factori-archipelago/blob/v1.4.1/docs/linux-proton.md) for manual paths, verify, restore, uninstall, and recovery. Automated Ubuntu tests pass, but a **real Linux/Proton playthrough remains unverified**.
+See the bundled `docs/linux-proton.md` or [full Linux guide](https://github.com/Akamarus/word-factori-archipelago/blob/v1.4.2/docs/linux-proton.md) for manual paths, verify, restore, uninstall, and recovery. Automated Ubuntu tests pass, but a **real Linux/Proton playthrough remains unverified**.
 
 ## Generate and play
 
