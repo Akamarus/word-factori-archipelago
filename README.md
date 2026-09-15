@@ -12,7 +12,26 @@ Linux setup now accepts both native Archipelago user-world folder names (`worlds
 
 **[Download the 1.4.2 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.2).** One player ZIP now includes Windows and native Linux installers. Linux uses the regular Archipelago client while Steam runs Word Factori through Proton. Automated Windows and Ubuntu checks pass, but a real Linux/Proton playthrough has **not** been verified. This is a tester prerelease, not a stable release.
 
-> **Development-only recipe checks:** this source checkout can add optional Recipe Journal locations. They are **not included in the published 1.4.2 package**. A recipe-enabled seed needs the matching development APWorld and client, a newly generated room, and a fresh empty save bound to that room. Do not use the 1.4.2 download links above for such a seed.
+## UNRELEASED 1.5.0 development candidate
+
+This feature branch adds optional Type-a-Word orders, Recipe Journal checks, and authoritative room reconstruction for Universal Tracker. These features are **not in the public 1.4.2 download above**. The locally built 1.5.0 package is unpublished; connected game/client, disk restart, live Universal Tracker, and Linux/Proton acceptance remain pending.
+
+Type-a-Word orders are extra checks for manufacturing selected target words in the native free-word factory. They add filler items, no new machine items, and do not count toward campaign victory or unlock page arrows. I remains a starting source. Reachability uses machine-family requirements for each letter; it does not model machine quantities. Inspect selected orders and status with `/wf_words`.
+
+To opt in, generate a fresh room with the matching development APWorld/client and bind a fresh empty save:
+
+```yaml
+Word Factori:
+  type_a_word_checks: true
+  type_a_word_count: 3
+  type_a_word_words: [JACK, FACTORY, PUZZLE, ISLAND]
+```
+
+Defaults are checks off, count 5, and an empty list. Count is 1–20; provide at most 200 entries of 2–12 ASCII letters each, with enough unique words for the requested count. Surrounding whitespace is trimmed, letters uppercased, duplicates removed, and words sorted before seeded sampling. Disabled orders require no word list and create no locations. Older compatible room contracts without order fields keep orders disabled; changing local YAML cannot add orders to an existing room. Universal Tracker reconstructs the saved room orders rather than resampling local YAML.
+
+The development package retains the Windows **Install Word Factori Archipelago.cmd** and Linux **Install Word Factori Archipelago.sh** entry points described below. Close the game and Archipelago before setup. Its `enhanced_v2` patch upgrades the recognized legacy patch only with a verified original backup; unknown game bytes or a damaged/missing required backup are rejected. Restore and rollback preserve the original backup and saves. Restart Archipelago after installing the APWorld. During play, new machines apply by returning to Levels and entering a factory, without a game restart.
+
+**Custom-building restriction:** native custom-building production and previews are blocked in the AP mod, including saved custom buildings. Layouts are kept. Ordinary saved factories resume when their required machine families unlock. Arbitrary Workshop import remains unsupported.
 
 ### Current gameplay
 

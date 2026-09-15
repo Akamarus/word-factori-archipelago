@@ -243,7 +243,7 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         pinned_hash.start()
         self.addCleanup(pinned_hash.stop)
         (self.ctx.mod_folder / RECEIPT_NAME).write_text(json.dumps({
-            "protocol": PATCH_PROTOCOL, "original_sha256": ORIGINAL_SHA256,
+            "protocol": PATCH_PROTOCOL, "capability": "free_word_machine_enforcement_v1", "original_sha256": ORIGINAL_SHA256,
             "patched_sha256": hashlib.sha256(data.read_bytes()).hexdigest(), "game_data": str(data.resolve()),
         }))
         return data

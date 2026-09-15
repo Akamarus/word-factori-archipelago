@@ -23,6 +23,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.game = self.root / 'game' / 'data.win'
         self.game.parent.mkdir()
         self.original, self.patched = b'original game bytes', b'original PATCHED game bytes'
+        self.legacy = b'legacy patched game bytes'
         self.game.write_bytes(self.original)
         self.prefix = self.root / 'pfx'
         self.factori = self.prefix / 'drive_c/users/steamuser/AppData/Local/factori'
@@ -43,7 +44,7 @@ class LinuxInstallerTests(unittest.TestCase):
             archive.writestr('word_factori/__init__.py', '# fixture')
         original_hash = hashlib.sha256(self.original).hexdigest()
         patched_hash = hashlib.sha256(self.patched).hexdigest()
-        delta = {'format': 1, 'protocol': 'enhanced_v1', 'original_sha256': original_hash,
+        delta = {'format': 1, 'protocol': 'enhanced_v2', 'capability': 'free_word_machine_enforcement_v1', 'original_sha256': original_hash,
                  'patched_sha256': patched_hash, 'size': len(self.patched),
                  'operations': [['copy', 0, 9], ['data', base64.b64encode(b'PATCHED game bytes').decode()]]}
         compressed = gzip.compress(json.dumps(delta).encode())
@@ -53,6 +54,9 @@ class LinuxInstallerTests(unittest.TestCase):
             override = patch.object(installer, name, value)
             override.start()
             self.addCleanup(override.stop)
+        override = patch.object(installer, 'LEGACY_PATCHED_SHA256', hashlib.sha256(self.legacy).hexdigest(), create=True)
+        override.start()
+        self.addCleanup(override.stop)
         self.paths = installer.paths_api.InstallationPaths(self.game, self.prefix, self.factori)
         self.setup = installer.LinuxInstaller(self.paths, self.worlds, self.config,
                                               self.package, process_reader=lambda: [])
@@ -60,6 +64,70 @@ class LinuxInstallerTests(unittest.TestCase):
     def snapshot(self):
         return {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()
                 and 'install-transactions' not in p.parts and not p.name.startswith('.wf-ap-')}
+
+    def legacy_installation(self):
+        self.game.write_bytes(self.legacy)
+        self.setup.backup.write_bytes(self.original)
+        self.setup.receipt.parent.mkdir(parents=True, exist_ok=True)
+        self.setup.receipt.write_text(json.dumps({'protocol': 'enhanced_v1',
+            'original_sha256': installer.ORIGINAL_SHA256, 'patched_sha256': installer.LEGACY_PATCHED_SHA256,
+            'game_data': str(self.game)}))
+
+    def test_legacy_upgrade_has_enforcement_receipt_and_verified_original(self):
+        self.legacy_installation()
+        self.setup.run('install')
+        self.assertEqual(self.patched, self.game.read_bytes())
+        self.assertEqual(self.original, self.setup.backup.read_bytes())
+        receipt = json.loads(self.setup.receipt.read_text())
+        self.assertEqual('enhanced_v2', receipt['protocol'])
+        self.assertEqual('free_word_machine_enforcement_v1', receipt['capability'])
+        self.setup.run('restore')
+        self.assertEqual(self.original, self.game.read_bytes())
+
+    def test_legacy_missing_and_corrupt_backup_refuse_without_writes(self):
+        self.legacy_installation()
+        for payload in (None, b'bad backup'):
+            if payload is None:
+                self.setup.backup.unlink()
+            else:
+                self.setup.backup.write_bytes(payload)
+            before = self.snapshot()
+            with self.assertRaisesRegex(ValueError, 'backup'):
+                self.setup.run('install')
+            self.assertEqual(before, self.snapshot())
+
+    def test_legacy_interruption_recovers_previous_game_and_receipt(self):
+        self.legacy_installation()
+        before = self.snapshot()
+        original_replace = installer.transaction.os.replace
+        def interrupt_after_game(source, target):
+            original_replace(source, target)
+            if Path(target) == self.game:
+                raise KeyboardInterrupt()
+        with patch.object(installer.transaction.os, 'replace', side_effect=interrupt_after_game):
+            with self.assertRaises(KeyboardInterrupt):
+                self.setup.run('install')
+        self.assertEqual(self.patched, self.game.read_bytes())
+        self.setup.run('recover')
+        self.assertEqual(before, self.snapshot())
+
+    def test_legacy_upgrade_rejects_original_backup_alias_without_writes(self):
+        self.legacy_installation()
+        os.link(self.setup.backup, self.root / 'original-alias')
+        before = self.snapshot()
+        with self.assertRaises(ValueError):
+            self.setup.run('install')
+        self.assertEqual(before, self.snapshot())
+
+    def test_current_receipt_requires_capability(self):
+        self.setup.run('install')
+        document = json.loads(self.setup.receipt.read_text())
+        document.pop('capability')
+        self.setup.receipt.write_text(json.dumps(document))
+        before = self.snapshot()
+        with self.assertRaisesRegex(ValueError, 'Receipt'):
+            self.setup.run('verify')
+        self.assertEqual(before, self.snapshot())
 
     def test_worlds_install_receipt_is_accepted_by_client_and_lifecycle(self):
         from word_factori import enhanced_runtime as runtime
@@ -478,7 +546,7 @@ class LinuxInstallerTests(unittest.TestCase):
         setup = installer.LinuxInstaller(paths, self.worlds, self.config, self.package,
                                          process_reader=lambda: [])
         setup.run('install')
-        receipt = {'protocol': 'enhanced_v1', 'original_sha256': installer.ORIGINAL_SHA256,
+        receipt = {'protocol': 'enhanced_v2', 'capability': 'free_word_machine_enforcement_v1', 'original_sha256': installer.ORIGINAL_SHA256,
                    'patched_sha256': installer.PATCHED_SHA256,
                    'game_data': 'C:\\Games\\Word Factori\\data.win'}
         setup.receipt.write_text(json.dumps(receipt))
@@ -498,7 +566,7 @@ class LinuxInstallerTests(unittest.TestCase):
         mappings = self.prefix / 'dosdevices'
         mappings.mkdir()
         (mappings / 'z:').symlink_to('/', target_is_directory=True)
-        receipt = {'protocol': 'enhanced_v1', 'original_sha256': installer.ORIGINAL_SHA256,
+        receipt = {'protocol': 'enhanced_v2', 'capability': 'free_word_machine_enforcement_v1', 'original_sha256': installer.ORIGINAL_SHA256,
                    'patched_sha256': installer.PATCHED_SHA256,
                    'game_data': 'Z:' + str(self.game).replace('/', '\\')}
         self.setup.receipt.write_text(json.dumps(receipt))

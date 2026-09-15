@@ -16,7 +16,7 @@ RELEASE_ARCHIVE = ROOT / f"word-factori-archipelago-{VERSION}.zip"
 RELEASE_MANIFEST = ROOT / "release-manifest.json"
 PATCH_FILE = ROOT / "tools/enhanced.patch.gz"
 # Independently round-tripped against the verified original and patched game.
-PATCH_SHA256 = "5101e3172ecb171e36fce4e08c40b68d4cff077d8ef72452f988e010b1e03c5b"
+PATCH_SHA256 = "b698f7bd432fb5982a731188ab4a3c3a7e9e9cf41884a2c9e4696ff128e5adba"
 WORLD_SOURCE_NAMES = (
     "word_factori/Components.py",
     "word_factori/__init__.py",
@@ -50,6 +50,8 @@ WORLD_SOURCE_NAMES = (
     "word_factori/save.py",
     "word_factori/version.py",
     "word_factori/window_tracker.py",
+    "word_factori/word_orders.py",
+    "word_factori/data/alphabet_requirements.json",
 )
 WORLD_SOURCE_FILES = tuple(ROOT / name for name in WORLD_SOURCE_NAMES)
 PROHIBITED_RELEASE_BASENAMES = {
@@ -79,6 +81,9 @@ def include(path: Path) -> bool:
         and folded_parts[:2] != ("docs", "superpowers")
         and folded_parts[:2] != ("docs", "testing")
         and "__pycache__" not in folded_parts
+        and "probe-tools" not in folded_parts
+        and "codeentries" not in folded_parts
+        and not path.name.casefold().endswith((".win", ".gml", ".save"))
         and path.name.casefold() not in PROHIBITED_RELEASE_BASENAMES
         and not path.name.casefold().endswith((".pyc", ".pyo"))
         and not (len(parts) >= 2 and parts[0] == "tests" and parts[1].startswith("output"))
@@ -115,6 +120,8 @@ def write_release() -> None:
     files = sorted(set(path for path in files if include(path) and path != RELEASE_MANIFEST))
     manifest = {
         "format": 1,
+        "release_status": "UNRELEASED development",
+        "world_version": VERSION,
         "files": {
             path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in files

@@ -233,7 +233,7 @@ class IdentityExtractionTests(unittest.TestCase):
             # AP 0.6.7 materializes this sequence as a tuple in real multidata.
             "level_order": ("owl-second", "cat-first"),
             "layout_digest": "a" * 64,
-            "implementation_version": "1.4.2",
+            "implementation_version": "1.5.0",
             "level_set": "core_campaign",
             "goal": 0,
             "campaign_count": 25,
@@ -260,7 +260,7 @@ class IdentityExtractionTests(unittest.TestCase):
         self.assertEqual(identity.layout_digest, "a" * 64)
         self.assertEqual(identity.stable_keys, frozenset({"owl-second", "cat-first"}))
         self.assertEqual(identity.ap_ids, frozenset({975301001, 975301002}))
-        self.assertEqual(identity.implementation_version, "1.4.2")
+        self.assertEqual(identity.implementation_version, "1.5.0")
         self.assertEqual(identity.level_set, "core_campaign")
         self.assertEqual(getattr(identity, "goal", None), 0)
         self.assertEqual(getattr(identity, "campaign_count", None), 25)
@@ -289,7 +289,7 @@ class IdentityExtractionTests(unittest.TestCase):
             layout_digest="a" * 64,
             stable_keys=frozenset(location.stable_key for location in canonical_locations),
             ap_ids=frozenset(location.code for location in canonical_locations),
-            implementation_version="1.4.2",
+            implementation_version="1.5.0",
             level_set=case.level_set,
             location_names=tuple(location.name for location in canonical_locations),
             goal=0,
@@ -337,7 +337,7 @@ class IdentityExtractionTests(unittest.TestCase):
         slot_data = {
             "level_order": ["cat-first"],
             "layout_digest": "a" * 64,
-            "implementation_version": "1.4.2",
+            "implementation_version": "1.5.0",
             "level_set": "core_campaign",
             "goal": 0,
             "campaign_count": 25,
@@ -385,7 +385,7 @@ class IdentityExtractionTests(unittest.TestCase):
         slot_data = {
             "level_order": ["cat-first"],
             "layout_digest": "a" * 64,
-            "implementation_version": "1.4.2",
+            "implementation_version": "1.5.0",
             "level_set": "core_campaign",
             "goal": 0,
             "campaign_count": 25,
@@ -531,7 +531,7 @@ if a.seed == 13001:
     order[:2] = list(reversed(order[:2]))
 by_key = {location.stable_key: location for location in canonical}
 slot = {"level_order": order, "layout_digest": ("a" if a.seed != 13001 else "b") * 64,
-        "implementation_version": "1.4.2",
+        "implementation_version": "1.5.0",
         "level_set": level_set, "goal": goal, "campaign_count": 25,
         "level_count": level_count, "layout_algorithm": "enhanced_balanced_pages_v1",
         "integration_mode": "enhanced", "progression_model": "machines_enhanced_four_of_six_v1",
@@ -578,7 +578,7 @@ a = p.parse_args()
 assert a.spoiler == 3 and a.skip_prog_balancing
 assert list(Path(a.player_files_path).glob("*.yaml"))
 slot = {"level_order": ["cat", "owl"], "layout_digest": "d" * 64,
-        "implementation_version": "1.4.2", "level_set": "core_campaign",
+        "implementation_version": "1.5.0", "level_set": "core_campaign",
         "goal": 0, "campaign_count": 25, "level_count": 2,
         "layout_algorithm": "enhanced_balanced_pages_v1",
         "integration_mode": "enhanced", "progression_model": "machines_enhanced_four_of_six_v1",
@@ -637,7 +637,7 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
             "layout_digest": "a" * 64,
             "stable_keys": frozenset(location.stable_key for location in canonical_locations),
             "ap_ids": frozenset(location.code for location in canonical_locations),
-            "implementation_version": "1.4.2",
+            "implementation_version": "1.5.0",
             "level_set": "discovery_labs",
             "location_names": tuple(location.name for location in canonical_locations),
             "goal": 1,
@@ -721,7 +721,7 @@ order = [f"core-{index}" for index in range(30)]
 slot = {
     "level_order": order,
     "layout_digest": "a" * 64,
-    "implementation_version": "1.4.2",
+    "implementation_version": "1.5.0",
     "level_set": "core_campaign",
     "goal": 0,
     "campaign_count": 25,
@@ -779,7 +779,7 @@ a = p.parse_args()
 slot = {
     "level_order": ["cat"],
     "layout_digest": "a" * 64,
-    "implementation_version": "1.4.2",
+    "implementation_version": "1.5.0",
     "level_set": "core_campaign",
     "goal": 0,
     "campaign_count": 25,
@@ -841,7 +841,7 @@ goal = 1 if "goal: final_factory" in yaml else 0
 canonical = list(locations_for_level_set("core_campaign"))
 order = [location.stable_key for location in canonical]
 slot = {"level_order": order, "layout_digest": ("a" if a.seed == 13000 else "b") * 64,
-        "implementation_version": "1.4.2", "level_set": "core_campaign",
+        "implementation_version": "1.5.0", "level_set": "core_campaign",
         "goal": goal, "campaign_count": 25, "level_count": 30,
         "layout_algorithm": "enhanced_balanced_pages_v1",
         "integration_mode": "enhanced", "progression_model": "machines_enhanced_four_of_six_v1",
@@ -921,7 +921,7 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
                     "requested_layout_algorithm": "enhanced_balanced_pages_v1",
                     "requested_integration_mode": "enhanced",
                     "requested_progression_model": "machines_enhanced_four_of_six_v1",
-                    "requested_implementation_version": "1.4.2",
+                    "requested_implementation_version": "1.5.0",
                     "generated_level_set": "core_campaign",
                     "generated_goal": 0,
                     "generated_campaign_count": 25,
@@ -930,7 +930,7 @@ with zipfile.ZipFile(out / "AP_fake.zip", "w") as z:
                     "generated_layout_algorithm": "enhanced_balanced_pages_v1",
                     "generated_integration_mode": "enhanced",
                     "generated_progression_model": "machines_enhanced_four_of_six_v1",
-                    "generated_implementation_version": "1.4.2",
+                    "generated_implementation_version": "1.5.0",
                     "identity_validation": "Pass",
                     "canonical_identity_validation": "Pass",
                 },

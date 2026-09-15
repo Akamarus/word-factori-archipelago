@@ -31,7 +31,7 @@ def build_delta(original: bytes, patched: bytes) -> dict:
         literal_start = cursor
     if literal_start < len(patched):
         operations.append(["data", base64.b64encode(patched[literal_start:]).decode("ascii")])
-    return {"format": 1, "protocol": "enhanced_v1", "original_sha256": hashlib.sha256(original).hexdigest(),
+    return {"format": 1, "protocol": "enhanced_v2", "capability": "free_word_machine_enforcement_v1", "original_sha256": hashlib.sha256(original).hexdigest(),
             "patched_sha256": hashlib.sha256(patched).hexdigest(), "size": len(patched), "operations": operations}
 
 

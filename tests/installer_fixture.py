@@ -17,6 +17,7 @@ from tools.enhanced_delta import build_delta
 ROOT = Path(__file__).resolve().parents[1]
 ORIGINAL = b"controlled original game fixture " * 400
 PATCHED = ORIGINAL[:4096] + b"native integration fixture" + ORIGINAL[5000:]
+LEGACY = ORIGINAL[:4096] + b"legacy integration fixture" + ORIGINAL[5000:]
 
 
 class InstallerFixture(unittest.TestCase):
@@ -38,6 +39,8 @@ class InstallerFixture(unittest.TestCase):
             script, count = re.subn(rf"(\${field} = ')[0-9a-f]{{64}}(')",
                                    lambda match: match[1] + hashlib.sha256(data).hexdigest() + match[2], script)
             self.assertEqual(1, count)
+        script = re.sub(r"(\$legacyPatchedHash = ')[0-9a-f]{64}(')",
+                        lambda m: m[1] + hashlib.sha256(LEGACY).hexdigest() + m[2], script)
         (self.distribution / "tools/install_enhanced.ps1").write_text(script, encoding="utf-8")
         self.patch = self.distribution / "tools/enhanced.patch.gz"
         self.patch.write_bytes(gzip.compress(json.dumps(build_delta(ORIGINAL, PATCHED)).encode()))

@@ -45,6 +45,8 @@ class PublicationTests(unittest.TestCase):
         "word_factori/save.py",
         "word_factori/version.py",
         "word_factori/window_tracker.py",
+        "word_factori/word_orders.py",
+        "word_factori/data/alphabet_requirements.json",
     }
 
     def test_release_text_formats_have_deterministic_checkout_line_endings(self):
@@ -104,11 +106,12 @@ class PublicationTests(unittest.TestCase):
 
         metadata = json.loads((ROOT / "word_factori" / "archipelago.json").read_text(encoding="utf-8"))
 
-        self.assertEqual("1.4.2", VERSION)
+        self.assertEqual("1.5.0", VERSION)
+        self.assertEqual("UNRELEASED development", metadata["release_status"])
         self.assertEqual(VERSION, metadata["world_version"])
         self.assertEqual("0.6.7", metadata["minimum_ap_version"])
         self.assertEqual("0.6.7", metadata["maximum_ap_version"])
-        self.assertEqual(12, metadata["version"])
+        self.assertEqual(13, metadata["version"])
         self.assertEqual(7, metadata["compatible_version"])
         self.assertEqual(f"word-factori-archipelago-{VERSION}.zip", build_release.RELEASE_ARCHIVE.name)
 

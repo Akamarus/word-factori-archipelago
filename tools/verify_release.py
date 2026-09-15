@@ -42,6 +42,9 @@ def find_prohibited_release_entries(names: list[str]) -> list[str]:
         parts = tuple(part.casefold() for part in Path(name).parts)
         if (
             ".superpowers" in parts
+            or "probe-tools" in parts
+            or "codeentries" in parts
+            or name.casefold().endswith((".win", ".gml", ".save"))
             or parts[:2] == ("docs", "superpowers")
             or (parts and parts[-1] in PROHIBITED_RELEASE_BASENAMES)
         ):
@@ -172,6 +175,13 @@ def main(*, verify_installed: bool = False) -> None:
     if RELEASE_ARCHIVE.name != f"word-factori-archipelago-{VERSION}.zip":
         raise AssertionError("unexpected player release name")
     verify_archive_matches_disk(WORLD_ARCHIVE)
+    with zipfile.ZipFile(WORLD_ARCHIVE) as world:
+        world_names = world.namelist()
+        if find_prohibited_release_entries(world_names):
+            raise AssertionError("APWorld contains proprietary or user data")
+        for required in ("word_factori/word_orders.py", "word_factori/data/alphabet_requirements.json"):
+            if required not in world_names:
+                raise AssertionError(f"APWorld is missing {required}")
     release_archive_present = RELEASE_ARCHIVE.is_file()
     if release_archive_present:
         verify_archive_matches_disk(RELEASE_ARCHIVE, ("docs/images", "examples", "game_mod"))

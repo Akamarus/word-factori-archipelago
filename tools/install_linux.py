@@ -23,8 +23,11 @@ else:
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 ORIGINAL_SHA256 = 'd40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978'
-PATCHED_SHA256 = '5a964d5155f8f7acc63fd90bc81882a0559c4586f5de4fd9a0657badd8594194'
-DELTA_SHA256 = '5101e3172ecb171e36fce4e08c40b68d4cff077d8ef72452f988e010b1e03c5b'
+LEGACY_PATCHED_SHA256 = '5a964d5155f8f7acc63fd90bc81882a0559c4586f5de4fd9a0657badd8594194'
+PATCHED_SHA256 = '33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161'
+PATCH_PROTOCOL = 'enhanced_v2'
+ENFORCEMENT_CAPABILITY = 'free_word_machine_enforcement_v1'
+DELTA_SHA256 = 'b698f7bd432fb5982a731188ab4a3c3a7e9e9cf41884a2c9e4696ff128e5adba'
 MOD_FILES = ('levels.json', 'recipes.json', 'tips.json', 'credits.json', 'archipelago_campaign.json')
 RECEIPT = 'archipelago_enhanced_install.json'
 
@@ -156,7 +159,7 @@ class LinuxInstaller:
         identity = dict(self.identity, ap_worlds=str(self.worlds), config=str(self.config))
         self.transaction = transaction.Transaction(paths.factori_root / 'archipelago/install-transactions',
                                                     self.targets, identity, self.check_closed,
-                                                    {'game': {ORIGINAL_SHA256, PATCHED_SHA256},
+                                                    {'game': {ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PATCHED_SHA256},
                                                      'backup': {None, ORIGINAL_SHA256}})
         for target in self.targets.values():
             transaction.safe_path(target)
@@ -176,20 +179,25 @@ class LinuxInstaller:
         paths_api.validate_installation(self.paths)
         snapshot = {key: transaction.read(path) for key, path in self.targets.items()}
         current = transaction.digest(snapshot['game'])
-        if current not in (ORIGINAL_SHA256, PATCHED_SHA256):
+        if current not in (ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PATCHED_SHA256):
             raise ValueError('Unsupported or modified game data; no files changed')
         if snapshot['backup'] is not None and transaction.digest(snapshot['backup']) != ORIGINAL_SHA256:
             raise ValueError('Original backup is unknown or damaged; no files changed')
-        if current == PATCHED_SHA256 and snapshot['backup'] is None:
+        if current != ORIGINAL_SHA256 and snapshot['backup'] is None:
             raise ValueError('Patched game requires its verified original backup')
         if snapshot['config'] is not None:
             if json.loads(snapshot['config']) != self.identity:
                 raise ValueError('Configuration is paired with another installation or has invalid fields')
         if snapshot['receipt'] is not None:
             receipt = json.loads(snapshot['receipt'])
-            if (not isinstance(receipt, dict) or receipt.get('protocol') != 'enhanced_v1'
+            legacy_receipt = (isinstance(receipt, dict) and receipt.get('protocol') == 'enhanced_v1'
+                              and receipt.get('patched_sha256') == LEGACY_PATCHED_SHA256)
+            current_receipt = (isinstance(receipt, dict) and receipt.get('protocol') == PATCH_PROTOCOL
+                               and receipt.get('patched_sha256') == PATCHED_SHA256
+                               and receipt.get('capability') == ENFORCEMENT_CAPABILITY)
+            if (not (legacy_receipt or current_receipt)
                     or receipt.get('original_sha256') != ORIGINAL_SHA256
-                    or receipt.get('patched_sha256') != PATCHED_SHA256):
+                    or (current != ORIGINAL_SHA256 and receipt.get('patched_sha256') != current)):
                 raise ValueError('Receipt hashes or protocol are invalid')
             receipt_game(receipt.get('game_data'), self.paths)
             if receipt.get('platform') == 'linux' and (receipt.get('prefix') != str(self.paths.prefix)
@@ -223,14 +231,15 @@ class LinuxInstaller:
         if len(decoded) > 128 * 1024 * 1024:
             raise ValueError('Delta payload exceeds size limit')
         delta = json.loads(decoded)
-        if (not isinstance(delta, dict) or delta.get('protocol') != 'enhanced_v1'
+        if (not isinstance(delta, dict) or delta.get('protocol') != PATCH_PROTOCOL
+                or delta.get('capability') != ENFORCEMENT_CAPABILITY
                 or delta.get('original_sha256') != ORIGINAL_SHA256
                 or delta.get('patched_sha256') != PATCHED_SHA256
                 or not isinstance(delta.get('operations'), list)
                 or any(not isinstance(op, list) for op in delta['operations'])):
             raise ValueError('Delta does not match this integration')
         patched = apply_delta(source, delta)
-        receipt = {'protocol': 'enhanced_v1', 'original_sha256': ORIGINAL_SHA256,
+        receipt = {'protocol': PATCH_PROTOCOL, 'capability': ENFORCEMENT_CAPABILITY, 'original_sha256': ORIGINAL_SHA256,
                    'patched_sha256': PATCHED_SHA256, 'game_data': str(self.paths.game_data),
                    'platform': 'linux', 'prefix': str(self.paths.prefix),
                    'factori_root': str(self.paths.factori_root), 'ap_worlds': str(self.worlds)}

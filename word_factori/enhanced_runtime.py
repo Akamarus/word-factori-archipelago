@@ -12,8 +12,8 @@ from .mod import MODULES, _write_json
 from .platform_paths import InstallationPaths, validate_installation, validate_ap_worlds
 
 ORIGINAL_SHA256 = "d40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978"
-PATCH_PROTOCOL = "enhanced_v1"
-PATCHED_SHA256 = "5a964d5155f8f7acc63fd90bc81882a0559c4586f5de4fd9a0657badd8594194"
+PATCH_PROTOCOL = "enhanced_v2"
+PATCHED_SHA256 = "33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161"
 ENFORCEMENT_CAPABILITY = "free_word_machine_enforcement_v1"
 RUNTIME_SCHEMA = 2
 MAX_REVISION = 2**53 - 1
@@ -50,6 +50,7 @@ def patch_readiness(mod_folder: Path, installation: InstallationPaths | None = N
         return PatchReadiness(False, "receipt_invalid", "Native patch receipt is unreadable or invalid; rerun the installer.")
     try:
         if (not isinstance(receipt, dict) or receipt["protocol"] != PATCH_PROTOCOL
+                or receipt.get("capability") != ENFORCEMENT_CAPABILITY
                 or receipt["original_sha256"] != ORIGINAL_SHA256
                 or receipt["patched_sha256"] != PATCHED_SHA256):
             raise ValueError("unsupported receipt")

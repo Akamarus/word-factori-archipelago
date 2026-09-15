@@ -15,6 +15,20 @@ def publish(path, room, layout, levels):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_receipt_without_enforcement_cannot_authorize_current_game(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            game = root / "data.win"
+            game.write_bytes(b"current patch")
+            receipt = {"protocol": "enhanced_v2", "original_sha256": runtime.ORIGINAL_SHA256,
+                       "patched_sha256": hashlib.sha256(game.read_bytes()).hexdigest(), "game_data": str(game)}
+            with patch.object(runtime, "PATCHED_SHA256", receipt["patched_sha256"]):
+                for capability, expected in ((None, False), ("wrong", False),
+                        ("free_word_machine_enforcement_v1", True)):
+                    receipt["capability"] = capability
+                    (root / runtime.RECEIPT_NAME).write_text(json.dumps(receipt))
+                    self.assertEqual(expected, runtime.patch_ready(root))
+
     def test_missing_windows_receipt_names_windows_installer(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = runtime.patch_readiness(Path(tmp))
@@ -36,7 +50,7 @@ class RuntimeTests(unittest.TestCase):
             worlds = root / "custom_worlds"
             worlds.mkdir()
             paths = InstallationPaths(game, prefix, factori)
-            receipt = {"protocol": runtime.PATCH_PROTOCOL, "original_sha256": runtime.ORIGINAL_SHA256,
+            receipt = {"protocol": runtime.PATCH_PROTOCOL, "capability": "free_word_machine_enforcement_v1", "original_sha256": runtime.ORIGINAL_SHA256,
                        "patched_sha256": runtime.PATCHED_SHA256, "game_data": str(game),
                        "platform": "linux", "prefix": str(prefix), "factori_root": str(factori),
                        "ap_worlds": str(worlds)}

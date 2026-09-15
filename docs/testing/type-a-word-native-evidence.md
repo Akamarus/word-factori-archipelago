@@ -360,3 +360,21 @@ Python verification: new runtime API tests first failed on the missing inventory
 and contract interface; shared-transform tests first failed on the old candidate
 hooks. Focused runtime, transform, probe-safety and client-lifecycle tests passed.
 Full discovery ran 557 tests in 63.051 seconds, OK with two pre-existing skips.
+
+## Task 5 production artifact promotion — UNRELEASED 1.5.0
+
+A fresh Task 5 build from the verified original and the real production
+providers independently reproduced
+`33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161`.
+The complete patch compiled, reopened, and retained all five required hooks.
+The distributable delta round-trips to that exact hash; its compressed SHA256 is
+`b698f7bd432fb5982a731188ab4a3c3a7e9e9cf41884a2c9e4696ff128e5adba`.
+
+Both installers and client readiness now require `enhanced_v2` and capability
+`free_word_machine_enforcement_v1`. Recognized legacy patched games upgrade
+through the independently verified original backup. This supersedes the Task 3
+receipt/hash deferral above. Build metadata is explicitly UNRELEASED 1.5.0;
+public release remains 1.4.2. Production output stays outside Git and archives.
+
+See [acceptance checklist](type-a-word-acceptance.md) for the separate generation,
+tracker reconstruction and pending connected/native-disk/Linux acceptance.

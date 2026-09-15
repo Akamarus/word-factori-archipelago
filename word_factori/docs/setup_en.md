@@ -2,7 +2,24 @@
 
 Version **[1.4.2 is a tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.4.2)** with a full connected playthrough still pending. It uses one integration: enhanced, shuffled, machine-only progression. There is no integration-mode or fixed-layout selector. New rooms need a **fresh empty mod save**. The 1.4.0 campaign contract is unchanged, so updating a matching 1.4.0 room does not require resetting its bound save. Pre-1.4.0 rooms remain unsupported.
 
-Optional Recipe Journal checks described below are a **development feature, not part of the published 1.4.2 package**. They require a newly generated seed, the matching development APWorld and client, and a fresh empty bound save. The local Universal Tracker reconstruction fix is likewise unpublished.
+This checkout is **UNRELEASED 1.5.0 development**. Optional Recipe Journal checks, Type-a-Word orders, and Universal Tracker room reconstruction are not part of the published 1.4.2 package linked here. Enabled orders require a newly generated room, the matching development APWorld/client and native patch, and a fresh empty bound save. Connected game/client, native disk restart, live Universal Tracker, and Linux/Proton acceptance remain pending.
+
+## Optional Type-a-Word orders (UNRELEASED)
+
+```yaml
+Word Factori:
+  type_a_word_checks: true
+  type_a_word_count: 3
+  type_a_word_words: [JACK, FACTORY, PUZZLE, ISLAND]
+```
+
+Manufacture the selected targets in the native free-word factory and use `/wf_words` to inspect their status. Orders add checks and filler, not new machine items. They never count toward Campaign Count or Final Factory victory and never open page arrows. I is a starting source. Logic combines machine-family routes for the target's letters; it makes no machine-quantity guarantee.
+
+Defaults: checks off, count 5, empty list. Count must be 1–20, with at most 200 list entries of 2–12 ASCII letters. Entries are trimmed, uppercased, deduplicated and sorted before seed-based selection; enough unique words must remain. Disabled orders create no locations and need no list. Compatible older rooms lacking order fields are disabled. Local YAML edits cannot change an existing room's orders, including in Universal Tracker: reconstruction uses authoritative room data.
+
+The development ZIP uses the same Windows and Linux entry points below. Its `enhanced_v2` receipt requires `free_word_machine_enforcement_v1` and the exact patched hash. A recognized legacy installation upgrades through its verified original backup; missing or damaged required backups and unknown builds refuse without replacing the game. Close the game and Archipelago before upgrading. Restart Archipelago after installation. In play, return to Levels and re-enter a factory to receive new machine access without restarting the game.
+
+Native custom-building production and previews are conservatively blocked in the AP mod. Saved layouts are retained; ordinary saved factories resume once their machine families unlock. Arbitrary Workshop import remains unsupported.
 
 ## Install on Windows
 

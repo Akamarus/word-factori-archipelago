@@ -70,7 +70,7 @@ class LinuxClientTests(unittest.IsolatedAsyncioTestCase):
         worlds = self.root / worlds_name
         worlds.mkdir(exist_ok=True)
         (mod / RECEIPT_NAME).write_text(json.dumps({
-            "protocol": PATCH_PROTOCOL, "original_sha256": hashlib.sha256(backup.read_bytes()).hexdigest(),
+            "protocol": PATCH_PROTOCOL, "capability": "free_word_machine_enforcement_v1", "original_sha256": hashlib.sha256(backup.read_bytes()).hexdigest(),
             "patched_sha256": digest, "game_data": str(self.game), "platform": "linux",
             "prefix": str(self.prefix), "factori_root": str(self.factori), "ap_worlds": str(worlds),
         }))

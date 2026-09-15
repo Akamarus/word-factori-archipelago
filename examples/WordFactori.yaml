@@ -9,6 +9,11 @@ Word Factori:
   # Development feature: add global Recipe Journal checks. Requires the matching
   # development APWorld/client and a newly generated seed with a fresh empty save.
   recipe_checks: true
+  # UNRELEASED 1.5.0: optional Type-a-Word orders. Enable only in a fresh room
+  # using its matching development package. The default is false, count 5, [].
+  type_a_word_checks: false
+  type_a_word_count: 3
+  type_a_word_words: [JACK, FACTORY, PUZZLE, ISLAND]
   goal: campaign_count
   campaign_count: 25
   custom_level_set: discovery_labs
