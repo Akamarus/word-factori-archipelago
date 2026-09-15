@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 try:
     from BaseClasses import Item, ItemClassification, Location, Region, Tutorial
 except ModuleNotFoundError as error:
@@ -15,8 +17,9 @@ else:
         REGION_REQUIREMENTS, locations_for_layout,
     )
     from .campaign import campaign_for_level_set
-    from .layout import build_layout, layout_slot_data
-    from .options import WordFactoriOptions
+    from .client_core import resolve_room_campaign
+    from .layout import ENHANCED_MACHINE_MODEL, build_layout, layout_slot_data
+    from .options import CampaignCount, CustomLevelSet, Goal, WordFactoriOptions
     from .requirements import access_rule_for
     from .version import AUTHOR, VERSION
     from . import Components as components
@@ -44,6 +47,23 @@ else:
         options: WordFactoriOptions
         item_name_to_id = ITEM_NAME_TO_ID
         location_name_to_id = LOCATION_NAME_TO_ID
+        ut_can_gen_without_yaml = True
+
+        @staticmethod
+        def interpret_slot_data(slot_data: dict) -> dict:
+            """Give UT the room contract, never a newly randomized approximation."""
+            resolved = resolve_room_campaign(slot_data)
+            if resolved.layout is None or slot_data.get("progression_model") != ENHANCED_MACHINE_MODEL:
+                raise ValueError("Universal Tracker requires a matching 1.4.0-or-newer machine-only room")
+            if slot_data.get("level_set") not in ("core_campaign", "discovery_labs"):
+                raise ValueError("tracker room level_set is missing or invalid")
+            goal = slot_data.get("goal")
+            count = slot_data.get("campaign_count")
+            if type(goal) is not int or goal not in (Goal.option_campaign_count, Goal.option_final_factory):
+                raise ValueError("tracker room goal is missing or invalid")
+            if type(count) is not int or not CampaignCount.range_start <= count <= CampaignCount.range_end:
+                raise ValueError("tracker room campaign_count is missing or invalid")
+            return deepcopy(slot_data)
 
         def selected_level_set(self) -> str:
             if hasattr(self, "_level_set"):
@@ -54,14 +74,28 @@ else:
             return self._locations
 
         def generate_early(self) -> None:
-            self._level_set = self.selected_level_set()
-            self._manifest = campaign_for_level_set(self._level_set)
-            self._layout = build_layout(
-                self._manifest, self._level_set, "shuffled_pages", self.random,
-                integration_mode="enhanced",
-                machine_only=True,
-            )
-            self._locations = locations_for_layout(self._manifest, self._layout)
+            passthrough = getattr(self.multiworld, "re_gen_passthrough", {})
+            if GAME in passthrough:
+                # UT's RNG and YAML need not match the server. Restore both the
+                # native page order and goal before creating locations/rules.
+                slot_data = self.interpret_slot_data(passthrough[GAME])
+                resolved = resolve_room_campaign(slot_data)
+                self._level_set = slot_data["level_set"]
+                self.options.custom_level_set = CustomLevelSet.from_any(self._level_set)
+                self.options.goal = Goal.from_any(slot_data["goal"])
+                self.options.campaign_count = CampaignCount.from_any(slot_data["campaign_count"])
+                self._manifest = resolved.manifest
+                self._layout = resolved.layout
+                self._locations = resolved.locations
+            else:
+                self._level_set = self.selected_level_set()
+                self._manifest = campaign_for_level_set(self._level_set)
+                self._layout = build_layout(
+                    self._manifest, self._level_set, "shuffled_pages", self.random,
+                    integration_mode="enhanced",
+                    machine_only=True,
+                )
+                self._locations = locations_for_layout(self._manifest, self._layout)
             self.multiworld.local_early_items[self.player]["Merger2 Access"] = 1
             self.multiworld.local_early_items[self.player]["Rotation Access"] = 1
             self.multiworld.push_precollected(self.create_item("Bender Access"))

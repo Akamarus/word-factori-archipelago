@@ -194,6 +194,14 @@ Only four checks on each full page are needed for forward progress, starting on 
 
 Discovery Labs use stricter rules: only their declared route is permitted in the generated level. Challenge levels keep their curated quantity limits even after all relevant machine families are unlocked.
 
+**What a “Discover” check means:** complete the named Discovery Lab. For example, `Discover C — Bending Lab` is awarded for finishing that lab, not for producing C in another factory. These are lab-completion checks, not global letter/recipe-journal discoveries. The existing names are retained so room location IDs and names remain stable.
+
+### Universal Tracker and page progress
+
+The tracker fix in this source checkout reconstructs the room's saved shuffled layout and goal instead of generating a different layout from the tracker's seed or YAML. It is **not included in the published 1.4.2 package**. A connected Universal Tracker playthrough still needs verification before publication; updating the tracker-side Word Factori APWorld will be required to use the fix.
+
+“In logic” means reachable with your current machines **after completing the required earlier puzzles**, not necessarily clickable right now. The tracker assumes you can finish four solvable levels on the preceding page; the game opens the next page only after you actually finish four there. Conversely, an unlocked page lets you select all six factories even if some still require machines you do not own. Discovery Lab routes and challenge limits also apply.
+
 For example, the M Lab needs Merger3, J needs Bender and Merger2, and X needs Merger2 and Reflection. Owning Rotation does not enable it inside a lab that forbids it. I remains available in all these labs in new seeds. An in-game missing-requirement notice is still planned, not implemented by this progression update.
 
 ![The V Discovery Lab open in Word Factori during live campaign validation](docs/images/word-factori-discovery-lab-v.png)
@@ -233,6 +241,8 @@ Every curated set has an ID, version, stable level keys, and content digest. The
 | `/wf_overlay restart` | Restart the optional renderer if it stopped |
 
 Manual reporting cannot bypass campaign-digest or save-slot safety checks.
+
+Manual reports and `/send_location` mark checks on the Archipelago server; they do **not** finish factories in Word Factori's save or open its next-page arrow. Complete four factories on that page in-game to advance. Server-checked locations can count toward the AP victory goal, so manual checks should be reserved for testing or recovery, not normal play.
 
 ## In-game Archipelago client (Windows)
 
