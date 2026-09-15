@@ -23,7 +23,7 @@ For an update, close the game and Archipelago and double-click the same installe
 1. Install native **Archipelago 0.6.7** and **Python 3.12 or newer**. Launch the supported Word Factori build through Steam Proton once, then close the game and Archipelago.
 2. Extract the same player ZIP linked above and open a terminal in its folder.
 3. Run `bash "Install Word Factori Archipelago.sh"`.
-4. Choose the Steam/Proton installation if prompted, enter your existing native Archipelago `custom_worlds` directory, and confirm the displayed destinations. Choices remain local.
+4. Choose the Steam/Proton installation if prompted, enter your existing native Archipelago user-world directory (`worlds` or `custom_worlds`), and confirm the displayed real destinations (directory shortcuts are resolved). Choices remain local.
 5. Restart native Archipelago, launch Word Factori Client, and connect. Start the game through Steam and select the AP mod. Use a fresh empty mod save for a new room; preserve the bound save for an existing matching 1.4.0 room.
 
 Use the regular native client for items, chat, hints, and connection status. The in-game overlay is Windows-only. Do not run the Windows installer through Wine or use sudo. To update, close the game and Archipelago and rerun the Linux command.

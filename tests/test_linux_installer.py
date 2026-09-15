@@ -19,7 +19,7 @@ class LinuxInstallerTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        self.root = Path(temporary.name).resolve()
         self.game = self.root / 'game' / 'data.win'
         self.game.parent.mkdir()
         self.original, self.patched = b'original game bytes', b'original PATCHED game bytes'
@@ -60,6 +60,69 @@ class LinuxInstallerTests(unittest.TestCase):
     def snapshot(self):
         return {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()
                 and 'install-transactions' not in p.parts and not p.name.startswith('.wf-ap-')}
+
+    def test_worlds_install_receipt_is_accepted_by_client_and_lifecycle(self):
+        from word_factori import enhanced_runtime as runtime
+        from word_factori.platform_paths import InstallationPaths
+        worlds = self.root / 'native-ap/worlds'
+        worlds.mkdir(parents=True)
+        setup = installer.LinuxInstaller(self.paths, worlds, self.config, self.package,
+                                         process_reader=lambda: [])
+        setup.run('install')
+        paths = InstallationPaths(self.game, self.prefix, self.factori)
+        with patch.object(runtime, 'ORIGINAL_SHA256', hashlib.sha256(self.original).hexdigest()), \
+             patch.object(runtime, 'PATCHED_SHA256', hashlib.sha256(self.patched).hexdigest()):
+            result = runtime.patch_readiness(paths.mod_folder, paths)
+            self.assertTrue(result.ready, result.message)
+        before = self.snapshot()
+        setup.run('install')
+        self.assertEqual(before, self.snapshot())
+        self.assertEqual(setup.run('verify'), 'Installation verified.')
+        setup.run('restore')
+        setup.run('uninstall')
+        self.assertEqual(self.game.read_bytes(), self.original)
+        self.assertFalse((worlds / 'word_factori.apworld').exists())
+
+    def test_ap_root_shortcut_is_canonicalized_before_install_and_receipt(self):
+        from tests.test_platform_paths import PlatformPathsTests
+        native = self.root / 'native-ap'
+        worlds = native / 'worlds'
+        worlds.mkdir(parents=True)
+        shortcut = self.root / 'AP Shortcut'
+        PlatformPathsTests.directory_alias(self, native, shortcut)
+        setup = installer.LinuxInstaller(self.paths, shortcut / 'worlds', self.config,
+                                         self.package, process_reader=lambda: [])
+        self.assertEqual(setup.worlds, worlds.resolve())
+        setup.run('install')
+        receipt = json.loads(setup.receipt.read_text())
+        self.assertEqual(receipt['ap_worlds'], str(worlds.resolve()))
+        setup = installer.LinuxInstaller(self.paths, worlds.resolve(), self.config,
+                                         self.package, process_reader=lambda: [])
+        setup.run('install')
+        setup.run('restore')
+        setup.run('uninstall')
+        self.assertFalse((worlds / 'word_factori.apworld').exists())
+
+    def test_ap_shortcut_cannot_redirect_into_game_or_prefix(self):
+        from tests.test_platform_paths import PlatformPathsTests
+        for index, parent in enumerate((self.game.parent, self.prefix)):
+            worlds = parent / 'worlds'
+            worlds.mkdir()
+            shortcut = self.root / f'Forbidden Shortcut {index}'
+            PlatformPathsTests.directory_alias(self, parent, shortcut)
+            with self.assertRaises(ValueError):
+                installer.LinuxInstaller(self.paths, shortcut / 'worlds', self.config,
+                                         self.package, process_reader=lambda: [])
+        self.assertEqual(self.game.read_bytes(), self.original)
+
+    def test_apworld_hardlink_still_rejected_after_root_resolution(self):
+        protected = self.root / 'protected'
+        protected.write_bytes(b'not integration data')
+        os.link(protected, self.worlds / 'word_factori.apworld')
+        with self.assertRaises(ValueError):
+            installer.LinuxInstaller(self.paths, self.worlds, self.config,
+                                     self.package, process_reader=lambda: [])
+        self.assertEqual(protected.read_bytes(), b'not integration data')
 
     def test_first_install_and_idempotent_update(self):
         self.setup.run('install')

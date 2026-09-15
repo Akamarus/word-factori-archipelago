@@ -32,8 +32,15 @@ bash "Install Word Factori Archipelago.sh"
 
 Setup searches the usual native and Flatpak Steam locations and their library
 metadata. If several installations/accounts are found, choose one locally. Enter
-the existing **native Archipelago custom_worlds directory** when asked. Check the
+the existing **native Archipelago user-world directory (`worlds` or `custom_worlds`)** when asked. Check the
 displayed destinations and confirm. No paths, logs, or account names are uploaded.
+
+Archipelago uses `worlds` when its user-data folder is separate from its program
+folder, and `custom_worlds` otherwise. Select the folder your native Archipelago
+installation actually loads; do not rename it or create a second folder to satisfy
+setup. An explicitly selected Archipelago directory shortcut is resolved once,
+and setup displays and records the real destination. Redirected APWorld files and
+destinations inside the game or Proton prefix remain forbidden.
 
 Setup validates and backs up the original game, installs the APWorld and JSON mod,
 applies the same reversible native patch used on Windows, and saves the selected
@@ -58,7 +65,7 @@ bash "Install Word Factori Archipelago.sh" install \
   --game-data "/path/to/steamapps/common/word factori/data.win" \
   --prefix "/path/to/steamapps/compatdata/2072840/pfx" \
   --factori-root "/path/to/steamapps/compatdata/2072840/pfx/drive_c/users/steamuser/AppData/Local/factori" \
-  --ap-worlds "/path/to/Archipelago/custom_worlds"
+  --ap-worlds "/path/to/Archipelago/worlds"
 ```
 
 Supply all three game/prefix/factori options together. Use the actual Proton user
@@ -79,7 +86,7 @@ chooses among ambiguous installations; supply `--ap-worlds` for noninteractive u
 ## Verify, restore, uninstall, or recover
 
 These commands reuse the saved selection and still ask for the native
-`custom_worlds` directory. Add `--ap-worlds "/your/Archipelago/custom_worlds"`
+Archipelago user-world directory. Add `--ap-worlds "/your/Archipelago/worlds"`
 to avoid that prompt. Add your `--config` override if you used one during setup.
 
 ```bash

@@ -114,7 +114,7 @@ To restore the game binary, close Word Factori and double-click the root **Resto
    bash "Install Word Factori Archipelago.sh"
    ```
 
-4. Choose your Steam/Proton installation if prompted. Enter your existing **native Archipelago `custom_worlds` directory**, check the displayed destinations, and confirm. These choices stay local; no personal setup details need to be posted publicly.
+4. Choose your Steam/Proton installation if prompted. Enter your existing **native Archipelago user-world directory (`worlds` or `custom_worlds`)**, check the displayed real destinations (setup resolves Archipelago directory shortcuts), and confirm. These choices stay local; no personal setup details need to be posted publicly.
 5. Restart native Archipelago, launch **Word Factori Client**, and connect to your room before completing checks.
 6. Start Word Factori through Steam, select **word factori archipelago**, and use a fresh empty mod save for a **new** room. Keep the bound save when updating an existing matching 1.4.0 room.
 

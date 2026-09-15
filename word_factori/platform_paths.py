@@ -101,6 +101,32 @@ def validate_state_target(paths: InstallationPaths, target: Path) -> Path:
     return target
 
 
+def validate_ap_worlds(paths: InstallationPaths, directory: Path, *, resolve_root: bool = False) -> Path:
+    """Validate the selected native AP destination, shared by setup and client.
+
+    Only setup may resolve the user's explicit directory shortcut. Receipts store
+    that canonical destination; clients reject later redirections.
+    """
+    directory = Path(directory)
+    if not directory.is_absolute() or ".." in directory.parts:
+        raise ValueError("Archipelago worlds directory must be absolute without parent traversal")
+    try:
+        canonical = directory.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("Archipelago worlds directory is missing or cannot be resolved") from error
+    if canonical.name not in {"worlds", "custom_worlds"} or not canonical.is_dir():
+        raise ValueError("Select the existing native Archipelago worlds or custom_worlds directory")
+    if not resolve_root and (directory != canonical or _has_alias_ancestor(directory)):
+        raise ValueError("Archipelago receipt directory is redirected; rerun the Linux installer")
+    if _within(canonical, paths.prefix) or _within(canonical, paths.game_data.parent):
+        raise ValueError("Native Archipelago worlds directory must be outside the game and Proton prefix")
+    target = canonical / "word_factori.apworld"
+    if _has_alias_ancestor(target) or (target.exists() and (
+            not target.is_file() or target.stat().st_nlink != 1)):
+        raise ValueError("Archipelago APWorld target is redirected or is not an ordinary file")
+    return canonical
+
+
 def config_path(environ: Mapping[str, str] | None = None, home: Path | None = None) -> Path:
     environment = os.environ if environ is None else environ
     home = Path.home() if home is None else Path(home)
