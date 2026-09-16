@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Status: direction approved by Jack; detailed specification awaiting review.
+Status: direction and detailed specification approved by Jack on 2026-09-16.
 This document does not claim implemented Linux UI support. It changes no live
 installation, save, room, release or existing Windows presentation.
 
@@ -224,5 +224,5 @@ client requirement before an official release remains open, not waived by this U
 - Player-facing Linux instructions updated when the feature is actually packaged,
   clearly distinguishing automated evidence from real Linux playtesting.
 
-Detailed task ordering and implementation commands are intentionally deferred
-until Jack has reviewed this specification.
+Implementation ordering is recorded in
+`docs/superpowers/plans/2026-09-16-linux-ap-mail.md`.
