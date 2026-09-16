@@ -12,5 +12,6 @@ Word Factori:
   progressive_machines: false
   type_a_word_checks: true
   type_a_word_count: 3
-  # 2-12 ASCII letters per word. Enough distinct words for the selected count.
-  type_a_word_words: [JACK, FACTORY, PUZZLE, ISLAND]
+  # 2-12 supported characters per target; enough distinct targets for the count.
+  # Quote targets so digits and YAML punctuation remain text, not YAML values.
+  type_a_word_words: ['JACK', 'I=', '(=)', '99', 'A9🔑', '🔑🚪']

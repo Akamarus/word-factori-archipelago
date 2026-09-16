@@ -51,7 +51,7 @@ class QuantityGraphTests(unittest.TestCase):
     def test_catalog_preserves_all_recipe_identities_and_validates_every_graph(self):
         catalog = self.g.load_catalog()
         self.assertEqual({check.code for check in RECIPE_CHECKS}, set(catalog.recipes))
-        self.assertEqual(set('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), set(catalog.alphabet))
+        self.assertEqual(set('ABCDEFGHIJKLMNOPQRSTUVWXYZ()#%$@+=&0123456789🔑🚪~'), set(catalog.alphabet))
         for alternatives in (*catalog.recipes.values(), *catalog.alphabet.values()):
             self.assertTrue(alternatives)
             for graph in alternatives:

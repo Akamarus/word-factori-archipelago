@@ -31,6 +31,7 @@ CODE_ENTRIES = (
     "gml_Object_oIdentity_Create_0", "gml_Object_oPersistent_Create_0",
     "gml_GlobalScript_LoadConfig", "gml_GlobalScript_MenuFuncs", "gml_Object_oInput_Create_0",
     "gml_GlobalScript___GoogSystem",
+    "gml_Object_oPersistent_Other_62",
 )
 ENFORCEMENT_ENTRIES = ("gml_GlobalScript_Misc", "gml_Object_oModule_Create_0")
 ENFORCEMENT_HOOKS = ["LevelFuncs.get_level_module_counts", "LevelFuncs.get_current_module_count",
@@ -109,7 +110,9 @@ def parse_native_result(log: str, nonce: str) -> dict:
     return result
 
 
-def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enforcement: bool = False, quantities: bool = False) -> dict:
+def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enforcement: bool = False, quantities: bool = False, recipe_safety: bool = False) -> dict:
+    if recipe_safety and (enforcement or quantities):
+        raise ValueError('Recipe safety is a separate native acceptance mode')
     if quantities and not enforcement:
         raise ValueError('Quantity acceptance requires enforcement')
     validate_probe_paths(cli, original, runtime, output)
@@ -162,6 +165,17 @@ def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enfor
         level = transformed["gml_GlobalScript_LevelFuncs"]
     else:
         level = sources["gml_GlobalScript_LevelFuncs"]
+    if recipe_safety:
+        from tools.enhanced_hooks import transform_recipe_loading
+        config, http = transform_recipe_loading(sources["gml_GlobalScript_LoadConfig"], sources["gml_Object_oPersistent_Other_62"])
+        stage("gml_GlobalScript_LoadConfig", config)
+        # Execute the transformed response handler against a supplied response;
+        # only transport and logging are replaced, not the get_recipes branch.
+        http = http.replace("mapToStruct(async_load)", "response")
+        http = http.replace("UnknownEnum", "RecipeProbeEnum")
+        http = re.sub(r"\blog\(", "wf_probe_external(", http)
+        level += "\nfunction wf_probe_receive(response) {\n" + http + "\n}\n"
+        level += extract_function((ROOT / "tools/native_machine_access.gml").read_text(encoding="utf-8"), "wf_access_active")
     for call in ("analyticsEvent", "doHTTPRequest", "AWSLog"):
         level = re.sub(r"\b" + call + r"\(", "wf_probe_external(", level)
     stage("gml_GlobalScript_LevelFuncs", level)
@@ -185,7 +199,8 @@ def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enfor
     # Keep the actual keyboard filtering, truncation and case conversion block.
     input_step = sources["gml_Object_oInputBox_Step_0"]
     stage("gml_Object_oInputBox_Step_0", input_step[input_step.index("with (oInput)"):input_step.index("interactable =")])
-    harness_name = "type_word_enforcement_acceptance.gml" if enforcement else "type_word_completion_acceptance.gml"
+    harness_name = ("recipe_safety_acceptance.gml" if recipe_safety else
+                    "type_word_enforcement_acceptance.gml" if enforcement else "type_word_completion_acceptance.gml")
     harness = (ROOT / "tools" / harness_name).read_text(encoding="utf-8")
     if quantities:
         harness = harness.replace('    var supported=array_all(tests,',
@@ -250,9 +265,10 @@ def argument_parser() -> argparse.ArgumentParser:
         parser.add_argument("--" + argument, type=Path, required=True)
     parser.add_argument("--enforcement", action="store_true", help="Run development-only native enforcement gate")
     parser.add_argument("--quantities", action="store_true", help="Include finite machine allowance acceptance")
+    parser.add_argument("--recipe-safety", action="store_true", help="Verify duplicate recipe refresh and AP online-update isolation")
     return parser
 
 
 if __name__ == "__main__":
     args = argument_parser().parse_args()
-    print(json.dumps(build_probe(args.cli, args.original, args.runtime, args.output, enforcement=args.enforcement, quantities=args.quantities), indent=2))
+    print(json.dumps(build_probe(args.cli, args.original, args.runtime, args.output, enforcement=args.enforcement, quantities=args.quantities, recipe_safety=args.recipe_safety), indent=2))

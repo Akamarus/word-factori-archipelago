@@ -12,6 +12,7 @@ from word_factori.campaign import campaign_for_level_set
 from word_factori.data import locations_for_manifest
 from word_factori.quantity_graphs import graph_budget, graph_payload
 from word_factori.quantity_logic import graphs_for_location, graphs_for_word
+from word_factori.symbols import SPECIAL_CHARACTERS
 
 
 def cases_for_campaign():
@@ -26,6 +27,9 @@ def cases_for_campaign():
     for word in ('CC','CV','CVC','ABCDEFGHIJKL'):
         graph=graphs_for_word(word)[0]
         cases.append(dict(graph_payload(graph),word=word,name='free-'+word,budget=graph_budget(graph)))
+    for word in tuple("I"+c for c in SPECIAL_CHARACTERS) + ("(=)", "99", "🔑🚪", "A9🔑"):
+        graph=graphs_for_word(word)[0]
+        cases.append(dict(graph_payload(graph),word=word,name='symbol-'+word,budget=graph_budget(graph)))
     return cases,missing
 
 

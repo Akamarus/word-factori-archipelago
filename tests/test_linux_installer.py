@@ -25,6 +25,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.original, self.patched = b'original game bytes', b'original PATCHED game bytes'
         self.legacy = b'legacy patched game bytes'
         self.previous = b'previous v2 patched game bytes'
+        self.release150 = b'release 1.5.0 patched game bytes'
         self.game.write_bytes(self.original)
         self.prefix = self.root / 'pfx'
         self.factori = self.prefix / 'drive_c/users/steamuser/AppData/Local/factori'
@@ -52,6 +53,7 @@ class LinuxInstallerTests(unittest.TestCase):
         (self.package / 'tools/enhanced.patch.gz').write_bytes(compressed)
         for name, value in [('ORIGINAL_SHA256', original_hash), ('PATCHED_SHA256', patched_hash),
                             ('PREVIOUS_PATCHED_SHA256', hashlib.sha256(self.previous).hexdigest()),
+                            ('RELEASE_150_SHA256', hashlib.sha256(self.release150).hexdigest()),
                             ('DELTA_SHA256', hashlib.sha256(compressed).hexdigest())]:
             override = patch.object(installer, name, value)
             override.start()
@@ -97,6 +99,19 @@ class LinuxInstallerTests(unittest.TestCase):
             self.setup.run('install')
         self.assertEqual(before, self.snapshot())
         receipt['capability']='free_word_machine_enforcement_v1'
+        self.setup.receipt.write_text(json.dumps(receipt))
+        self.setup.run('install')
+        self.assertEqual(self.patched, self.game.read_bytes())
+        self.assertEqual(self.original, self.setup.backup.read_bytes())
+        self.setup.run('restore')
+        self.assertEqual(self.original, self.game.read_bytes())
+
+    def test_release_150_upgrade_and_restore(self):
+        self.legacy_installation()
+        self.game.write_bytes(self.release150)
+        receipt = json.loads(self.setup.receipt.read_text())
+        receipt.update(protocol='enhanced_v2', patched_sha256=installer.RELEASE_150_SHA256,
+                       capability='free_word_machine_enforcement_v1')
         self.setup.receipt.write_text(json.dumps(receipt))
         self.setup.run('install')
         self.assertEqual(self.patched, self.game.read_bytes())

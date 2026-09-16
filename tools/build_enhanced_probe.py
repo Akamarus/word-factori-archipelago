@@ -63,6 +63,8 @@ def build_probe(cli: Path, original: Path, output: Path) -> dict:
             CODE_ENTRIES[4]: "wf_access_allowed(arg0, arg1)",
             CODE_ENTRIES[5]: "wf_access_factory_allowed(buildings)",
             CODE_ENTRIES[6]: "wf_access_poll()",
+            CODE_ENTRIES[7]: "wf_access_active()",
+            CODE_ENTRIES[8]: "wf_access_active()",
         }
         for entry, call in required_calls.items():
             decompiled = (inspected / "CodeEntries" / (entry + ".gml")).read_text(encoding="utf-8")
@@ -73,7 +75,7 @@ def build_probe(cli: Path, original: Path, output: Path) -> dict:
         with output.open("xb") as stream:
             stream.write(patched)
         metadata = {
-            "status": "UNRELEASED 1.5.0 production providers compiled and reopened; connected acceptance pending",
+            "status": "Production providers compiled and reopened; connected acceptance pending",
             "protocol": "enhanced_v2",
             "capability": "free_word_machine_enforcement_v1",
             "original_sha256": ORIGINAL_SHA256,

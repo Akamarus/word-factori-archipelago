@@ -12,10 +12,11 @@ import re
 import string
 
 from .recipe_graph import MACHINE_CAPABILITIES
+from .symbols import TARGET_CHARACTERS, TARGET_SET, SPECIAL_CHARACTERS
 
 
 FIRST_WORD_ORDER_CODE = 975303000
-ALPHABET_LOGIC_VERSION = 1
+ALPHABET_LOGIC_VERSION = 2
 _MAX_WORD_ORDERS = 20
 _MAX_WORD_LIST_ENTRIES = 200
 _CAPABILITIES = tuple(sorted(set(MACHINE_CAPABILITIES.values())))
@@ -37,11 +38,11 @@ def _load_alphabet_catalog() -> tuple[dict[str, tuple[frozenset[str], ...]], str
         raise ValueError("alphabet catalog version is invalid")
     if not isinstance(digest, str) or _LOWERCASE_SHA256(digest) is None:
         raise ValueError("alphabet catalog digest is invalid")
-    if not isinstance(alphabet, dict) or set(alphabet) != set(string.ascii_uppercase):
-        raise ValueError("alphabet catalog must contain exactly A through Z")
+    if not isinstance(alphabet, dict) or set(alphabet) != TARGET_SET:
+        raise ValueError("alphabet catalog must contain every supported target character")
 
     validated: dict[str, tuple[frozenset[str], ...]] = {}
-    for letter in string.ascii_uppercase:
+    for letter in TARGET_CHARACTERS:
         requirements = alphabet[letter]
         if not isinstance(requirements, list) or not requirements:
             raise ValueError(f"alphabet catalog requirements for {letter} are invalid")
@@ -86,9 +87,9 @@ def _normalize_word(word: object) -> str:
         raise ValueError("word-list entries must be strings")
     stripped = word.strip()
     if not 2 <= len(stripped) <= 12:
-        raise ValueError("words must contain between 2 and 12 ASCII letters")
-    if not all("A" <= character <= "Z" or "a" <= character <= "z" for character in stripped):
-        raise ValueError("words must contain only ASCII letters")
+        raise ValueError("words must contain between 2 and 12 supported characters")
+    if not all(character in string.ascii_letters or character in SPECIAL_CHARACTERS for character in stripped):
+        raise ValueError("words must contain only A–Z letters and supported Word Factori symbols")
     return stripped.upper()
 
 

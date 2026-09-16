@@ -1,15 +1,15 @@
-# Linux setup with Steam Proton (1.5.0, experimental)
+# Linux setup with Steam Proton (1.5.1, experimental)
 
-Download the **[1.5.0 player package](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.5.0)**,
-which includes **Install Word Factori Archipelago.sh** alongside the Windows installer.
-Automated Windows and Ubuntu checks pass, but Linux support has **not been validated
+Download the **[1.5.1 player package](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.5.1)**.
+It includes **Install Word Factori Archipelago.sh** alongside the Windows installer.
+Installer regressions have automated coverage, but Linux support has **not been validated
 in a real Linux/Proton playthrough**. Do not describe it as stable support yet.
 
 There is one campaign and one player package for both platforms. Linux runs the
 regular native Archipelago client while Steam runs the Windows game through Proton.
 The in-game AP Mail overlay is Windows-only; items and chat remain available in
 the regular client. No Wine-based installer or Windows Archipelago installation
-is needed. For 1.5.0 testing, generate a new room and bind a fresh empty save; keep your previous saves and original-game backup.
+is needed. For 1.5.1 testing, generate a new room and bind a fresh empty save; keep your previous saves and original-game backup.
 
 ## Before setup
 
@@ -50,7 +50,7 @@ Restart Archipelago, launch **Word Factori Client**, and connect to your matchin
 room. Start Word Factori through Steam, select **word factori archipelago**, and
 use a fresh empty mod save for a new room. Do not reset an existing room's bound
 save just because its host OS changes. Existing room identity and save binding
-checks still apply. Updating to 1.5.0 does not convert an older room.
+checks still apply. Updating to 1.5.1 does not convert an older room.
 
 Play normally. Completed levels send checks; received machines become available
 after returning to Levels and entering a factory in normal mode. With

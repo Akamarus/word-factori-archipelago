@@ -10,6 +10,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from word_factori.quantity_graphs import (catalog_from_payload, graph_from_payload,
     graph_budget, graph_payload, payload_digest, validate_graph)
+from word_factori.symbols import TARGET_TOKENS, SPECIAL_CHARACTERS
+from word_factori.quantity_logic import _ranked_candidates
 
 
 def build_catalog(research: dict, native: dict, *, research_sha256: str, native_sha256: str) -> dict:
@@ -19,8 +21,10 @@ def build_catalog(research: dict, native: dict, *, research_sha256: str, native_
                             for e in native['snapshots']['edges'])
     evidence = {entry['witness_id']: entry for entry in research['native_evidence']}
     recipes, alphabet, proofs = {}, {}, []
+    symbol_candidates = {character: [] for character in SPECIAL_CHARACTERS}
     for ti, record in enumerate(research['records']):
-        if not record.get('ap_code') and not record['id'].startswith('letter-'):
+        symbols = [character for character in SPECIAL_CHARACTERS if TARGET_TOKENS[character] == record['output']]
+        if not record.get('ap_code') and not record['id'].startswith('letter-') and not symbols:
             continue
         graphs = []
         for ri, route in enumerate(record['routes']):
@@ -33,12 +37,18 @@ def build_catalog(research: dict, native: dict, *, research_sha256: str, native_
             if tuple(route['counts']) != graph_budget(graph) or route['sources'] != sum(n.machine == 'oIFactory' for n in graph.nodes):
                 raise ValueError('research budget differs from actual graph')
             graphs.append(graph_payload(graph))
+            for character in symbols:
+                symbol_candidates[character].append(graph)
             proofs.append({'graph': payload_digest(graphs[-1]), 'native_result': proof['result_sha256']})
         if record.get('ap_code'):
             recipes[str(record['ap_code'])] = graphs
-        else:
+        elif record['id'].startswith('letter-'):
             alphabet[record['output']] = graphs
-    payload = {'schema': 1, 'provenance': {'research_sha256': research_sha256,
+    for character, candidates in symbol_candidates.items():
+        if not candidates:
+            raise ValueError(f'No native production evidence for {character}')
+        alphabet[character] = [graph_payload(g) for g in _ranked_candidates(candidates)]
+    payload = {'schema': 2, 'provenance': {'research_sha256': research_sha256,
         'native_table_sha256': native_sha256, 'recipe_source_sha256': research['source_recipe_sha256'],
         'witnesses': proofs, 'model': 'fixed-output acyclic, conservative alternatives'},
         'transitions': sorted(transitions), 'recipes': recipes, 'alphabet': alphabet}

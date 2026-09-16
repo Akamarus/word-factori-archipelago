@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "digest": "f6365423fb5a75a61ae42d9b0fe00d1c1051c7335236e4ef59d33fb64ac8d397",
+  "version": 2,
+  "digest": "d0b66413ca9847ca4d610dda7d281c873c40a42ad28f1f3375045a3196c15ee9",
   "alphabet": {
     "A": [
       [
@@ -345,6 +345,367 @@
       ],
       [
         "Merger3 Access",
+        "Rotation Access"
+      ]
+    ],
+    "(": [
+      [
+        "Bender Access"
+      ]
+    ],
+    ")": [
+      [
+        "Bender Access",
+        "Rotation Access"
+      ]
+    ],
+    "#": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger4 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Merger4 Access"
+      ]
+    ],
+    "%": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Reflection Access"
+      ]
+    ],
+    "$": [
+      [
+        "Bender Access",
+        "Merger2 Access"
+      ],
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ]
+    ],
+    "@": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Reflection Access"
+      ]
+    ],
+    "+": [
+      [
+        "Bender Access",
+        "Merger2 Access"
+      ],
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ]
+    ],
+    "=": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ]
+    ],
+    "&": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Reflection Access"
+      ]
+    ],
+    "0": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Reflection Access"
+      ]
+    ],
+    "1": [
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger2 Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger3 Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ]
+    ],
+    "2": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger3 Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Merger3 Access",
+        "Reflection Access"
+      ]
+    ],
+    "3": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Reflection Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger3 Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ]
+    ],
+    "4": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger4 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Merger3 Access",
+        "Reflection Access"
+      ]
+    ],
+    "5": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger3 Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Merger3 Access",
+        "Reflection Access"
+      ]
+    ],
+    "6": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Reflection Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Reflection Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger3 Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ]
+    ],
+    "7": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger3 Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Merger3 Access",
+        "Reflection Access"
+      ]
+    ],
+    "8": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Reflection Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger4 Access",
+        "Reflection Access"
+      ],
+      [
+        "Bender Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger3 Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ]
+    ],
+    "9": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Reflection Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Reflection Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger3 Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ]
+    ],
+    "🔑": [
+      [
+        "Merger2 Access",
+        "Merger3 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger2 Access",
+        "Merger4 Access",
+        "Rotation Access"
+      ],
+      [
+        "Merger2 Access",
+        "Reflection Access",
+        "Rotation Access"
+      ]
+    ],
+    "🚪": [
+      [
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Merger4 Access",
+        "Reflection Access"
+      ]
+    ],
+    "~": [
+      [
+        "Bender Access",
+        "Merger2 Access",
+        "Rotation Access"
+      ],
+      [
+        "Bender Access",
+        "Merger3 Access",
+        "Reflection Access",
         "Rotation Access"
       ]
     ]

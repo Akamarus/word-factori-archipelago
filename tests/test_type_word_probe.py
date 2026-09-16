@@ -36,6 +36,12 @@ class TypeWordProbePaths(unittest.TestCase):
         self.validate()
         self.assertFalse(self.output.exists())
 
+    def test_recipe_safety_cannot_be_combined_with_enforcement(self):
+        with self.assertRaisesRegex(ValueError, 'separate'):
+            self.probe.build_probe(self.cli, self.original, self.runtime, self.output,
+                                   enforcement=True, recipe_safety=True)
+        self.assertFalse(self.output.exists())
+
     def test_existing_output_is_preserved(self):
         self.output.mkdir()
         sentinel = self.output / "keep.txt"

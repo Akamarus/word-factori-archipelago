@@ -4,11 +4,11 @@ from functools import lru_cache
 import hashlib
 from importlib.resources import files
 import json
-import string
 from types import MappingProxyType
 from collections.abc import Mapping
 
 from .quantities import MODULE_FAMILIES, Vector, placed_counts
+from .symbols import TARGET_SET, TARGET_TOKENS
 
 Transition = tuple[str, tuple[str, ...], str]
 
@@ -124,7 +124,7 @@ class QuantityCatalog:
 def catalog_from_payload(raw: object) -> QuantityCatalog:
     from .recipe_checks import RECIPE_CHECKS
     expected = {'schema', 'digest', 'provenance', 'transitions', 'recipes', 'alphabet'}
-    if not isinstance(raw, dict) or set(raw) != expected or type(raw['schema']) is not int or raw['schema'] != 1:
+    if not isinstance(raw, dict) or set(raw) != expected or type(raw['schema']) is not int or raw['schema'] != 2:
         raise ValueError('unsupported quantity catalog')
     if raw['digest'] != payload_digest({k: v for k, v in raw.items() if k != 'digest'}):
         raise ValueError('quantity catalog digest mismatch')
@@ -132,8 +132,8 @@ def catalog_from_payload(raw: object) -> QuantityCatalog:
         transitions = frozenset((m, tuple(sorted(inputs)), out) for m, inputs, out in raw['transitions'])
         if not isinstance(raw['recipes'], dict) or set(raw['recipes']) != {str(c.code) for c in RECIPE_CHECKS}:
             raise ValueError('quantity recipe identities do not match the AP catalog')
-        if not isinstance(raw['alphabet'], dict) or set(raw['alphabet']) != set(string.ascii_uppercase):
-            raise ValueError('quantity alphabet must contain exactly A through Z')
+        if not isinstance(raw['alphabet'], dict) or set(raw['alphabet']) != TARGET_SET:
+            raise ValueError('quantity alphabet must contain every supported target character')
         def decode(alternatives):
             if not isinstance(alternatives, list) or not alternatives:
                 raise ValueError('missing constructive alternatives')
@@ -152,7 +152,7 @@ def catalog_from_payload(raw: object) -> QuantityCatalog:
                 if actual != (check.machine, tuple(check.inputs), check.output):
                     raise ValueError('quantity recipe root does not match its AP identity')
         for letter, graphs in alphabet.items():
-            if any(graph.nodes[graph.roots[0]].output != letter for graph in graphs):
+            if any(graph.nodes[graph.roots[0]].output != TARGET_TOKENS[letter] for graph in graphs):
                 raise ValueError('quantity alphabet output mismatch')
     except (KeyError, TypeError, IndexError) as error:
         raise ValueError('malformed quantity catalog') from error

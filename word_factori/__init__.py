@@ -15,7 +15,7 @@ else:
     from .data import (
         CAMPAIGN_DIGEST, CAMPAIGN_ID, CAMPAIGN_VERSION, GAME, ITEM_NAME_TO_ID,
         ITEM_NAMES, ITEM_POOL, LOCATIONS, LOCATION_NAME_TO_ID, MACHINE_ITEMS,
-        REGION_REQUIREMENTS, locations_for_layout,
+        REGION_REQUIREMENTS, locations_for_layout, STICKER_NAMES,
     )
     from .campaign import campaign_for_level_set
     from .client_core import resolve_room_campaign
@@ -61,6 +61,16 @@ else:
             **LOCATION_NAME_TO_ID,
             **{check.name: check.code for check in RECIPE_CHECKS},
             **WORD_ORDER_NAME_TO_ID,
+        }
+        item_name_groups = {
+            "Machines": set(MACHINE_ITEMS) | set(PROGRESSIVE_ITEMS),
+            "Progressive Machines": set(PROGRESSIVE_ITEMS),
+            "Stickers": set(STICKER_NAMES),
+        }
+        location_name_groups = {
+            "Campaign Levels": set(LOCATION_NAME_TO_ID),
+            "Recipe Discoveries": {check.name for check in RECIPE_CHECKS},
+            "Word Orders": set(WORD_ORDER_NAME_TO_ID),
         }
         ut_can_gen_without_yaml = True
 

@@ -18,13 +18,53 @@ class EnhancedHookTests(unittest.TestCase):
             "gml_GlobalScript_Misc": "function getModuleRecipe(arg0, arg1) { return native_recipe(); }",
             "gml_Object_oControl_Create_0": "function doTick() { native_tick(); }\nfunction try_win_condition() { native_win(); }",
             "gml_Object_oControl_Step_0": "native_step();",
+            "gml_GlobalScript_LoadConfig": """function applyModRecipes() {
+    recipes = variable_clone(base_recipes);
+}
+function refreshRecipeList() {
+    for (var i=0;i<10;i++) {
+            if (is_struct(variable_struct_get(variable_struct_get(recipes, _module), input)))
+            {
+                exit;
+            }
+        normalize_recipe();
+    }
+}""",
+            "gml_Object_oPersistent_Other_62": 'switch(request_name) { case "get_recipes": try { base_recipes = json_parse(async_struct.result); applyModRecipes(); refreshRecipeList(); } catch(e) {} break; }',
         }
 
     def test_unknown_binary_is_refused(self):
         with self.assertRaisesRegex(ValueError, "Unsupported game hash"):
             verify_original(b"unrecognized game data")
 
-    def test_probe_refuses_unknown_input_before_creating_or_invoking_tools(self):
+    def test_duplicate_recipe_does_not_abort_group_and_ap_uses_bundled_data(self):
+        try:
+            result = transform_sources(self.sources(), "// helpers")
+        except ValueError as error:
+            self.fail(f"Recipe safety hooks unavailable: {error}")
+        config = result["gml_GlobalScript_LoadConfig"]
+        self.assertIn("continue;", config)
+        self.assertNotIn("exit;", config)
+        self.assertIn('loadB64JsonFileAsStruct("recipes.data", true)', config)
+        self.assertIn("if (wf_access_active())", config)
+        http = result["gml_Object_oPersistent_Other_62"]
+        self.assertLess(http.index("if (wf_access_active()) break;"), http.index("base_recipes ="))
+
+    def test_recipe_safety_hooks_refuse_missing_or_ambiguous_surfaces(self):
+        for entry, needle in (
+            ('gml_GlobalScript_LoadConfig', 'recipes = variable_clone(base_recipes);'),
+            ('gml_GlobalScript_LoadConfig', 'if (is_struct(variable_struct_get(variable_struct_get(recipes, _module), input)))'),
+            ('gml_Object_oPersistent_Other_62', 'case "get_recipes":'),
+        ):
+            for ambiguous in (False, True):
+                with self.subTest(entry=entry, needle=needle, ambiguous=ambiguous):
+                    source = self.sources()
+                    source[entry] = (source[entry] + '\n' + source[entry] if ambiguous
+                                     else source[entry].replace(needle, '// changed hook'))
+                    with self.assertRaisesRegex(ValueError, 'recipe safety hook'):
+                        transform_sources(source, '// helpers')
+
+    def test_probe_refuses_unknown_input_before_writes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             original = root / "original.win"

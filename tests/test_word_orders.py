@@ -35,12 +35,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WordListTests(unittest.TestCase):
-    def test_normalization_is_ascii_only_bounded_deduplicated_and_sorted(self):
+    def test_normalization_is_bounded_deduplicated_and_sorted(self):
         self.assertEqual(
             normalize_word_list([" jack ", "JACK", "ISLAND", "aa", "abcdefghijkl"]),
             ("AA", "ABCDEFGHIJKL", "ISLAND", "JACK"),
         )
-        for invalid in (["I"], ["ABCDEFGHIJKLM"], ["TWO WORDS"], ["WORD2"], ["straße"], [3]):
+        for invalid in (["I"], ["ABCDEFGHIJKLM"], ["TWO WORDS"], ["WORD?"], ["straße"], [3]):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 normalize_word_list(invalid)
 
@@ -96,9 +96,9 @@ class AlphabetRequirementTests(unittest.TestCase):
             missing_machine_options("JACK", {"Future Machine"})
 
     def test_packaged_catalog_has_expected_independent_evidence_digest(self):
-        self.assertEqual(1, ALPHABET_LOGIC_VERSION)
+        self.assertEqual(2, ALPHABET_LOGIC_VERSION)
         self.assertEqual(
-            "f6365423fb5a75a61ae42d9b0fe00d1c1051c7335236e4ef59d33fb64ac8d397",
+            "d0b66413ca9847ca4d610dda7d281c873c40a42ad28f1f3375045a3196c15ee9",
             ALPHABET_LOGIC_DIGEST,
         )
 
@@ -166,7 +166,7 @@ class AlphabetRequirementTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "w") as package:
                 package.writestr("worlds/__init__.py", "")
                 package.writestr("worlds/word_factori/__init__.py", "")
-                for relative in ("recipe_graph.py", "word_orders.py"):
+                for relative in ("recipe_graph.py", "word_orders.py", "symbols.py"):
                     package.write(
                         ROOT / "word_factori" / relative,
                         f"worlds/word_factori/{relative}",
@@ -219,7 +219,7 @@ class WordOrderContractTests(unittest.TestCase):
                     {"id": 975303000, "name": "Word Order 01", "word": "JACK"},
                     {"id": 975303001, "name": "Word Order 02", "word": "ISLAND"},
                 ],
-                "alphabet_logic_version": 1,
+                "alphabet_logic_version": 2,
                 "alphabet_logic_digest": ALPHABET_LOGIC_DIGEST,
             },
             self.enabled,
@@ -243,7 +243,7 @@ class WordOrderContractTests(unittest.TestCase):
             del candidate[field]
             malformed.append(candidate)
         malformed.append({**self.enabled, "alphabet_logic_version": True})
-        malformed.append({**self.enabled, "alphabet_logic_version": 2})
+        malformed.append({**self.enabled, "alphabet_logic_version": 1})
         malformed.append({**self.enabled, "alphabet_logic_digest": "0" * 64})
         for candidate in malformed:
             with self.subTest(candidate=candidate), self.assertRaises(ValueError):

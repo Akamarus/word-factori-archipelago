@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.1 — Recipe loading, static groups and symbol orders (tester prerelease)
+
+- Fixed a native recipe-normalization bug reproduced with the original game code: duplicate reversed inputs could stop processing a machine's remaining recipes. Subsequent save loading could then crash with `Unable to find instance for object index 6`. Normalization now skips the already-normalized entry and continues processing.
+- AP sessions load the verified bundled recipe table and ignore online recipe replacements. Entering the AP mod resets an earlier vanilla online table; vanilla sessions retain online updates. This keeps game recipes aligned with AP logic.
+- Registered class-level item groups: `Machines`, `Progressive Machines`, `Stickers`; location groups: `Campaign Levels`, `Recipe Discoveries`, `Word Orders`. Groups exist before Archipelago registers the world and do not change with a seed's options.
+- Type-a-Word now supports A–Z plus every verified native special character: `()#%$@+=&0123456789🔑🚪~`. Lowercase ASCII input still becomes uppercase. Targets remain 2–12 characters, with at most 200 entries and 1–20 selected orders. Quote YAML targets, especially numbers and punctuation.
+- Rebuilt normal and progressive reachability catalogs from native-verified transitions and factory witnesses, including the game's rotated-six representation of 9. Added symbol completion, duplicate-check and Universal Tracker reconstruction coverage. The 187 optional letter-recipe checks and stable numbered word-order IDs are unchanged.
+- Rebuilt the reversible native delta and updated Windows/Linux validation. Upgrade/restore paths retain recognition of 1.5.0 and earlier supported patches and preserve the verified original backup.
+- Updated player documentation and the word-order YAML example. Use matching APWorld, client, tracker and native patch, a new room and a fresh mod save; older symbol/quantity contracts are not silently reinterpreted. Keep existing saves as backups.
+- This is a tester prerelease, not a stable-release declaration. Automated and isolated native tests do not replace a connected Windows or Linux/Proton playthrough. The fix does not edit or repair player saves.
+
 ## 1.5.0 — Expanded checks and progressive machines (tester prerelease)
 
 All changes below are new since the published 1.4.2 release. This release is for community testing, not a declaration of stable or fully playtested support.

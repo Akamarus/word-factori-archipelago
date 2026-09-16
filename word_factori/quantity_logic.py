@@ -1,10 +1,10 @@
 """Conservative complete-factory candidates; never claim exhaustive trade-offs."""
 from collections import Counter
 from functools import lru_cache
-import string
 
 from .quantities import FAMILIES, MODULE_FAMILIES, checked_vector
 from .quantity_graphs import FactoryGraph, graph_budget, load_catalog, merge_graphs
+from .symbols import TARGET_SET
 
 MAX_CANDIDATES = 256
 
@@ -38,8 +38,8 @@ def _ranked_candidates(graphs):
 @lru_cache(maxsize=256)
 def graphs_for_word(word: str, module_limits: tuple[tuple[str,int], ...] = (),
                     allowed_families: frozenset[str] | None = None) -> tuple[FactoryGraph, ...]:
-    if not isinstance(word, str) or not 1 <= len(word) <= 12 or any(c not in string.ascii_uppercase for c in word):
-        raise ValueError('quantity word must be 1–12 uppercase ASCII letters')
+    if not isinstance(word, str) or not 1 <= len(word) <= 12 or any(c not in TARGET_SET for c in word):
+        raise ValueError('quantity word must be 1–12 supported uppercase letters or symbols')
     if any(name not in MODULE_FAMILIES and name != 'IFactory' or type(n) is not int or n < 0
            for name, n in module_limits):
         raise ValueError('invalid native module restriction')

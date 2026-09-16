@@ -36,6 +36,19 @@ class _MachineState:
 
 
 class WordOrderWorldTests(unittest.TestCase):
+    def test_symbol_orders_restore_tracker_contract_in_both_machine_modes(self):
+        for progressive in (False, True):
+            with self.subTest(progressive=progressive):
+                original = self.make_world(29, progressive_machines=progressive,
+                    type_a_word_checks=True, type_a_word_count=3,
+                    type_a_word_words=["I=", "A9🔑", "(=)"])
+                original.create_regions()
+                original.set_rules()
+                slot = original.fill_slot_data()
+                restored = self.make_world(907, passthrough={word_factori.GAME:slot})
+                self.assertEqual(slot, restored.fill_slot_data())
+                self.assertEqual({"I=", "A9🔑", "(=)"}, {o.word for o in restored.word_orders})
+
     def make_world(self, seed=17, **options):
         return fixtures.WorldLayoutTests().make_world(seed, **options)
 

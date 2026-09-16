@@ -52,7 +52,7 @@ class TypeAWordCount(Range):
 
 
 class TypeAWordWords(OptionList):
-    """Words from which this seed selects Type-a-Word orders."""
+    """Targets of 2–12 supported letters/symbols. Quote numeric and punctuation entries in YAML."""
     display_name = "Type-a-Word Words"
     default = ()
 

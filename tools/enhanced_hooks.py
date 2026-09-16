@@ -66,7 +66,27 @@ def transform_quantity_control(source: str) -> str:
 
 CODE_ENTRIES = ("gml_Object_oLevelButton_Create_0", "gml_GlobalScript_MenuFuncs",
                 "gml_GlobalScript_LevelFuncs", "gml_GlobalScript_Building", "gml_GlobalScript_Misc",
-                "gml_Object_oControl_Create_0", "gml_Object_oControl_Step_0")
+                "gml_Object_oControl_Create_0", "gml_Object_oControl_Step_0",
+                "gml_GlobalScript_LoadConfig", "gml_Object_oPersistent_Other_62")
+
+
+def transform_recipe_loading(config: str, http: str) -> tuple[str, str]:
+    """Normalize every entry; AP never consumes mutable online recipe definitions."""
+    duplicate = (
+        "if (is_struct(variable_struct_get(variable_struct_get(recipes, _module), input)))\n"
+        "            {\n                exit;\n            }"
+    )
+    clone = "recipes = variable_clone(base_recipes);"
+    online = 'case "get_recipes":'
+    for source, needle in ((config, duplicate), (config, clone), (http, online)):
+        if source.count(needle) != 1:
+            raise ValueError("Expected exactly one native recipe safety hook")
+    config = config.replace(duplicate, duplicate.replace("exit;", "continue;"))
+    # Reload the packaged source even when switching into AP after a vanilla
+    # online response. Do not mutate base_recipes, which belongs to vanilla.
+    config = config.replace(clone, clone + '\n    if (wf_access_active()) recipes = loadB64JsonFileAsStruct("recipes.data", true);')
+    http = http.replace(online, online + "\n        if (wf_access_active()) break;")
+    return config, http
 
 
 def runtime_helpers(root) -> str:
@@ -81,7 +101,7 @@ def transform_sources(sources: dict[str, str], helpers: str) -> dict[str, str]:
     button = "gml_Object_oLevelButton_Create_0"
     menu = "gml_GlobalScript_MenuFuncs"
     if set(sources) != set(CODE_ENTRIES):
-        raise ValueError("Expected exactly the seven verified native code entries")
+        raise ValueError("Expected exactly the verified native code entries")
     # Keep native visibility, animation, paywall, mode and secret checks intact.
     needle = "return (level_index == 0 ||"
     if sources[button].count(needle) != 1:
@@ -94,4 +114,6 @@ def transform_sources(sources: dict[str, str], helpers: str) -> dict[str, str]:
     })
     result['gml_Object_oControl_Create_0'] = transform_quantity_control(sources['gml_Object_oControl_Create_0'])
     result['gml_Object_oControl_Step_0'] = 'wf_access_poll();\n' + sources['gml_Object_oControl_Step_0']
+    result[CODE_ENTRIES[7]], result[CODE_ENTRIES[8]] = transform_recipe_loading(
+        sources[CODE_ENTRIES[7]], sources[CODE_ENTRIES[8]])
     return result
