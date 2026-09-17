@@ -21,6 +21,38 @@ from word_factori.platform_paths import InstallationPaths, save_installation
 
 
 class LinuxClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_native_mail_starts_only_for_paired_capability_and_closes_owner(self):
+        with self.install():
+            receipt_path = self.paths.mod_folder / RECEIPT_NAME
+            receipt = json.loads(receipt_path.read_text())
+            receipt['mail_protocol'] = 1
+            receipt_path.write_text(json.dumps(receipt))
+            ctx = self.context()
+            ctx.start_overlay()
+            self.assertIsNotNone(getattr(ctx, 'native_mail', None), 'Linux Mail adapter did not start')
+            self.assertEqual([], self.overlay.started)
+            await ctx.shutdown()
+            self.assertIsNone(ctx.native_mail)
+
+    async def test_native_mark_read_keeps_later_arrivals_unread(self):
+        from word_factori.dispatch_store import DispatchLedger
+        save_installation(self.paths, self.config)
+        ctx = self.context()
+        method = getattr(ctx, 'mark_native_mail_read', None)
+        self.assertIsNotNone(method, 'Native Mail bounded read acknowledgment is missing')
+        identity = ctx.connected_identity
+        # Real immutable dispatch events, not a mocked persistence method.
+        from word_factori.dispatch import DispatchEvent, DispatchDirection
+        events = tuple(DispatchEvent(f'{identity}:receive:{i}', DispatchDirection.RECEIVED,
+                                    1, 'Item', 2, 'Player', 'Game', i, 'Location', i, None, False)
+                       for i in range(3))
+        ctx.dispatch_ledger = DispatchLedger(identity, events, frozenset(e.key for e in events), True, 2)
+        self.assertTrue(await method(frozenset(e.key for e in events[:2]), identity, ctx._connection_generation))
+        self.assertEqual(frozenset({events[2].key}), ctx.dispatch_ledger.unread_keys)
+        ctx._advance_connection_generation()
+        self.assertFalse(await method(frozenset({events[2].key}), identity, ctx._connection_generation-1))
+        self.assertEqual(frozenset({events[2].key}), ctx.dispatch_ledger.unread_keys)
+
     async def asyncSetUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

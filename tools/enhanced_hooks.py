@@ -57,10 +57,32 @@ def transform_enforcement(sources: dict[str, str], helper: str) -> dict[str, str
 
 
 def transform_quantity_control(source: str) -> str:
-    for name in ('doTick', 'try_win_condition'):
-        source = insert_function_guard(source, name,
-            '    wf_access_poll(); if (wf_access_quantity() && !wf_access_factory_allowed(buildings)) { wf_access_explain(buildings); return false; }')
-    return source
+    # The allowlisted native tick is synchronous: it cannot accept placement or
+    # network events midway through this call. Keep its body (including returns)
+    # in a separate method so every exit crosses our cleanup boundary.
+    tick = re.compile(r'\bfunction doTick\(\)\s*\{')
+    if len(tick.findall(source)) != 1 or 'wf_access_native_tick' in source:
+        raise ValueError('Expected exactly one unwrapped zero-argument doTick hook')
+    source = tick.sub('function wf_access_native_tick() {', source, count=1)
+    source = insert_function_guard(source, 'try_win_condition',
+        '    wf_access_poll(); if (wf_access_quantity() && !wf_access_factory_allowed(buildings)) { wf_access_explain(buildings); return false; }')
+    return source + '''
+function doTick() {
+    global.wf_access_tick_grants = undefined;
+    wf_access_poll();
+    var wf_quantity = wf_access_quantity();
+    if (wf_quantity && !wf_access_factory_allowed(buildings)) { wf_access_explain(buildings); return false; }
+    try {
+        if (wf_quantity) global.wf_access_tick_grants = wf_access_tick_permissions();
+        var wf_result = wf_access_native_tick();
+        global.wf_access_tick_grants = undefined;
+        return wf_result;
+    } catch (wf_error) {
+        global.wf_access_tick_grants = undefined;
+        throw wf_error;
+    }
+}
+'''
 
 
 
@@ -116,4 +138,28 @@ def transform_sources(sources: dict[str, str], helpers: str) -> dict[str, str]:
     result['gml_Object_oControl_Step_0'] = 'wf_access_poll();\n' + sources['gml_Object_oControl_Step_0']
     result[CODE_ENTRIES[7]], result[CODE_ENTRIES[8]] = transform_recipe_loading(
         sources[CODE_ENTRIES[7]], sources[CODE_ENTRIES[8]])
+    return result
+
+
+def production_code_entries() -> tuple[str, ...]:
+    from tools.mail_hooks import CODE_ENTRIES as mail_entries
+    return tuple(dict.fromkeys((*CODE_ENTRIES, *mail_entries)))
+
+
+def transform_production_sources(sources: dict[str, str], root) -> dict[str, str]:
+    """Compose separately verified transformations; refuse unreviewed overlaps."""
+    from tools.mail_hooks import CODE_ENTRIES as mail_entries
+    from tools.mail_hooks import transform_mail_sources, production_mail_helpers, redirect_readers
+    if set(sources) != set(production_code_entries()):
+        raise ValueError('Expected exactly the production progression and Mail hooks')
+    overlap = set(CODE_ENTRIES) & set(mail_entries)
+    if overlap != {'gml_GlobalScript_LoadConfig', 'gml_Object_oControl_Step_0'}:
+        raise ValueError('Unreviewed production hook overlap')
+    mail = transform_mail_sources({key: sources[key] for key in mail_entries}, production_mail_helpers(root))
+    enhanced = transform_sources({key: sources[key] for key in CODE_ENTRIES}, runtime_helpers(root))
+    result = enhanced | mail
+    # LoadConfig receives recipe safety and guarded raw input readers.
+    result['gml_GlobalScript_LoadConfig'] = redirect_readers(enhanced['gml_GlobalScript_LoadConfig'])
+    # Poll progression even when Mail suppresses editing, never suppress production.
+    result['gml_Object_oControl_Step_0'] = 'wf_access_poll();\n' + mail['gml_Object_oControl_Step_0']
     return result

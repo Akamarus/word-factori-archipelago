@@ -6,9 +6,9 @@ An experimental public beta for playing **Word Factori** with [Archipelago](http
 
 ![Word Factori with the integrated Archipelago Chat panel open](docs/images/word-factori-archipelago-chat.png)
 
-## New in 1.5.1: recipe-loading fix and symbol orders
+## New in 1.6.0: AP Mail targets, Linux Mail and faster simulation
 
-**[Download the 1.5.1 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.5.1)** — fixes the reproduced save-loading recipe crash, adds static Archipelago groups and supports native symbols in Type-a-Word orders. One player ZIP supports Windows and Linux/Proton. This is **not a stable release**. See the [complete changelog](CHANGELOG.md).
+**[Download the 1.6.0 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.6.0)** — adds selected Type-a-Word targets to AP Mail, experimental native Linux/Proton Mail, source-generation support through Archipelago 0.6.8, and a scoped progressive-simulation performance fix. One player ZIP supports Windows and Linux/Proton. This is **not a stable release**. See the [complete changelog](CHANGELOG.md).
 
 - **Recipe Journal checks:** 187 distinct working letter recipes, enabled by default and configurable.
 - **Type-a-Word orders:** optional checks for a seed-selected subset of your own word list.
@@ -16,7 +16,11 @@ An experimental public beta for playing **Word Factori** with [Archipelago](http
 - **Universal Tracker:** reconstructs the actual room's layout, goals, selected words and quantity rules.
 - **Native enforcement:** saved/imported factories cannot bypass locked machinery; progressive over-limit layouts stay editable without awarding invalid checks.
 
-**Updating from 1.5.0, an earlier supported release or a development build:** close the game and Archipelago, extract this ZIP into a separate folder, and rerun its installer. Restart Archipelago, update the tracker-side APWorld too, generate a **new room** and use a **fresh empty mod save**. Do not delete your old saves or original-game backup. Old room compatibility is not promised by this release; changing YAML cannot change an existing room.
+**Updating from 1.5.1 or an earlier supported release:** close the game and Archipelago, extract this ZIP into a separate folder, and rerun its installer. Restart Archipelago, update the tracker-side APWorld too, generate a **new room** and use a **fresh empty mod save**. Do not delete your old saves or original-game backup. Old room compatibility is not promised by this release; changing YAML cannot change an existing room.
+
+### AP Mail on both platforms
+
+Open **AP MAIL** or press **F8**. The **Type-a-Word** tab lists your room's chosen targets and completion status; targets also appear on connection, in `/wf_words`, and in the generated spoiler. Windows keeps its existing overlay. Linux uses an experimental native panel with **Items**, **Chat**, **Type-a-Word**, **Status**, and blue item popups on the left. On Linux, enter server, slot and password in the regular client; Mail can reconnect using that configuration. No extra app, service or YAML option is needed. Rerun the matching installer: replacing only the APWorld does not apply native changes.
 
 ### YAML options
 
@@ -55,7 +59,7 @@ Word Factori:
 
 Recipe checks record an exact machine/input recipe in the bound save's global journal, not merely the first time a letter is made. Alternate and hidden routes are separate checks. Source I, symbol outputs and two unusable Merger3 entries are excluded. See [Recipe Journal details](docs/recipe-checks.md).
 
-Type-a-Word orders are earned by manufacturing selected targets in the native free-word factory. Entries are trimmed, uppercased, deduplicated and sorted before seeded sampling. Disabled orders require no list and create no checks. Use `/wf_words` to see selected words, status and missing machines/upgrades.
+Type-a-Word orders are earned by manufacturing selected targets in the native free-word factory. Entries are trimmed, uppercased, deduplicated and sorted before seeded sampling. Disabled orders require no list and create no checks. Use `/wf_words` to see selected words, status and missing machines/upgrades. Players on both platforms can also open **AP Mail → Type-a-Word**; both platforms announce the chosen targets on connection, and the spoiler lists each player's selections. **Sending** means the check is queued; **Completed** means the server has acknowledged it. The tab is a read-only checklist, not a way to award checks. `[KEY]` and `[DOOR]` represent the game's corresponding symbols.
 
 Supported characters are **A–Z** and **`()#%$@+=&0123456789🔑🚪~`**. ASCII lowercase is accepted and converted to uppercase. Spaces inside a target and other punctuation are not supported. Quote YAML targets (for example `'99'`, `'I='`, `'🔑🚪'`) so YAML keeps them as text. Symbol routes are covered in both normal and progressive logic; this does not add symbol Recipe Journal checks.
 
@@ -82,7 +86,7 @@ Progressive upgrades are polled during play without reloading. Saved or imported
 - **No World Access items in new seeds.** Your machines and recipe requirements determine which puzzles you can solve, alongside page progression.
 - **I stays available in every level.** Discovery Labs still restrict machine types, and challenge factories retain their machine limits.
 - **Shuffled pages from the start.** The first page is randomized, all six levels on an unlocked page are selectable, and four completions advance. Normal access unlocks refresh on factory entry; progressive quantities update during play.
-- **New rooms start with an empty mod save.** For 1.5.1 testing, generate a new room; updating does not convert existing rooms.
+- **New rooms start with an empty mod save.** For 1.6.0 testing, generate a new room; updating does not convert existing rooms.
 
 There is one integration: enhanced, shuffled, machine-only progression. The player package includes the APWorld, JSON mod, and required reversible native delta patch. There are no integration-mode or fixed-layout choices. Connected acceptance remains pending. Progressive over-limit notices are implemented; general missing-requirement notices for every campaign target remain planned.
 
@@ -91,12 +95,13 @@ The native patch enables independent first-page buttons and machine refresh on f
 ## Engineering highlights
 
 - Python Archipelago APWorld and client integration compatible with Archipelago 0.6.7.
+- Also passes generation on 0.6.8 source, including invocation outside the source directory; connected 0.6.8 client testing remains pending.
 - Word Factori JSON mod integration with a required exact-build native patch and stable 30- and 40-location Archipelago identities even when their native game slots move.
 - Deterministic recipe-graph and progression modeling for automated reachability rules.
 - Idempotent item delivery, completed-check, reconnect, and victory reconciliation.
 - Defensive save-slot binding and digest-verified campaign identity without writing game saves.
 - Transactional Windows and Linux install, update, and uninstall that preserve neighboring files.
-- Failure-isolated, Word Factori-styled Items/Chat overlay on Windows; regular native client on Linux.
+- Failure-isolated, Word Factori-styled AP Mail: Windows overlay and experimental native Linux/Proton panel. The regular client remains available on both.
 - A reproducible player package, full automated suite, release verifier, and Windows/Ubuntu CI workflow.
 
 ## Architecture
@@ -135,11 +140,11 @@ Letters are always manufactured inside Word Factori. Archipelago never sends ind
 
 The required Word Factori depot is Steam build **12616577**, with the exact original `data.win` verified by the installer. Other builds and other binary modifications are rejected.
 
-For a new playthrough, generate a room with the matching APWorld and client and use a **fresh empty mod save**. Use a new 1.5.1 room for this prerelease; keep previous saves as backups rather than reusing their progress.
+For a new playthrough, generate a room with the matching APWorld and client and use a **fresh empty mod save**. Use a new 1.6.0 room for this prerelease; keep previous saves as backups rather than reusing their progress.
 
 ## Simple installation
 
-Download the single **[word-factori-archipelago-1.5.1.zip player package](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.5.1/word-factori-archipelago-1.5.1.zip)** for either platform. Use the player ZIP, not GitHub's automatic source-code archives.
+Download the single **[word-factori-archipelago-1.6.0.zip player package](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.6.0/word-factori-archipelago-1.6.0.zip)** for either platform. Use the player ZIP, not GitHub's automatic source-code archives.
 
 ### Windows
 
@@ -185,7 +190,7 @@ To restore the game binary, close Word Factori and double-click the root **Resto
 5. Restart native Archipelago, launch **Word Factori Client**, and connect to your room before completing checks.
 6. Start Word Factori through Steam, select **word factori archipelago**, and use a fresh empty mod save for a **new** room. Do not reuse an earlier room's progressed save.
 
-Use the regular Archipelago client for items, chat, hints, and connection status. **The in-game AP Mail overlay is Windows-only.** Do not run the Windows `.cmd` installer through Wine or use `sudo`.
+Connect in the regular Archipelago client, then click **AP MAIL** or press **F8** in the game. Experimental Linux Mail has Items, Chat, Type-a-Word and Status. Keep the regular client running; it remains responsible for networking and checks. Do not run the Windows `.cmd` installer through Wine or use `sudo`.
 
 To update, close the game and Archipelago and run the same Linux command again. Setup verifies the game, preserves its original backup, installs the APWorld and mod, and records the selected paths locally. For manual path selection, verification, restore, uninstall, and interrupted-setup recovery, see the [Linux/Proton guide](docs/linux-proton.md).
 
@@ -276,7 +281,7 @@ Discovery Labs use stricter rules: only their declared route is permitted in the
 
 ### Universal Tracker and page progress
 
-Universal Tracker reconstructs the room's saved shuffled layout, goal, recipe checks, word orders and progressive settings instead of regenerating them from local YAML. Install the matching 1.5.1 Word Factori APWorld in the tracker environment too. Connected tracker testing remains a community-test priority.
+Universal Tracker reconstructs the room's saved shuffled layout, goal, recipe checks, word orders and progressive settings instead of regenerating them from local YAML. Install the matching 1.6.0 Word Factori APWorld in the tracker environment too. Connected tracker testing remains a community-test priority.
 
 “In logic” means reachable with your current machines **after completing the required earlier puzzles**, not necessarily clickable right now. The tracker assumes you can finish four solvable levels on the preceding page; the game opens the next page only after you actually finish four there. Conversely, an unlocked page lets you select all six factories even if some still require machines you do not own. Discovery Lab routes and challenge limits also apply.
 
@@ -327,7 +332,7 @@ Manual reports and `/send_location` mark checks on the Archipelago server; they 
 
 ## In-game Archipelago client (Windows)
 
-Linux uses the regular native Archipelago client for all items and chat; this overlay is not available there.
+Linux uses a separate experimental native panel with Items, Chat, Type-a-Word and Status; see the [Linux Mail guide](docs/linux-proton.md#in-game-ap-mail-experimental). The Windows-specific controls below describe the existing overlay.
 
 While Word Factori is focused, received Archipelago items appear as blue popups on the left side of the game. The small **AP MAIL** button shows unread deliveries; click it or press **F8** to open the integrated client.
 
@@ -335,6 +340,7 @@ The panel provides:
 
 - **Items** with All, Received, and Sent history;
 - **Chat** with player messages, hints, command results, and safe error notices;
+- **Type-a-Word** selected targets and completion status;
 - manual server address and slot connection, intentional disconnect, and connection status;
 - masked room-password entry; and
 - normal Archipelago chat, `!` server commands, and `/` local commands from one input.
@@ -361,9 +367,9 @@ Use a new empty save slot for that Archipelago room. The safety system intention
 
 ### The in-game client is missing
 
-On Linux this is expected: use the regular native Word Factori Client.
+On Linux, keep the regular native Word Factori Client running, connect there, select the AP mod and press F8. If Mail is absent, close the game/client and rerun the matching Linux installer; replacing only the APWorld is insufficient. Use the regular client as a fallback and see the [Linux guide](docs/linux-proton.md).
 
-Use `/wf_overlay status` in the Word Factori Client. Then try `/wf_overlay restart`. Keep Word Factori in windowed or borderless mode; exclusive fullscreen is not supported. Item delivery and check reporting continue in the regular client even when the display is unavailable.
+On Windows, use `/wf_overlay status` in the Word Factori Client, then try `/wf_overlay restart`. Keep Word Factori in windowed or borderless mode; exclusive fullscreen is not supported by the Windows overlay. On both platforms, item delivery and check reporting continue in the regular client even when Mail is unavailable.
 
 ### The next-page arrow is gray
 
@@ -371,11 +377,11 @@ Complete any four levels on the current full page, including page one. If the th
 
 ## Current limitations
 
-- Version 1.5.1 is a tester prerelease; a complete connected playthrough of the new features remains pending.
+- Version 1.6.0 is a tester prerelease; a complete connected playthrough of the new features remains pending.
 - Recipe checks, Type-a-Word orders and tracker reconstruction have automated/isolated coverage; live game/client/tracker testing is still needed.
-- Linux setup and client behavior have automated Ubuntu coverage, but a real Linux/Proton playthrough remains unverified. Linux does not have the Windows in-game overlay.
+- Linux setup/client behavior have automated coverage. The new native Mail panel has isolated Windows-runner coverage, not an actual Linux/Proton playthrough. Proton, compositor, fullscreen and Flatpak Mail testing remain pending.
 - Arbitrary Workshop packs are not imported into generated seeds.
-- Progressive GUI import/undo/duplicate, restored over-limit saves and large-factory performance need tester coverage. Repeated scene scans may be expensive on large factories.
+- Progressive GUI import/undo/duplicate, restored over-limit saves and sustained large-factory performance need tester coverage. The new tick-scoped optimization reduces repeated scans; it is not a memory-leak or FPS guarantee.
 - Sticker items are AP filler rather than in-game sticker grants.
 - There is no DeathLink, traps, or randomized factory layouts.
 - The full in-game client is implemented. Its primary Windows 10/125%/2560×1440 path is live-smoke tested; password-room, 100%/150% scaling, ultrawide, and multi-monitor permutations remain in the beta matrix.

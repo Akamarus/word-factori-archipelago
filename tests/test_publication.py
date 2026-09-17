@@ -12,6 +12,11 @@ from tools.build_release import ROOT, include
 
 
 class PublicationTests(unittest.TestCase):
+    def test_native_mail_modules_are_in_the_built_apworld(self):
+        build_release.write_world()
+        with zipfile.ZipFile(build_release.WORLD_ARCHIVE) as archive:
+            for name in ('native_mail_protocol', 'native_mail_transport', 'native_mail_adapter'):
+                self.assertIn('word_factori/' + name + '.py', archive.namelist())
     EXPECTED_WORLD_ENTRIES = {
         "word_factori/Components.py",
         "word_factori/__init__.py",
@@ -31,6 +36,9 @@ class PublicationTests(unittest.TestCase):
         "word_factori/docs/setup_en.md",
         "word_factori/layout.py",
         "word_factori/mod.py",
+        "word_factori/native_mail_protocol.py",
+        "word_factori/native_mail_transport.py",
+        "word_factori/native_mail_adapter.py",
         "word_factori/options.py",
         "word_factori/platform_paths.py",
         "word_factori/overlay_model.py",
@@ -113,12 +121,12 @@ class PublicationTests(unittest.TestCase):
 
         metadata = json.loads((ROOT / "word_factori" / "archipelago.json").read_text(encoding="utf-8"))
 
-        self.assertEqual("1.5.1", VERSION)
+        self.assertEqual("1.6.0", VERSION)
         self.assertEqual("tester prerelease", metadata["release_status"])
         self.assertEqual(VERSION, metadata["world_version"])
         self.assertEqual("0.6.7", metadata["minimum_ap_version"])
-        self.assertEqual("0.6.7", metadata["maximum_ap_version"])
-        self.assertEqual(14, metadata["version"])
+        self.assertEqual("0.6.8", metadata["maximum_ap_version"])
+        self.assertEqual(15, metadata["version"])
         self.assertEqual(7, metadata["compatible_version"])
         self.assertEqual(f"word-factori-archipelago-{VERSION}.zip", build_release.RELEASE_ARCHIVE.name)
 
@@ -187,6 +195,7 @@ class PublicationTests(unittest.TestCase):
                 "docs/enhanced-playtest.md",
                 "docs/linux-proton.md",
                 "docs/recipe-checks.md",
+                "docs/feedback-2026-09-16.md",
                 "Install Word Factori Archipelago.sh",
                 "tools/install_linux.py",
                 "tools/linux_transaction.py",

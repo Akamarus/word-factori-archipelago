@@ -114,6 +114,7 @@ def verify_archive_matches_disk(archive_path: Path, roots: tuple[str, ...] | Non
                 "release-manifest.json",
                 "docs/enhanced-playtest.md",
                 "docs/recipe-checks.md",
+                "docs/feedback-2026-09-16.md",
                 "Restore Original Game.cmd",
                 "tools/install_enhanced.ps1",
                 "tools/enhanced.patch.gz",
@@ -135,6 +136,9 @@ def verify_headless_modules() -> None:
     for name in (
         "word_factori.campaign",
         "word_factori.client_messages",
+        "word_factori.native_mail_protocol",
+        "word_factori.native_mail_transport",
+        "word_factori.native_mail_adapter",
         "word_factori.overlay_model",
         "word_factori.overlay_protocol",
         "word_factori.overlay_renderer",

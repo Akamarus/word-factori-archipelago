@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import uuid
 from pathlib import Path
 
 import Utils
@@ -177,6 +178,8 @@ class WordFactoriContext(CommonContext):
         self.mods_path = self.factori_root / "mods.json" if self.factori_root else None
         self.state_root = self.factori_root / "archipelago" if self.factori_root else None
         self.slot_data: dict = {}
+        self._word_order_room_data: dict | None = None
+        self._word_order_campaign: ResolvedCampaign | None = None
         self.bridge_state = BridgeState.empty()
         self.last_render_signature: tuple[tuple[str, ...], int] | None = None
         self._prepared_campaign_reload_required = False
@@ -204,6 +207,82 @@ class WordFactoriContext(CommonContext):
         self.transcript = ClientTranscript.empty()
         self.client_notices: tuple[ClientNotice, ...] = ()
         self._client_message_sequence = 0
+        self.native_mail = None
+        self.native_mail_task: asyncio.Task | None = None
+
+    def start_native_mail(self) -> bool:
+        """Linux presentation only; exact patch verification still gates startup."""
+        if not self.native_linux or self.installation_paths is None or self.mod_folder is None:
+            return False
+        if self.native_mail is not None:
+            return True
+        transport = None
+        try:
+            from .enhanced_runtime import RECEIPT_NAME
+            from .native_mail_adapter import NativeMailAdapter
+            from .native_mail_transport import NativeMailTransport
+            if not patch_readiness(self.mod_folder, self.installation_paths).ready:
+                return False
+            receipt = json.loads((self.mod_folder / RECEIPT_NAME).read_text(encoding='utf-8'))
+            if type(receipt.get('mail_protocol')) is not int or receipt['mail_protocol'] != 1:
+                return False
+            transport = NativeMailTransport(self.mod_folder / 'archipelago_mail', uuid.uuid4().hex)
+            transport.start()
+            self.native_mail = NativeMailAdapter(transport)
+            self.native_mail_task = asyncio.create_task(self._native_mail_loop(), name='Word Factori native Mail')
+            self.publish_native_mail()
+            return True
+        except Exception:
+            if transport is not None:
+                transport.close()
+            self.native_mail = None
+            self._overlay_warning('Native Mail unavailable; use the regular client. Progression remains active.')
+            return False
+
+    def publish_native_mail(self) -> bool:
+        if self.native_mail is None:
+            return False
+        try:
+            from .native_mail_adapter import room_token
+            identity = self.connected_identity
+            if identity is not None and self.dispatch_ledger.identity != identity:
+                return False
+            word_rows, word_status = self.word_order_presentation()
+            return self.native_mail.publish(snapshot(
+                self.overlay_state, self.dispatch_ledger, self.overlay_preferences,
+                self.transcript, self.client_notices, generation=self._presentation_generation,
+                word_order_rows=word_rows, word_orders_status=word_status),
+                room=room_token(identity), contract=checks_contract_digest(self.slot_data) if identity else None,
+                unread_keys=self.dispatch_ledger.unread_keys)
+        except Exception:
+            self._overlay_warning('Native Mail display unavailable; progression remains active.')
+            return False
+
+    async def _native_mail_loop(self) -> None:
+        while not self.exit_event.is_set() and self.native_mail is not None:
+            try:
+                await self.native_mail.process_once(self)
+            except Exception:
+                self._overlay_warning('Native Mail action unavailable; use the regular client.')
+            try:
+                await asyncio.wait_for(self.exit_event.wait(), timeout=.25)
+            except asyncio.TimeoutError:
+                pass
+
+    async def mark_native_mail_read(self, keys, identity, generation) -> bool:
+        """Persist only deliveries in the acknowledged view, never newer arrivals."""
+        async with self._dispatch_lock:
+            if not self._connection_epoch_matches(identity, generation) or self.dispatch_ledger.identity != identity:
+                return False
+            candidate = replace(self.dispatch_ledger, unread_keys=self.dispatch_ledger.unread_keys - frozenset(keys))
+            try:
+                save_ledger(self.dispatch_path(identity), candidate)
+            except (OSError, ValueError):
+                return False
+            self.dispatch_ledger = candidate
+            self.overlay_state = replace(self.overlay_state, unread_count=len(candidate.unread_keys))
+            self.publish_native_mail()
+            return True
 
     @property
     def last_overlay_error(self) -> str | None:
@@ -278,6 +357,20 @@ class WordFactoriContext(CommonContext):
             self._set_overlay_connection_status("disconnected")
 
     async def shutdown(self) -> None:
+        native_task, self.native_mail_task = self.native_mail_task, None
+        if native_task is not None:
+            native_task.cancel()
+            try:
+                await native_task
+            except asyncio.CancelledError:
+                pass
+        if self.native_mail is not None:
+            try:
+                self.native_mail.close()
+            except Exception:
+                self._overlay_warning('Native Mail shutdown failed; continuing client cleanup.')
+            finally:
+                self.native_mail = None
         action_task, self.overlay_action_task = self.overlay_action_task, None
         if action_task is not None:
             action_task.cancel()
@@ -353,7 +446,6 @@ class WordFactoriContext(CommonContext):
                 ),
             )
             self._overlay_identity = self.connected_identity
-            self.publish_overlay(self.connected_identity, connection_generation)
             try:
                 self.bridge_state = load_state(self.state_path())
             except (OSError, ValueError, TypeError) as error:
@@ -364,6 +456,11 @@ class WordFactoriContext(CommonContext):
                 return
             self.bridge_state = acknowledge_checks(self.bridge_state, self.checked_locations)
             save_state(self.state_path(), self.bridge_state)
+            self.publish_overlay(self.connected_identity, connection_generation)
+            word_rows, _ = self.word_order_presentation()
+            if word_rows:
+                logger.info("Type-a-Word targets: %s. Use /wf_words for status, or AP Mail > Type-a-Word.",
+                            ", ".join(row["word"] for row in word_rows))
             asyncio.create_task(self._connected_reconcile(
                 self.connected_identity, self._snapshot_dispatch_items(self.items_received),
                 frozenset(self.checked_locations), connection_generation,
@@ -391,6 +488,7 @@ class WordFactoriContext(CommonContext):
             if self.connected_identity is not None and self.compatible_campaign():
                 self.bridge_state = acknowledge_checks(self.bridge_state, self.checked_locations)
                 save_state(self.state_path(), self.bridge_state)
+                self.publish_overlay(self.connected_identity)
 
     def state_path(self) -> Path:
         if self.state_root is None:
@@ -429,7 +527,9 @@ class WordFactoriContext(CommonContext):
     def start_overlay(self) -> None:
         """Start optional cosmetic work only after the async client runtime exists."""
         if self.native_linux:
-            self._overlay_warning("Windows overlay is unavailable on Linux; items and chat remain in the regular client")
+            if self.start_native_mail():
+                return
+            self._overlay_warning("Native Mail is unavailable; items and chat remain in the regular client. Rerun the matching Linux installer with the game closed.")
             return
         if not self.overlay_preferences.enabled:
             return
@@ -1222,6 +1322,27 @@ class WordFactoriContext(CommonContext):
             result += '\nMachine allowances: ' + describe_allowances(inventory_view(self.network_items(),progressive=True).machine_limits)
         return result
 
+    def word_order_presentation(self) -> tuple[tuple[dict[str, str], ...], str]:
+        """Reuse validated room data and check status without polling a save."""
+        if self.connected_identity is None or self.server is None:
+            return (), "Connect to view this room's Type-a-Word targets."
+        if self._word_order_room_data != self.slot_data:
+            self._word_order_campaign = self.selected_campaign()
+            self._word_order_room_data = copy.deepcopy(self.slot_data)
+        campaign = self._word_order_campaign
+        if campaign is None:
+            return (), "Type-a-Word targets unavailable: incompatible room data."
+        if not campaign.word_orders:
+            return (), "Type-a-Word orders are off for this room."
+        rows = tuple({
+            "name": order.name, "word": order.word,
+            "status": ("Completed" if order.code in self.checked_locations else
+                       "Sending" if order.code in self.bridge_state.pending_checks else
+                       "Not completed"),
+        } for order in campaign.word_orders)
+        count = sum(row["status"] == "Completed" for row in rows)
+        return rows, f"{count} of {len(rows)} completed. Make these targets in Type-a-Word."
+
     def words_text(self) -> str:
         campaign = self.selected_campaign()
         if campaign is None or not campaign.word_orders:
@@ -1291,8 +1412,6 @@ class WordFactoriContext(CommonContext):
         expected_presentation_generation: int | None = None,
     ) -> bool:
         """Publish cosmetic presentation without exposing renderer failure to bridge work."""
-        if not self.overlay_preferences.enabled:
-            return False
         if (
             expected_connection_generation is not None
             and self._connection_generation != expected_connection_generation
@@ -1309,11 +1428,17 @@ class WordFactoriContext(CommonContext):
             or self._overlay_identity not in (None, expected_identity)
         ):
             return False
+        if self.native_linux:
+            return self.publish_native_mail()
+        if not self.overlay_preferences.enabled:
+            return False
         try:
+            word_rows, word_status = self.word_order_presentation()
             published = self.overlay.publish(snapshot(
                 self.overlay_state, self.dispatch_ledger, self.overlay_preferences,
                 self.transcript, self.client_notices,
                 generation=self._presentation_generation,
+                word_order_rows=word_rows, word_orders_status=word_status,
             ))
         except Exception as error:
             published = False

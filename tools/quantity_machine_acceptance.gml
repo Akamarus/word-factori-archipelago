@@ -63,7 +63,47 @@ if(wf_access_context_valid(qcontext)) {
     wf_access_next_poll=0; wf_access_poll();
     record_test("unlimited reflection accepts both directions",wf_access_factory_allowed() && get_current_module_count("Reflect_hor")==-1,"native_function");
     with(horizontal) instance_destroy(); with(vertical) instance_destroy();
+    with(clockwise) instance_destroy(); with(counterclockwise) instance_destroy();
+    // Real native ticks must audit once, regardless of the number of buildings
+    // or production callbacks. Counter instrumentation exists only in this probe.
+    var profile=[]; var profile_sizes=[16,64,128];
+    for(var size_index=0;size_index<3;size_index++) {
+        var size=profile_sizes[size_index];
+        while(instance_number(oModule)<size) {
+            var extra=instance_create_depth(0,0,0,oIFactory);
+            extra.is_temp_initial=false; extra.building=new Building(oIFactory,"");
+        }
+        global.wf_probe_tick_scans=0;
+        var tick_started=get_timer(); control.doTick();
+        var tick_elapsed=get_timer()-tick_started;
+        array_push(profile,{modules:instance_number(oModule),scans:global.wf_probe_tick_scans,microseconds:tick_elapsed});
+        record_test("one scene audit for native tick with "+string(size)+" modules",global.wf_probe_tick_scans==1,"native_production");
+        record_test("tick permissions cleared after production "+string(size),is_undefined(global.wf_access_tick_grants),"native_production");
+    }
+    snapshot("tick_scope_profile",profile);
+    var actual_tick=control.wf_access_native_tick;
+    control.wf_access_native_tick=method(control,function() {
+        if(!wf_access_allowed(oIFactory,"") || wf_access_allowed(oMerger4,"") || wf_access_allowed(oCustomBuilding,"")) throw "incorrect tick grants";
+        return 7;
+    });
+    record_test("native early return preserved and scope cleared",control.doTick()==7 && is_undefined(global.wf_access_tick_grants),"native_function");
+    control.wf_access_native_tick=method(control,function() { throw "intentional tick failure"; });
+    var caught_tick=false;
+    try {control.doTick();} catch(tick_error) { caught_tick=tick_error=="intentional tick failure"; }
+    record_test("native error rethrown and scope cleared",caught_tick && is_undefined(global.wf_access_tick_grants),"native_function");
+    control.wf_access_native_tick=actual_tick;
+    // A new placement is checked immediately outside the scope and next tick.
+    var excess=instance_create_depth(0,0,0,oMerger2); excess.is_temp_initial=false; excess.building=new Building(oMerger2,"");
+    var before_cycle=control.cycle_count;
+    control.doTick();
+    record_test("placement after tick invalidates production and preview",control.cycle_count==before_cycle && !wf_access_allowed(oIFactory,"") && is_undefined(global.wf_access_tick_grants),"native_production");
+    with(excess) instance_destroy();
+    wf_probe_gate.payload.revision=107; wf_probe_gate.payload.machine_counts.Merger2=1; wf_access_next_poll=0;
+    control.doTick();
+    record_test("next tick honors changed received allowances",control.cycle_count==before_cycle && is_undefined(global.wf_access_tick_grants),"native_production");
+    wf_probe_gate.payload.revision=108; wf_probe_gate.payload.machine_counts.Merger2=2; wf_access_next_poll=0;
+    control.doTick();
+    record_test("later upgrade resumes production without reload",control.cycle_count==before_cycle+1,"native_production");
     wf_probe_gate.context.room=string_repeat("d",64); wf_access_next_poll=0; wf_access_poll();
     record_test("quantity previous room does not grant limits",get_current_module_count("Rotate_cw")==0,"native_function");
-    with(clockwise) instance_destroy(); with(counterclockwise) instance_destroy();
 }

@@ -8,6 +8,27 @@ from word_factori.client_core import resolve_room_campaign
 
 
 class ProgressiveWorldTests(unittest.TestCase):
+    def test_reported_recipe_inventories_match_tracker_and_constructive_logic(self):
+        # Native production evidence: docs/feedback-2026-09-16.md.
+        cases = (
+            ('Bender: [5] -> S', (2,2,0,1,1,1), True),
+            ('Bender: [J2] -> S', (2,2,0,1,1,1), False),
+            ('Merger2: [3, I] -> B', (1,2,0,1,1,1), True),
+            ('Merger2: [4, I] -> H', (1,2,0,1,1,1), True),
+        )
+        original = self.world(recipe_checks=True)
+        restored = fixtures.WorldLayoutTests().make_world(99, passthrough={original.game: original.fill_slot_data()})
+        class State:
+            def __init__(self, counts): self.counts = dict(zip(PROGRESSIVE_ITEMS, counts))
+            def count(self, name, player): return self.counts.get(name, 0)
+            # Isolate recipe arithmetic from page access, which has its own tests.
+            def can_reach_location(self, *args): return True
+        for world in (original, restored):
+            world.create_regions()
+            for name, inventory, expected in cases:
+                with self.subTest(recipe=name, restored=world is restored):
+                    self.assertEqual(expected, world.get_location(name).access_rule(State(inventory)))
+
     def test_start_inventory_from_pool_is_declared_for_archipelago_processing(self):
         self.assertIn('start_inventory_from_pool',fixtures.world_options.WordFactoriOptions.__annotations__)
 

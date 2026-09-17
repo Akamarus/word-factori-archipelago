@@ -156,6 +156,12 @@ def build_probe(cli: Path, original: Path, runtime: Path, output: Path, *, enfor
     if enforcement:
         helper = (ROOT / "tools/type_word_enforcement_probe.gml").read_text(encoding="utf-8")
         helper += "\n" + (ROOT / "tools/native_machine_access.gml").read_text(encoding="utf-8")
+        if quantities:
+            # Development-only counters; never included in the production patch.
+            helper = helper.replace('function wf_access_scene_counts() {',
+                'function wf_access_scene_counts() {\n'
+                'if(!variable_global_exists("wf_probe_tick_scans")) global.wf_probe_tick_scans=0;\n'
+                'global.wf_probe_tick_scans++;')
         transformed = transform_enforcement(sources, helper)
         for entry in ("gml_GlobalScript_Building", "gml_GlobalScript_Misc"):
             stage(entry, transformed[entry])

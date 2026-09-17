@@ -3,10 +3,27 @@ import json
 import hashlib
 from pathlib import Path
 
-from tests.installer_fixture import InstallerFixture, ORIGINAL, PATCHED, LEGACY, PREVIOUS, RELEASE150
+from tests.installer_fixture import InstallerFixture, ORIGINAL, PATCHED, LEGACY, PREVIOUS, RELEASE150, RELEASE151
 
 
 class NativeInstallerTests(InstallerFixture):
+    def test_release_151_upgrade_and_restore_preserve_original(self):
+        self.mod_target.mkdir(parents=True)
+        self.game.write_bytes(RELEASE151)
+        self.backup.write_bytes(ORIGINAL)
+        self.receipt.write_text(json.dumps({"protocol": "enhanced_v2",
+            "capability": "free_word_machine_enforcement_v1",
+            "original_sha256": hashlib.sha256(ORIGINAL).hexdigest(),
+            "patched_sha256": hashlib.sha256(RELEASE151).hexdigest(),
+            "game_data": str(self.game.resolve())}))
+        self.assert_success(self.native('-CheckOnly'))
+        self.assertEqual(RELEASE151, self.game.read_bytes())
+        self.assert_success(self.native())
+        self.assertEqual(PATCHED, self.game.read_bytes())
+        self.assertEqual(ORIGINAL, self.backup.read_bytes())
+        self.assert_success(self.native('-Restore'))
+        self.assertEqual(ORIGINAL, self.game.read_bytes())
+
     def test_release_150_upgrade_and_restore_preserve_original(self):
         self.mod_target.mkdir(parents=True)
         self.game.write_bytes(RELEASE150)

@@ -110,6 +110,29 @@ function refreshRecipeList() {
         self.assertTrue(output['gml_Object_oControl_Step_0'].startswith('wf_access_poll();'))
         self.assertEqual(2,output['gml_Object_oControl_Create_0'].count('!wf_access_factory_allowed(buildings)'))
 
+    def test_tick_wraps_native_return_and_error_without_caching_completion(self):
+        source = self.sources()
+        source['gml_Object_oControl_Create_0'] = (
+            'function doTick() { if (early) return 7; throw "tick failure"; }\n'
+            'function try_win_condition() { native_win(); }')
+        output = transform_sources(source, '// helpers')['gml_Object_oControl_Create_0']
+        self.assertIn('function wf_access_native_tick()', output)
+        self.assertIn('if (early) return 7; throw "tick failure";', output)
+        self.assertIn('var wf_result = wf_access_native_tick();', output)
+        self.assertIn('catch (wf_error)', output)
+        self.assertIn('throw wf_error;', output)
+        self.assertEqual(3, output.count('global.wf_access_tick_grants = undefined;'))
+        self.assertIn('return wf_result;', output)
+
+    def test_tick_wrapper_refuses_collisions_and_changed_signature(self):
+        for change in ('function wf_access_native_tick() {}\n', ''):
+            source = self.sources()
+            source['gml_Object_oControl_Create_0'] = (
+                change + source['gml_Object_oControl_Create_0'] if change else
+                source['gml_Object_oControl_Create_0'].replace('doTick()', 'doTick(arg0)'))
+            with self.assertRaises(ValueError):
+                transform_sources(source, '// helpers')
+
     def test_every_enforcement_surface_requires_exactly_one_native_occurrence(self):
         targets = (
             ("gml_GlobalScript_LevelFuncs", "function get_level_module_counts"),

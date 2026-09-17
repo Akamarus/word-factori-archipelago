@@ -132,6 +132,13 @@ function wf_access_limit(name) {
     return variable_struct_get(counts,name);
 }
 function wf_access_allowed(module,tag) {
+    // Only the audited synchronous doTick wrapper creates this snapshot. Never
+    // reuse it for UI placement, later ticks, recipe previews or win checks.
+    if(variable_global_exists("wf_access_tick_grants") && is_struct(global.wf_access_tick_grants)) {
+        var name=wf_access_name(module,tag);
+        return variable_struct_exists(global.wf_access_tick_grants,name)
+            && variable_struct_get(global.wf_access_tick_grants,name);
+    }
     if(!wf_access_active()) return true;
     if(wf_access_quantity() && !wf_access_factory_allowed()) return false;
     if(module==oIFactory || module==oFinalWord) return true;
@@ -140,6 +147,18 @@ function wf_access_allowed(module,tag) {
     var name=object_get_name(module);
     if(module==oRotate || module==oReflect) name+="_"+tag;
     return wf_access_limit(name)!=0;
+}
+function wf_access_tick_permissions() {
+    var grants={IFactory:true,FinalWord:true};
+    var names=["Bend","Rotate_cw","Rotate_ccw","Reflect_hor","Reflect_vert","Merger2","Merger3","Merger4"];
+    var caps=wf_access_caps();
+    for(var i=0;i<array_length(names);i++) {
+        var name=names[i];
+        var permitted=wf_access_limit(name)!=0;
+        if(variable_struct_exists(caps,name) && variable_struct_get(caps,name)==0) permitted=false;
+        variable_struct_set(grants,name,permitted);
+    }
+    return grants;
 }
 function wf_ap_counts(index) {
     if(!wf_access_active() || !wf_access_integer(index)) return undefined;

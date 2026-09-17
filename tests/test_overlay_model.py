@@ -31,6 +31,39 @@ def make_event(index: int, direction: DispatchDirection = DispatchDirection.RECE
 
 
 class OverlayReducerTests(unittest.TestCase):
+    def test_version_two_snapshot_still_decodes_without_words(self):
+        from word_factori.overlay_protocol import decode_parent_message, snapshot_message
+        payload = dict(snapshot_message(snapshot(OverlayState())).payload)
+        del payload["word_order_rows"]
+        del payload["word_orders_status"]
+        self.assertEqual("snapshot", decode_parent_message(json.dumps({
+            "version": 2, "type": "snapshot", "payload": payload,
+        })).kind)
+
+    def test_word_rows_reject_invalid_or_unbounded_payloads(self):
+        from word_factori.overlay_protocol import encode_parent_message, snapshot_message
+        for rows in (
+            ({"name": "Word Order 01", "word": "II", "status": "Completed"},) * 21,
+            ({"name": "Word Order 01", "word": "II", "status": "unknown"},),
+            ({"name": "Word Order 01", "word": "I" * 65, "status": "Completed"},),
+        ):
+            with self.subTest(rows=rows), self.assertRaises(ValueError):
+                encode_parent_message(snapshot_message(snapshot(OverlayState(), word_order_rows=rows)))
+
+    def test_words_tab_is_read_only_and_round_trips(self):
+        from word_factori.overlay_protocol import decode_parent_message, encode_parent_message, snapshot_message
+        state = apply_action(OverlayState(), OverlayAction("open-chat"))
+        state = apply_action(state, OverlayAction("open-words"))
+        self.assertTrue(state.is_open)
+        self.assertEqual("words", state.active_view.value)
+        self.assertFalse(state.input_focused)
+        value = snapshot(state, word_order_rows=({"name": "Word Order 01", "word": "JACK", "status": "Completed"},), word_orders_status="1 of 1 completed")
+        payload = decode_parent_message(encode_parent_message(snapshot_message(value))).payload
+        self.assertEqual("JACK", payload["word_order_rows"][0]["word"])
+        self.assertEqual("1 of 1 completed", payload["word_orders_status"])
+        with self.assertRaises(TypeError):
+            value.word_order_rows[0]["word"] = "OTHER"
+
     def test_snapshot_presents_chat_command_error_and_notice_rows(self):
         transcript = ClientTranscript((
             ClientMessage("chat:1", ClientMessageKind.CHAT, "hello", 2, "now"),
@@ -260,7 +293,7 @@ class OverlayProtocolTests(unittest.TestCase):
         self.assertEqual(OverlayAction("open", generation=7), decode_child_action(encoded))
 
         legacy_payload = dict(snapshot_message(snapshot(OverlayState.closed())).payload)
-        for field in ("active_view", "accepts_keyboard", "transcript_rows", "notice_rows"):
+        for field in ("active_view", "accepts_keyboard", "transcript_rows", "notice_rows", "word_order_rows", "word_orders_status"):
             del legacy_payload[field]
         legacy_snapshot = json.dumps({
             "version": 1, "type": "snapshot", "payload": legacy_payload,

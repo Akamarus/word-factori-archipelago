@@ -16,6 +16,17 @@ from tools import install_linux as installer
 
 
 class LinuxInstallerTests(unittest.TestCase):
+    def test_native_mail_capability_is_transactional_and_removed_without_touching_history(self):
+        self.setup.run('install')
+        marker = self.paths.mod_folder / 'archipelago_mail/enabled.json'
+        self.assertTrue(marker.is_file(), 'Linux Mail capability marker missing')
+        self.assertEqual({'version': 1, 'enabled': True}, json.loads(marker.read_text()))
+        self.assertEqual(1, json.loads(self.setup.receipt.read_text())['mail_protocol'])
+        history = marker.parent / 'snapshot.json'
+        history.write_text('retained cosmetic history')
+        self.setup.run('uninstall')
+        self.assertFalse(marker.exists())
+        self.assertEqual('retained cosmetic history', history.read_text())
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -26,6 +37,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.legacy = b'legacy patched game bytes'
         self.previous = b'previous v2 patched game bytes'
         self.release150 = b'release 1.5.0 patched game bytes'
+        self.release151 = b'release 1.5.1 patched game bytes'
         self.game.write_bytes(self.original)
         self.prefix = self.root / 'pfx'
         self.factori = self.prefix / 'drive_c/users/steamuser/AppData/Local/factori'
@@ -54,6 +66,7 @@ class LinuxInstallerTests(unittest.TestCase):
         for name, value in [('ORIGINAL_SHA256', original_hash), ('PATCHED_SHA256', patched_hash),
                             ('PREVIOUS_PATCHED_SHA256', hashlib.sha256(self.previous).hexdigest()),
                             ('RELEASE_150_SHA256', hashlib.sha256(self.release150).hexdigest()),
+                            ('RELEASE_151_SHA256', hashlib.sha256(self.release151).hexdigest()),
                             ('DELTA_SHA256', hashlib.sha256(compressed).hexdigest())]:
             override = patch.object(installer, name, value)
             override.start()
@@ -99,6 +112,19 @@ class LinuxInstallerTests(unittest.TestCase):
             self.setup.run('install')
         self.assertEqual(before, self.snapshot())
         receipt['capability']='free_word_machine_enforcement_v1'
+        self.setup.receipt.write_text(json.dumps(receipt))
+        self.setup.run('install')
+        self.assertEqual(self.patched, self.game.read_bytes())
+        self.assertEqual(self.original, self.setup.backup.read_bytes())
+        self.setup.run('restore')
+        self.assertEqual(self.original, self.game.read_bytes())
+
+    def test_release_151_upgrade_and_restore(self):
+        self.legacy_installation()
+        self.game.write_bytes(self.release151)
+        receipt = json.loads(self.setup.receipt.read_text())
+        receipt.update(protocol='enhanced_v2', patched_sha256=installer.RELEASE_151_SHA256,
+                       capability='free_word_machine_enforcement_v1')
         self.setup.receipt.write_text(json.dumps(receipt))
         self.setup.run('install')
         self.assertEqual(self.patched, self.game.read_bytes())

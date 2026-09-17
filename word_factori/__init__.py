@@ -281,6 +281,12 @@ else:
         def set_rules(self) -> None:
             self.multiworld.completion_condition[self.player] = lambda state: state.has("Victory", self.player)
 
+        def write_spoiler(self, spoiler_handle) -> None:
+            if self.word_orders:
+                spoiler_handle.write(f"\nType-a-Word selected targets (Player {self.player}):\n")
+                for order in self.word_orders:
+                    spoiler_handle.write(f"  {order.name}: {order.word}\n")
+
         def fill_slot_data(self) -> dict:
             locations = self.selected_locations()
             recipe_checks = bool(self.options.recipe_checks.value)

@@ -36,6 +36,23 @@ class _MachineState:
 
 
 class WordOrderWorldTests(unittest.TestCase):
+    def test_spoiler_lists_selected_words_with_their_check_names(self):
+        from io import StringIO
+        world = self.make_world(type_a_word_checks=True, type_a_word_count=2,
+                                type_a_word_words=["JACK", "ISLAND", "WORD"])
+        output = StringIO()
+        world.write_spoiler(output)
+        self.assertIn("Player 1", output.getvalue())
+        for order in world.word_orders:
+            self.assertIn(f"{order.name}: {order.word}", output.getvalue())
+        self.assertEqual(2, output.getvalue().count("Word Order"))
+
+    def test_disabled_word_orders_do_not_add_a_spoiler_section(self):
+        from io import StringIO
+        output = StringIO()
+        self.make_world().write_spoiler(output)
+        self.assertEqual("", output.getvalue())
+
     def test_symbol_orders_restore_tracker_contract_in_both_machine_modes(self):
         for progressive in (False, True):
             with self.subTest(progressive=progressive):

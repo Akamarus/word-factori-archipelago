@@ -490,6 +490,75 @@ class ClientLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.ctx.dispatch_ledger = DispatchLedger.empty(self.ctx.connected_identity)
         return locations, orders
 
+    async def test_word_overlay_tracks_room_checks_without_reading_saves(self):
+        _, orders = self.install_word_room(("II", "HI"))
+        with patch("word_factori.client.read_active_slot", side_effect=AssertionError("UI must not read saves")):
+            self.ctx.publish_overlay()
+            value = self.overlay.published[-1]
+            self.assertEqual(["II", "HI"], [row.word for row in value.word_order_rows])
+            self.assertEqual(["Not completed"] * 2, [row.status for row in value.word_order_rows])
+            self.ctx.checked_locations = {orders[0].code}
+            self.ctx.publish_overlay()
+            self.assertEqual("Completed", self.overlay.published[-1].word_order_rows[0].status)
+            self.ctx.connected_identity = None
+            self.ctx.publish_overlay()
+            self.assertEqual((), self.overlay.published[-1].word_order_rows)
+            self.assertIn("Connect", self.overlay.published[-1].word_orders_status)
+            self.ctx.connected_identity = self.ctx.current_identity()
+            self.ctx.publish_overlay()
+            self.assertEqual("Completed", self.overlay.published[-1].word_order_rows[0].status)
+            self.install_word_room(("CAT",))
+            self.ctx.checked_locations = set()
+            self.ctx.publish_overlay()
+            self.assertEqual(["CAT"], [row.word for row in self.overlay.published[-1].word_order_rows])
+
+    def test_word_presentation_reuses_validated_contract_until_room_data_changes(self):
+        self.install_word_room(("II",))
+        with patch.object(self.ctx, "selected_campaign", wraps=self.ctx.selected_campaign) as resolve:
+            self.ctx.word_order_presentation()
+            self.ctx.word_order_presentation()
+            self.assertEqual(1, resolve.call_count)
+            self.ctx.slot_data["manifest_digest"] = "invalid"
+            rows, status = self.ctx.word_order_presentation()
+            self.assertEqual(2, resolve.call_count)
+            self.assertEqual((), rows)
+            self.assertIn("incompatible", status)
+
+    async def test_word_overlay_pending_and_disabled_status(self):
+        from dataclasses import replace
+        _, orders = self.install_word_room(("II",))
+        self.ctx.bridge_state = replace(self.ctx.bridge_state, pending_checks=frozenset({orders[0].code}))
+        rows, _ = self.ctx.word_order_presentation()
+        self.assertEqual("Sending", rows[0]["status"])
+        self.ctx.checked_locations = {orders[0].code}
+        rows, _ = self.ctx.word_order_presentation()
+        self.assertEqual("Completed", rows[0]["status"])
+
+    def test_word_overlay_disabled_room_has_no_targets(self):
+        rows, status = self.ctx.word_order_presentation()
+        self.assertEqual((), rows)
+        self.assertIn("off", status)
+
+    async def test_word_tab_action_cannot_apply_after_presentation_changes(self):
+        self.install_word_room(("II",))
+        generation = self.ctx._presentation_generation
+        self.assertTrue(await self.ctx.handle_overlay_intent(OverlayAction("open-words", generation=generation)))
+        self.assertEqual("words", self.overlay.published[-1].active_view)
+        self.assertFalse(self.overlay.published[-1].accepts_keyboard)
+        self.ctx._presentation_generation += 1
+        self.assertFalse(await self.ctx.handle_overlay_intent(OverlayAction("open-chat", generation=generation)))
+        self.assertEqual("words", self.ctx.overlay_state.active_view.value)
+
+    async def test_connected_announces_selected_word_targets_in_regular_client(self):
+        self.install_word_room(("HI", "II"))
+        self.install_test_patch_receipt()
+        with patch("word_factori.client.logger.info") as log:
+            self.ctx.on_package("Connected", {"slot_data": self.ctx.slot_data})
+            messages = [call.args for call in log.call_args_list]
+            self.assertTrue(any("HI, II" in str(args) for args in messages))
+        await asyncio.sleep(0)
+
+
     def write_native_ack(self, **changes):
         from word_factori.enhanced_runtime import runtime_context
         from word_factori.word_orders import checks_contract_digest

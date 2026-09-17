@@ -16,7 +16,7 @@ RELEASE_ARCHIVE = ROOT / f"word-factori-archipelago-{VERSION}.zip"
 RELEASE_MANIFEST = ROOT / "release-manifest.json"
 PATCH_FILE = ROOT / "tools/enhanced.patch.gz"
 # Independently round-tripped against the verified original and patched game.
-PATCH_SHA256 = "75ad933546285aa2c53ccfcc3f0a53afd17029771abe77a40389bb4296ba5cd0"
+PATCH_SHA256 = "ec5ac3a3f8d72f71e984dae421ee57d0901ea38970fdb4355a69d6714ef887c5"
 WORLD_SOURCE_NAMES = (
     "word_factori/Components.py",
     "word_factori/__init__.py",
@@ -36,6 +36,9 @@ WORLD_SOURCE_NAMES = (
     "word_factori/docs/setup_en.md",
     "word_factori/layout.py",
     "word_factori/mod.py",
+    "word_factori/native_mail_protocol.py",
+    "word_factori/native_mail_transport.py",
+    "word_factori/native_mail_adapter.py",
     "word_factori/options.py",
     "word_factori/platform_paths.py",
     "word_factori/overlay_model.py",
@@ -116,6 +119,7 @@ def write_release() -> None:
         ROOT / "Install Word Factori Archipelago.cmd", WORLD_ARCHIVE,
         ROOT / "docs/enhanced-playtest.md",
         ROOT / "docs/recipe-checks.md",
+        ROOT / "docs/feedback-2026-09-16.md",
         ROOT / "Restore Original Game.cmd",
         ROOT / "tools/install_enhanced.ps1", PATCH_FILE,
         ROOT / "Install Word Factori Archipelago.sh",

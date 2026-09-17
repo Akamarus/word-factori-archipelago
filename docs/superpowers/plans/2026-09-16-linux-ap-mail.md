@@ -1,5 +1,31 @@
 # Linux AP Mail Implementation Plan
 
+## Execution checkpoint — 2026-09-17
+
+Jack authorized preparation for GitHub release, including the local 1.6.0 tester
+version/package. No push, merge, live installation or publication is authorized
+by this checkpoint. Execution remains inline. Historical checklists below are
+preserved rather than falsely marking unperformed manual/commit steps complete.
+
+- Task 1: bounded feasibility passed using combined native and full-object
+  scratch evidence; Jack confirmed physical placement/connection. Linux proof
+  and full production UI acceptance are separate gates.
+- Tasks 2–5: strict protocol, owned transport, presentation/actions and real
+  native/Python interoperability implemented and tested. Native JSON boolean/null
+  representation and scratch global-stub scope were corrected after failing runs.
+- Task 6: all native tabs, input isolation, status, Older/Latest history and
+  popups implemented; final combined bridge/UI case passes 50 assertions. Manual
+  production-panel visual and sustained performance acceptance remain pending.
+- Task 7: 42 production hook entries compile/reopen; final delta round-trip
+  passes. Linux owned marker/receipt and all Python module packaging are included.
+  Fresh separate 99 quantity/enforcement and 8 recipe assertions pass. Final
+  full-suite/package verification is recorded in the release-preparation report.
+- Task 8: player docs, release notes and a private two-player Linux acceptance
+  matrix are prepared. Actual Linux/Proton execution is pending, not waived.
+
+See `docs/testing/linux-native-mail-evidence.md` for the current checkpoint and
+`docs/testing/linux-mail-acceptance.md` for explicit remaining platform coverage.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Jack previously selected inline execution; do not dispatch subagents or ask him to choose the execution mode again.
 
 **Goal:** Deliver native in-game AP Mail for Linux/Proton with Items, Chat, Type-a-Word and status, preserving progression and simple installation.
@@ -73,9 +99,89 @@ machine enforcement as part of this feature.
 
 ## Task 1: Prove native drawing and input ownership
 
+Checkpoint 2026-09-16: partial native proof is recorded in
+`docs/testing/linux-native-mail-evidence.md`. The scratch fixture passes 25
+automatic runtime assertions and all 35 hook entries compile/reopen. A resumed
+desktop test also passed four physical keyboard assertions: one press, 108 held
+frames, one release, zero native consumer events. Populated-factory and viewport
+acceptance remain pending; Task 1 is NOT complete and Tasks 2–8 have not started.
+No production wiring was changed.
+
+Factory checkpoint: a cross-frame native simulation comparison was added, with
+identical observed production for closed/open Mail, but the scratch process
+crashes during shutdown. Separate processes did not eliminate the failure.
+The runner correctly refuses it; Task 1 remains blocked, not passed. Fresh
+Mail-only (25 assertions) and existing enforcement/quantity (99 assertions)
+controls exit cleanly. See the evidence document before continuing native work.
+
+Shutdown investigation checkpoint: scratch children now inherit process-local
+Windows no-dialog error handling, verified by child-process tests. Exit failures
+are still rejected. A private debugger captured freed-memory access during
+shutdown; multiple isolated candidate changes were disproved, including cases
+that first passed normal runs. No candidate gameplay or lifecycle fix was
+accepted. Task 1 remains incomplete; the next diagnostic is a minimal native
+completion-call/lifetime reproduction, not additional production UI wiring.
+
+Later shutdown checkpoint: the reduced case also failed with empty methods and
+no Mail or simulation, disproving the initial struct/completion theories.
+Scratch-only two-phase teardown (destroy host-created objects, allow normal
+engine steps, then report/quit from an Alarm) passed 40 minimal, 40 closed-factory
+and 40 rebuilt open-factory debugger runs. The new paired probe passes 32
+assertions with matching ten-word production in 21 ticks/frames. Exit validation
+is unchanged; teardown evidence is mandatory. This clears the bounded fixture's
+shutdown blocker, not Task 1's remaining original-editor/viewport/platform gate.
+No live installation, production patch or release changed. See current evidence
+for the sequential full-suite and ordinary-launch results.
+
+Editor checkpoint: the complete verified native editor Step, invoked in a
+bounded fixture with native movement/eraser methods, reproduced five failures
+from existing drags and a retained eraser latch. A mode-aware capture guard now
+passes 41 input/teardown/editor assertions in a fresh build and ten consecutive
+ordinary launches. Dismissal does not re-arm a drag; a fresh click resumes it and
+normal release commits once. Native production dispatch remains active, and a
+blanket-pause mutation is rejected. A fresh paired factory run still passes 32
+assertions with equal production/journals. Full-object physical input, viewport
+and Linux/Proton evidence are still pending. Task 1 remains incomplete; no
+production bridge, installation or release changed.
+
 **Files:** create `tools/mail_hooks.py`, `tools/run_mail_native_probe.py`,
 `tools/native_mail_acceptance.gml`, `tests/test_native_mail_hooks.py` and
 `docs/testing/linux-native-mail-evidence.md`.
+Full-object checkpoint: a private cloud-isolated copy retains original rooms and
+object lifecycles and now exits cleanly with an explicit finish marker. Desktop
+tests confirm immediate Mail opening, Chat/Items switching, dismissal without
+native-menu click-through, fullscreen coordinate mapping, and pending placement
+capture/resume through original editor events. Automated palette/wire dragging
+and arbitrary resizing were not established; populated-factory completion and
+minimum viewport checks remain pending. Keep Task 1 incomplete and Tasks 2–8
+unstarted. See the evidence document for the separate safety audit and failed
+probe history; no production wiring or installed files changed.
+
+Manual follow-up: Jack confirmed palette-to-grid placement and wire connection
+both worked in the isolated full-object copy. A diagnostic 1280x720 viewport
+also preserved Mail hit testing. The manual run exited 0 without its mandatory
+finish marker before production-with-Mail-open could be checked, so it is not
+an accepted complete probe. Preserve the user-reported observation separately
+from automated assertions. Task 1's remaining acceptance gate is unchanged.
+
+Production follow-up: `mail-full-v6/production-run-1` reopened that connected
+scratch factory, started Play and opened Mail at counter zero. Native logs
+progressed from production mode 4 to completion mode 6 while `open:true`;
+dismissing Mail revealed the completed I result. F10 finish and exit 0 were both
+verified, so this is an accepted full-object production observation. It does
+not establish speed equivalence, AP delivery or Linux behavior. Remaining
+input/focus and viewport checklist gaps still need review before Task 1 closes.
+
+Focus/viewport follow-up: `mail-full-v6/focus-run-1` passed the full-object
+minimize/restore check (panel closed, draft cleared, two modules unchanged).
+Returning the pointer to the grid allowed normal I-shortcut placement and one
+new machine; Mail reopened normally. Resizing the open panel to a 1280x720
+client viewport preserved tab hit testing and consumed an outside dismissal
+over native Play without starting production. F10 finish and exit 0 verified.
+Review Task 1 against the combined bounded/native/desktop evidence next; keep
+Task 6's complete panel/input/viewport acceptance and Task 8's Linux acceptance
+separate rather than treating the developer panel as production-ready.
+
 Read existing `tools/run_type_word_native_probe.py`, `tools/enhanced_hooks.py`
 and `tools/build_enhanced_probe.py` for scratch isolation and exact-hook patterns.
 
@@ -86,13 +192,13 @@ The first task implements `input`; the other cases reject use until supported.
 Every completed case emits `result.json` with `supported`, named assertion
 results, input hashes and the active hook list. A failed assertion exits nonzero.
 
-- [ ] Record fresh baseline: `python -m unittest discover -s tests -q`.
+- [x] Record fresh baseline: `python -m unittest discover -s tests -q`.
 - [ ] Verify the original with `tools.enhanced_hooks.verify_original`. Use the
   CLI's object/event inventory to identify actual GUI draw, early input dispatch,
   focus and cleanup sites. Inspect private extracted code, including independent
   native widgets and factory placement paths. Record exact hook names/hashes and
   event ordering in scratch evidence; never guess them from object names.
-- [ ] Write failure tests against integration-authored minimal fixtures. A missing,
+- [x] Write failure tests against integration-authored minimal fixtures. A missing,
   duplicate, already-patched or changed hook must be refused before output writes:
 
 ```python
@@ -102,7 +208,7 @@ def test_missing_mail_hooks_are_refused(self):
         transform_mail_sources({}, "// authored helpers")
 ```
 
-- [ ] Run `python -m unittest tests.test_native_mail_hooks -v`; confirm the new
+- [x] Run `python -m unittest tests.test_native_mail_hooks -v`; confirm the new
   tests fail before implementing their guards.
 - [ ] Implement exact transforms only for verified sites, using the existing
   uniqueness-check pattern. Preserve the native tick and progression guards.
@@ -130,6 +236,13 @@ python tools/run_mail_native_probe.py --cli "$WF_CLI" --original "$WF_ORIGINAL" 
   `test: prove native AP Mail drawing and input isolation`.
 
 ## Task 2: Define and test the bounded protocol
+
+Execution checkpoint: the combined native fixtures and accepted full-object
+production/focus/viewport runs now support the bounded Task 1 feasibility gate.
+The 34 targeted Python hook/isolation/enforcement tests pass. Proceed to the
+protocol, retaining the separate full UI, composition, stress and Linux rollout
+gates. Earlier partial checkpoints above remain historical evidence. Task 1
+files remain uncommitted pending the final scoped review; no live patch changes.
 
 **Files:** create `word_factori/native_mail_protocol.py`,
 `tests/native_mail_fixtures.py`, `tests/test_native_mail_protocol.py`.

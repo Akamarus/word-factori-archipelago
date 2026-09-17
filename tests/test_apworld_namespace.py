@@ -31,6 +31,9 @@ class APWorldNamespaceTests(unittest.TestCase):
             renderer = importlib.import_module("worlds.word_factori.overlay_renderer")
             model = importlib.import_module("worlds.word_factori.overlay_model")
             supervisor = importlib.import_module("worlds.word_factori.overlay_supervisor")
+            importlib.import_module("worlds.word_factori.native_mail_protocol")
+            importlib.import_module("worlds.word_factori.native_mail_transport")
+            importlib.import_module("worlds.word_factori.native_mail_adapter")
 
             view = model.snapshot(model.OverlayState())
             assert view.ledger_rows == ()

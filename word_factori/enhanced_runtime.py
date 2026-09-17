@@ -14,7 +14,7 @@ from .platform_paths import InstallationPaths, validate_installation, validate_a
 
 ORIGINAL_SHA256 = "d40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978"
 PATCH_PROTOCOL = "enhanced_v2"
-PATCHED_SHA256 = "20ccd780854adcab416f903e8ffb1702930c16fd91c307ec316d746da1567bbe"
+PATCHED_SHA256 = "0284cbb72e966e79f3b4878f2a78d0c9331bab54d3c3780f79364cd912a94d1a"
 ENFORCEMENT_CAPABILITY = "free_word_machine_enforcement_v1"
 RUNTIME_SCHEMA = 2
 QUANTITY_CAPABILITY = "progressive_machine_enforcement_v1"

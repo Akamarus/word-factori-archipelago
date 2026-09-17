@@ -1,15 +1,15 @@
-# Linux setup with Steam Proton (1.5.1, experimental)
+# Linux setup with Steam Proton (1.6.0, experimental)
 
-Download the **[1.5.1 player package](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.5.1)**.
+Download the **[1.6.0 player package](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.6.0)**.
 It includes **Install Word Factori Archipelago.sh** alongside the Windows installer.
 Installer regressions have automated coverage, but Linux support has **not been validated
 in a real Linux/Proton playthrough**. Do not describe it as stable support yet.
 
 There is one campaign and one player package for both platforms. Linux runs the
 regular native Archipelago client while Steam runs the Windows game through Proton.
-The in-game AP Mail overlay is Windows-only; items and chat remain available in
+An experimental native in-game AP Mail panel is included; items and chat also remain available in
 the regular client. No Wine-based installer or Windows Archipelago installation
-is needed. For 1.5.1 testing, generate a new room and bind a fresh empty save; keep your previous saves and original-game backup.
+is needed. For 1.6.0 testing, generate a new room and bind a fresh empty save; keep your previous saves and original-game backup.
 
 ## Before setup
 
@@ -50,11 +50,43 @@ Restart Archipelago, launch **Word Factori Client**, and connect to your matchin
 room. Start Word Factori through Steam, select **word factori archipelago**, and
 use a fresh empty mod save for a new room. Do not reset an existing room's bound
 save just because its host OS changes. Existing room identity and save binding
-checks still apply. Updating to 1.5.1 does not convert an older room.
+checks still apply. Updating to 1.6.0 does not convert an older room.
 
 Play normally. Completed levels send checks; received machines become available
 after returning to Levels and entering a factory in normal mode. With
-`progressive_machines: true`, allowances update during play. Use the regular client for items, chat, hints, and connection status.
+`progressive_machines: true`, allowances update during play. Click AP MAIL or press F8 for Items, Chat, Type-a-Word and Status. Keep the regular client running.
+
+## In-game AP Mail (experimental)
+
+Keep the native Word Factori Client running and connect there first. Click **AP MAIL**
+on the left or press **F8**. No extra installation or YAML option is required.
+
+- **Items:** received/sent history, filters, unread status and blue left-side popups.
+- **Chat:** click the input, type, then press Enter or Send. Shift+Enter adds a newline.
+  Plain chat and `/help`, `/wf_status`, `/wf_words` are supported. Use the regular
+  client for other commands, server/slot selection and passwords.
+- **Type-a-Word:** your room's chosen targets, with Not completed, Sending or
+  server-confirmed Completed status. This list cannot award checks.
+- **Status:** connection/action status, Disconnect and Reconnect. Reconnect uses
+  the regular client's existing configuration; it cannot select a new room.
+
+Escape, F8, the close button or an outside click dismisses the panel. That click
+is consumed rather than also placing a building. Losing focus clears the unsent
+draft. Closing Mail does not stop checks or item handling. A stale client heartbeat
+disables Mail actions after five seconds. If delivery is uncertain, inspect the
+regular client's chat before resending.
+
+History is paged in bounded batches: use **Older** and **Latest** to navigate.
+Long display fields are shortened; unsupported font characters display as `?`,
+with `[KEY]` and `[DOOR]` for the game's symbols. Use the regular client for full
+text. Mail uses the installed game's font; no font or full game binary is distributed.
+
+If Mail is absent, close the game/client and rerun the matching Linux installer.
+Replacing only the APWorld is not enough. Select the AP mod and restart both.
+Keep just one game and one client paired to that installation. If Mail still fails,
+use the regular client and report the error category privately. Do not delete saves
+or post personal paths/passwords. Actual Proton, X11/Wayland, fullscreen and Flatpak
+Mail acceptance remain pending; Windows-runner tests are not Linux certification.
 
 ## If automatic discovery cannot find the installation
 

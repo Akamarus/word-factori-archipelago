@@ -1334,7 +1334,7 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
         def __init__(self, app: "DispatchOverlayApp", payload: Mapping[str, object], **kwargs: object) -> None:
             super().__init__(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8), **kwargs)
             active = str(payload.get("active_view", "items"))
-            for label, view, action in (("Items", "items", "open-items"), ("Chat", "chat", "open-chat")):
+            for label, view, action in (("Items", "items", "open-items"), ("Chat", "chat", "open-chat"), ("Type-a-Word", "words", "open-words")):
                 color = (0.33, 0.34, 0.72, 1) if active == view else (0.16, 0.20, 0.26, 1)
                 button = styled_button(label, color=color)
                 button.bind(on_release=lambda _instance, selected=action: app.send_action(selected))
@@ -1445,6 +1445,36 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
             scroll.add_widget(rows)
             self.add_widget(scroll)
 
+    class WordsPanel(BoxLayout):
+        def __init__(self, payload: Mapping[str, object], **kwargs: object) -> None:
+            super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
+            status = str(payload.get("word_orders_status", "Connect to view Type-a-Word targets."))
+            has_symbols = any("🔑" in row["word"] or "🚪" in row["word"] for row in payload.get("word_order_rows", []))
+            if has_symbols:
+                status += "\n[KEY] / [DOOR] represent the game's key / door symbols."
+            self.add_widget(fitted_label(
+                text=status,
+                font_name=font_name, font_size=dp(14), size_hint_y=None, height=dp(60),
+                color=(0.65, 0.76, 0.88, 1), halign="left", valign="middle"))
+            scroll = ScrollView(do_scroll_x=False)
+            rows = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(8))
+            rows.bind(minimum_height=rows.setter("height"))
+            for row in payload.get("word_order_rows", []):
+                card = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(76), padding=dp(12))
+                paint(card, (0.16, 0.20, 0.26, 1), dp(12))
+                target = str(row["word"]).replace("🔑", "[KEY]").replace("🚪", "[DOOR]")
+                label = Label(text=f'{row["name"]}\n{target}', font_name=font_name,
+                    font_size=dp(17), color=(1, 1, 1, 1), halign="left", valign="middle")
+                label.bind(width=lambda instance, value: setattr(instance, "text_size", (value, None)))
+                label.bind(texture_size=lambda _instance, value, target_card=card:
+                           setattr(target_card, "height", max(dp(76), value[1] + dp(24))))
+                card.add_widget(label)
+                color = (0.35, 0.86, 0.60, 1) if row["status"] == "Completed" else (0.65, 0.76, 0.88, 1)
+                card.add_widget(Label(text=str(row["status"]), font_name=font_name, font_size=dp(14), color=color, size_hint_x=0.6))
+                rows.add_widget(card)
+            scroll.add_widget(rows)
+            self.add_widget(scroll)
+
     def form_input(*, hint: str, password: bool = False) -> TextInput:
         return TextInput(
             multiline=False, password=password, hint_text=hint, font_name=font_name,
@@ -1509,6 +1539,8 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
             view = str(payload.get("active_view", "items"))
             if view == "chat":
                 self.add_widget(ChatPanel(app, payload))
+            elif view == "words":
+                self.add_widget(WordsPanel(payload))
             elif view == "connect":
                 self.add_widget(ConnectionSheet(app, payload))
             elif view == "password":
