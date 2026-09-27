@@ -28,7 +28,7 @@ class LiveMailPeer:
         self.transport.start()
         self.transport._write('enabled.json', b'{"version":1,"enabled":true}')
         self.adapter.publish(snapshot(OverlayState(connection_status='connected'), DispatchLedger(IDENTITY),
-            word_order_rows=[dict(name='Live order', word='TEST', status='Not completed')]),
+            word_order_rows=[dict(name='Live order', word='TEST', status='Not completed', machine_status='Machines ready')]),
             room=ROOM, contract='test-contract')
         context = SimpleNamespace(connected_identity=IDENTITY, _connection_generation=1,
             server=object(), command_processor=lambda ctx: self.messages.append)

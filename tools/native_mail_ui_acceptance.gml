@@ -17,7 +17,7 @@ function wf_ui_tests() {
     wf_mail_ui_frame(ev);
     wf_expect("UI first click opens and captures native controls",s.open && wf_mail_blocks_input() && !checkPressed(65));
     var l=wf_mail_layout(), k=l.scale;
-    ev=wf_ui_event(); ev.press=true; ev.x=l.left+l.wide*.38; ev.y=l.top+75*k;
+    ev=wf_ui_event(); ev.press=true; ev.x=l.left+l.wide*.30; ev.y=l.top+75*k;
     wf_mail_ui_frame(ev);
     wf_expect("UI Chat switch keeps panel open",s.open && s.tab==1 && !s.typing);
     ev=wf_ui_event(); ev.text="ignored"; wf_mail_ui_frame(ev);
@@ -39,11 +39,25 @@ function wf_ui_tests() {
     ev=wf_ui_event(); ev.press=true; ev.x=l.left+145*k; ev.y=l.bottom-30*k; wf_mail_ui_frame(ev);
     wf_expect("UI Latest requests current history",is_struct(b.pending) && b.pending.action=="history" && b.pending.payload.cursor=="latest");
     b.pending=undefined;
-    ev=wf_ui_event(); ev.press=true; ev.x=l.left+l.wide*.63; ev.y=l.top+75*k; wf_mail_ui_frame(ev);
+    ev=wf_ui_event(); ev.press=true; ev.x=l.left+l.wide*.50; ev.y=l.top+75*k; wf_mail_ui_frame(ev);
     wf_expect("UI words tab lists authoritative selected target",s.tab==2 && string_pos("CAT",s.lines[0])>0 && string_pos("Not completed",s.lines[0])>0);
     wf_expect("UI key and door have readable labels",wf_mail_display("🔑🚪")=="[KEY][DOOR]");
+    b.snapshot.progress_rows=[{code:123,page:1,slot:1,name:"Complete I",target:"I",kind:"Campaign level",
+        completion:"Completed",page_status:"Save progress unavailable",machine_status:"Machines ready"}];
+    b.revision++;
+    ev=wf_ui_event(); ev.press=true; ev.x=l.left+l.wide*.70; ev.y=l.top+75*k; wf_mail_ui_frame(ev);
+    wf_expect("UI Progress shows page and machine status separately",s.open && s.tab==3 && !s.typing
+        && string_pos("Page 1",string(s.lines))>0 && string_pos("Save progress unavailable",string(s.lines))>0
+        && string_pos("Machines ready",string(s.lines))>0);
+    b.snapshot.progress_freshness="last_known"; b.revision++; wf_mail_ui_frame(wf_ui_event());
+    wf_expect("UI Progress labels last known observations",string_pos("Last known",s.lines[0])>0);
+    s.lines=[]; wf_mail_add_lines(string_repeat("Long requirement ",40),l.wide-40*k,l.text_scale);
+    var wrapped=array_length(s.lines)>1;
+    for(var n=0;n<array_length(s.lines);n++) if(string_width(s.lines[n])*l.text_scale>l.wide-40*k) wrapped=false;
+    wf_expect("UI long requirements wrap within panel",wrapped); s.cache="";
     ev=wf_ui_event(); ev.press=true; ev.x=l.left+l.wide*.88; ev.y=l.top+75*k; wf_mail_ui_frame(ev);
-    wf_expect("UI status tab is present",s.tab==3 && string_pos("Connection",s.lines[0])>0);
+    wf_expect("UI status tab is present",s.tab==4 && string_pos("Connection",s.lines[0])>0
+        && string_pos(b.snapshot.recovery.action,string(s.lines))>0);
     b.message="rejected: Use the regular client";
     wf_expect("UI rejected action has visible status",string_pos("rejected",wf_mail_status_text())>0);
     ev=wf_ui_event(); ev.press=true; ev.held=true; ev.x=5; ev.y=5; wf_mail_ui_frame(ev);
@@ -56,6 +70,13 @@ function wf_ui_tests() {
     ev=wf_ui_event(); ev.width=640; ev.height=360; wf_mail_ui_frame(ev);
     l=wf_mail_layout();
     wf_expect("UI minimum viewport layout stays bounded",l.left>=0 && l.right<=640 && l.top>=0 && l.bottom<=360);
+    var cells=wf_mail_tabs(l), bounded=array_length(cells)==5 && cells[3].top>cells[0].top;
+    for(var n=0;n<5;n++) {
+        var t=cells[n];
+        if(t.left<l.left || t.right>l.right || t.top<l.top || t.bottom>l.bottom
+            || wf_mail_tab_at(l,(t.left+t.right)/2,(t.top+t.bottom)/2)!=n) bounded=false;
+    }
+    wf_expect("UI narrow tabs share bounded draw and hit geometry",bounded);
     ev.toggle=true; wf_mail_ui_frame(ev);
     s.draft="old room"; b.epoch++; ev.toggle=false; wf_mail_ui_frame(ev);
     wf_expect("UI room epoch clears old draft and popup state",s.draft=="" && array_length(s.popups)==0);

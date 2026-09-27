@@ -18,6 +18,22 @@ function wf_mail_button_hit(xx,yy) {
     var s=global.wf_mail;
     return point_in_rectangle(xx,yy,12,s.height/2-34,82,s.height/2+34);
 }
+function wf_mail_tabs(l) {
+    var columns=global.wf_mail.width<900 ? 3 : 5;
+    var cells=[], wide=l.wide/columns, k=l.scale;
+    for(var i=0;i<5;i++) array_push(cells,{
+        left:l.left+(i mod columns)*wide+4*k,top:l.top+(58+floor(i/columns)*52)*k,
+        right:l.left+((i mod columns)+1)*wide-4*k,bottom:l.top+(104+floor(i/columns)*52)*k});
+    return cells;
+}
+function wf_mail_tab_at(l,xx,yy) {
+    var tabs=wf_mail_tabs(l);
+    for(var i=0;i<array_length(tabs);i++) {
+        var t=tabs[i];
+        if(xx>=t.left && xx<t.right && yy>=t.top && yy<t.bottom) return i;
+    }
+    return -1;
+}
 function wf_mail_display(text) {
     text=string_replace_all(string_replace_all(text,"🔑","[KEY]"),"🚪","[DOOR]");
     var out="";
@@ -72,12 +88,32 @@ function wf_mail_cache() {
             for(var i=0;i<array_length(value.words);i++) {
                 var row=value.words[i];
                 wf_mail_add_lines(row.name+": "+row.word+" - "+row.status,wide,l.text_scale);
+                wf_mail_add_lines(row.machine_status,wide,l.text_scale);
                 array_push(s.lines,"");
             }
             wf_mail_add_lines("Complete these targets in Type-a-Word. Completed means the server confirmed the check. [KEY] and [DOOR] represent the game's symbols.",wide,l.text_scale);
+        } else if(s.tab==3) {
+            var fresh=value.progress_freshness=="current" ? "Current save observation"
+                : (value.progress_freshness=="last_known" ? "Last known progress; reconnect to refresh." : "Save progress unavailable");
+            wf_mail_add_lines(fresh,wide,l.text_scale);
+            wf_mail_add_lines(value.progress_status,wide,l.text_scale);
+            if(array_length(value.progress_rows)==0) wf_mail_add_lines("Connect and load the selected campaign to view progress.",wide,l.text_scale);
+            var page=-1;
+            for(var i=0;i<array_length(value.progress_rows);i++) {
+                var row=value.progress_rows[i];
+                if(row.page!=page) { page=row.page; wf_mail_add_lines("Page "+string(page),wide,l.text_scale); }
+                wf_mail_add_lines(string(row.slot)+". "+row.name+" - "+row.target,wide,l.text_scale);
+                wf_mail_add_lines(row.kind+" - "+row.completion,wide,l.text_scale);
+                wf_mail_add_lines(row.page_status,wide,l.text_scale);
+                wf_mail_add_lines(row.machine_status,wide,l.text_scale);
+                array_push(s.lines,"");
+            }
         } else {
             wf_mail_add_lines("Connection: "+value.connection,wide,l.text_scale);
+            wf_mail_add_lines(value.recovery.title,wide,l.text_scale);
+            wf_mail_add_lines(value.recovery.action,wide,l.text_scale);
             wf_mail_add_lines(b.message,wide,l.text_scale);
+            wf_mail_add_lines("Page access uses your local save. Universal Tracker reports logical reachability.",wide,l.text_scale);
             wf_mail_add_lines("Use the regular client for server, slot and password settings. Reconnect uses its existing configuration.",wide,l.text_scale);
             wf_mail_add_lines("Mail is presentation only: factory checks and received upgrades continue if this panel is closed.",wide,l.text_scale);
         }
@@ -102,6 +138,7 @@ function wf_mail_ui_frame(ev) {
         s.open=false; s.consume=false; s.latch=false; s.draft=""; s.typing=false; return;
     }
     var was_open=s.open, l=wf_mail_layout(), k=l.scale;
+    var tabs=wf_mail_tabs(l), tabs_end=tabs[4].bottom, selected=wf_mail_tab_at(l,ev.x,ev.y);
     s.consume=s.open || s.latch;
     if(s.latch && !ev.held && !ev.keys) s.latch=false;
     if(ev.toggle || (ev.press && wf_mail_button_hit(ev.x,ev.y))) {
@@ -111,16 +148,16 @@ function wf_mail_ui_frame(ev) {
         || point_in_rectangle(ev.x,ev.y,l.right-48*k,l.top,l.right,l.top+48*k))))) {
         s.open=false; s.typing=false; s.latch=true;
     } else if(s.open && ev.press) {
-        if(ev.y>=l.top+58*k && ev.y<l.top+104*k) {
-            s.tab=clamp(floor((ev.x-l.left)/(l.wide/4)),0,3);
+        if(selected>=0) {
+            s.tab=selected;
             s.scroll=0; s.typing=false; wf_mail_view_boundary();
-        } else if(s.tab==0 && ev.y>=l.top+112*k && ev.y<l.top+150*k) {
+        } else if(s.tab==0 && ev.y>=tabs_end+8*k && ev.y<tabs_end+46*k) {
             s.filter=clamp(floor((ev.x-l.left)/(l.wide/3)),0,2); s.scroll=0;
         } else if(s.tab==1 && point_in_rectangle(ev.x,ev.y,l.left+12*k,l.bottom-112*k,l.right-105*k,l.bottom-48*k)) {
             s.typing=true; keyboard_string="";
         } else if(s.tab==1 && point_in_rectangle(ev.x,ev.y,l.right-98*k,l.bottom-112*k,l.right-12*k,l.bottom-48*k)) {
             if(wf_mail_submit("submit-text",{text:s.draft})) { s.draft=""; keyboard_string=""; }
-        } else if(s.tab==3 && ev.y>=l.bottom-104*k && ev.y<l.bottom-56*k) {
+        } else if(s.tab==4 && ev.y>=l.bottom-104*k && ev.y<l.bottom-56*k) {
             wf_mail_submit(ev.x<(l.left+l.right)/2 ? "reconnect" : "disconnect",{});
         } else if((s.tab==0 || s.tab==1) && ev.y>=l.bottom-44*k && ev.y<l.bottom-16*k && ev.x<l.left+210*k) {
             var value=b.snapshot;
@@ -202,21 +239,23 @@ function wf_mail_ui_draw() {
             draw_set_color(make_color_rgb(83,80,178)); draw_roundrect(l.left,l.top,l.right,l.top+48*k,false);
             draw_set_color(c_white); wf_mail_label("Archipelago",l.left+22*k,l.top+10*k,ts);
             wf_mail_label("X",l.right-32*k,l.top+10*k,ts);
-            var tabs=["Items","Chat","Type-a-Word","Status"], tabwide=l.wide/4;
-            for(var i=0;i<4;i++) {
+            var tabs=["Items","Chat","Type-a-Word","Progress","Status"], cells=wf_mail_tabs(l);
+            for(var i=0;i<5;i++) {
+                var t=cells[i];
                 draw_set_color(i==s.tab ? make_color_rgb(83,80,178) : make_color_rgb(40,50,65));
-                draw_rectangle(l.left+i*tabwide+4*k,l.top+58*k,l.left+(i+1)*tabwide-4*k,l.top+104*k,false);
-                draw_set_color(c_white); wf_mail_label(tabs[i],l.left+i*tabwide+12*k,l.top+70*k,ts*.82);
+                draw_rectangle(t.left,t.top,t.right,t.bottom,false);
+                draw_set_color(c_white); wf_mail_label(tabs[i],t.left+8*k,t.top+12*k,ts*.82);
             }
-            var content_top=l.top+118*k, content_bottom=l.bottom-(s.tab==1 ? 125 : (s.tab==3 ? 118 : 64))*k;
+            var tabs_end=cells[4].bottom;
+            var content_top=tabs_end+14*k, content_bottom=l.bottom-(s.tab==1 ? 125 : (s.tab==4 ? 118 : 64))*k;
             if(s.tab==0) {
                 var filters=["All","Received","Sent"];
                 for(var i=0;i<3;i++) {
                     draw_set_color(i==s.filter ? make_color_rgb(83,80,178) : make_color_rgb(40,50,65));
-                    draw_rectangle(l.left+i*l.wide/3+4*k,l.top+112*k,l.left+(i+1)*l.wide/3-4*k,l.top+150*k,false);
-                    draw_set_color(c_white); wf_mail_label(filters[i],l.left+i*l.wide/3+12*k,l.top+121*k,ts*.85);
+                    draw_rectangle(l.left+i*l.wide/3+4*k,tabs_end+8*k,l.left+(i+1)*l.wide/3-4*k,tabs_end+46*k,false);
+                    draw_set_color(c_white); wf_mail_label(filters[i],l.left+i*l.wide/3+12*k,tabs_end+17*k,ts*.85);
                 }
-                content_top=l.top+164*k;
+                content_top=tabs_end+60*k;
             }
             draw_set_color(c_white);
             var capacity=max(1,floor((content_bottom-content_top)/l.line));
@@ -233,7 +272,7 @@ function wf_mail_ui_draw() {
                 if(string_length(draft)>chars) draft="..."+string_copy(draft,string_length(draft)-chars+4,chars);
                 wf_mail_label(draft=="" ? "Click here to chat - Enter sends" : draft,l.left+20*k,l.bottom-95*k,ts*.85);
             }
-            if(s.tab==3) {
+            if(s.tab==4) {
                 draw_set_color(make_color_rgb(83,80,178));
                 draw_rectangle(l.left+12*k,l.bottom-104*k,(l.left+l.right)/2-4*k,l.bottom-56*k,false);
                 draw_rectangle((l.left+l.right)/2+4*k,l.bottom-104*k,l.right-12*k,l.bottom-56*k,false);

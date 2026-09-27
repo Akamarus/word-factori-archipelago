@@ -31,6 +31,7 @@ from .overlay_protocol import (
     encode_child_intent,
 )
 from .overlay_supervisor import OverlayConfig
+from .mail_view import TABS, tab_rects, progress_blocks, status_blocks
 from .window_tracker import Win32WindowTracker
 
 
@@ -1330,24 +1331,26 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
             color=(1, 1, 1, 1), **kwargs,
         )
 
-    class ClientTabs(BoxLayout):
+    class ClientTabs(FloatLayout):
         def __init__(self, app: "DispatchOverlayApp", payload: Mapping[str, object], **kwargs: object) -> None:
-            super().__init__(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8), **kwargs)
+            super().__init__(size_hint_y=None, height=dp(100), **kwargs)
             active = str(payload.get("active_view", "items"))
-            for label, view, action in (("Items", "items", "open-items"), ("Chat", "chat", "open-chat"), ("Type-a-Word", "words", "open-words")):
+            self.buttons = []
+            for label, view, action in TABS:
                 color = (0.33, 0.34, 0.72, 1) if active == view else (0.16, 0.20, 0.26, 1)
-                button = styled_button(label, color=color)
+                button = styled_button(label, color=color, size_hint=(None, None), font_size=dp(13))
                 button.bind(on_release=lambda _instance, selected=action: app.send_action(selected))
                 self.add_widget(button)
-            status = str(payload.get("connection_status", "disconnected"))
-            status_text = status.replace("-", " ").title()
-            status_color = (0.16, 0.62, 0.38, 1) if status == "connected" else (0.74, 0.05, 0.13, 1)
-            button = styled_button(status_text, color=status_color, size_hint_x=1.25)
-            if status == "connected":
-                button.bind(on_release=lambda _instance: app.disconnect())
-            else:
-                button.bind(on_release=lambda _instance: app.send_action("open-connect"))
-            self.add_widget(button)
+                self.buttons.append(button)
+            self.bind(size=self.arrange, pos=self.arrange)
+            self.arrange()
+
+        def arrange(self, *_args):
+            rects = tab_rects(max(80, self.width / dp(1)))
+            self.height = dp(max(y+h for _, y, _, h in rects))
+            for button, (x, y, w, h) in zip(self.buttons, rects):
+                button.size = (dp(w), dp(h))
+                button.pos = (self.x+dp(x), self.top-dp(y+h))
 
     class ClientNoticeCard(BoxLayout):
         def __init__(self, row: Mapping[str, object], **kwargs: object) -> None:
@@ -1463,7 +1466,7 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 card = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(76), padding=dp(12))
                 paint(card, (0.16, 0.20, 0.26, 1), dp(12))
                 target = str(row["word"]).replace("🔑", "[KEY]").replace("🚪", "[DOOR]")
-                label = Label(text=f'{row["name"]}\n{target}', font_name=font_name,
+                label = Label(text=f'{row["name"]}\n{target}\n{row["machine_status"]}', font_name=font_name,
                     font_size=dp(17), color=(1, 1, 1, 1), halign="left", valign="middle")
                 label.bind(width=lambda instance, value: setattr(instance, "text_size", (value, None)))
                 label.bind(texture_size=lambda _instance, value, target_card=card:
@@ -1474,6 +1477,27 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 rows.add_widget(card)
             scroll.add_widget(rows)
             self.add_widget(scroll)
+
+    class ReadOnlyPanel(BoxLayout):
+        def __init__(self, app, payload, *, status=False, **kwargs):
+            super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
+            scroll = ScrollView(do_scroll_x=False)
+            rows = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(8))
+            rows.bind(minimum_height=rows.setter("height"))
+            for block in (status_blocks(payload) if status else progress_blocks(payload)):
+                label = Label(text=block, font_name=font_name, font_size=dp(14),
+                              size_hint_y=None, color=(1, 1, 1, 1), halign="left", valign="middle")
+                label.bind(width=lambda instance, value: setattr(instance, "text_size", (value, None)))
+                label.bind(texture_size=lambda instance, value: setattr(instance, "height", value[1]+dp(16)))
+                rows.add_widget(label)
+            scroll.add_widget(rows)
+            self.add_widget(scroll)
+            if status:
+                connected = payload.get("connection_status") == "connected"
+                button = styled_button("Disconnect" if connected else "Connection settings",
+                                       size_hint_y=None, height=dp(44))
+                button.bind(on_release=lambda _instance: app.disconnect() if connected else app.send_action("open-connect"))
+                self.add_widget(button)
 
     def form_input(*, hint: str, password: bool = False) -> TextInput:
         return TextInput(
@@ -1541,6 +1565,8 @@ def overlay_process_main(connection: object, config: Mapping[str, object]) -> No
                 self.add_widget(ChatPanel(app, payload))
             elif view == "words":
                 self.add_widget(WordsPanel(payload))
+            elif view in ("progress", "status"):
+                self.add_widget(ReadOnlyPanel(app, payload, status=view == "status"))
             elif view == "connect":
                 self.add_widget(ConnectionSheet(app, payload))
             elif view == "password":
