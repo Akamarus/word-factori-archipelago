@@ -1,14 +1,20 @@
 import unittest
+import json
 from unittest.mock import patch, AsyncMock
 
 from tests import test_client_lifecycle as fixtures
 from word_factori.bridge import bind_game_slot
 from word_factori.overlay_model import OverlayState
+from word_factori.native_mail_adapter import NativeMailAdapter
+from tests.test_native_mail_adapter import RecordingTransport
+from tests import test_linux_client as linux_fixtures
+from word_factori.dispatch_store import DispatchLedger
 
 
 class ProgressClientTests(unittest.IsolatedAsyncioTestCase):
     asyncSetUp = fixtures.ClientLifecycleTests.asyncSetUp
     write_active_slot = fixtures.ClientLifecycleTests.write_active_slot
+    install_word_room = fixtures.ClientLifecycleTests.install_word_room
 
     def require_feature(self):
         self.assertTrue(callable(getattr(self.ctx, 'progress_presentation', None)))
@@ -48,6 +54,47 @@ class ProgressClientTests(unittest.IsolatedAsyncioTestCase):
             await self.ctx.scan_once()
         self.assertEqual(self.ctx.progress_presentation().freshness, 'unavailable')
         self.assertEqual(self.ctx.recovery_presentation().code, 'mod_unselected')
+
+    async def test_unexpected_scan_failure_publishes_unavailable_before_retry(self):
+        await self.scan()
+        with patch('word_factori.client.read_active_slot', side_effect=RuntimeError('scan failed')):
+            with self.assertRaisesRegex(RuntimeError, 'scan failed'):
+                await self.scan()
+        sent = self.overlay.published[-1]
+        self.assertEqual(sent.progress_freshness, 'unavailable')
+        self.assertEqual(sent.recovery['code'], 'unknown_error')
+
+    async def test_late_scan_cannot_publish_over_a_new_connection(self):
+        await self.scan()
+        published = len(self.overlay.published)
+        async def changed(*args, **kwargs):
+            self.ctx._advance_connection_generation()
+            raise RuntimeError('old scan failed')
+        with patch.object(self.ctx, 'report_indices', new=changed):
+            with self.assertRaisesRegex(RuntimeError, 'old scan failed'):
+                await self.scan()
+        self.assertEqual(len(self.overlay.published), published)
+        self.assertNotEqual(self.ctx.recovery_presentation().code, 'unknown_error')
+
+    async def test_word_readiness_does_not_survive_invalidation(self):
+        self.install_word_room(('CC',))
+        self.ctx._refresh_progress()
+        self.assertEqual(self.ctx.word_order_presentation()[0][0]['machine_status'], 'Machines ready')
+        self.ctx._invalidate_progress('mod_unselected')
+        self.ctx.publish_overlay()
+        self.assertEqual(self.overlay.published[-1].word_order_rows[0].machine_status, 'Requirements unavailable')
+
+    async def test_word_readiness_is_bound_to_room_and_generation(self):
+        self.install_word_room(('CC',))
+        for change in ('room', 'generation'):
+            with self.subTest(change=change):
+                self.ctx._refresh_progress()
+                self.assertEqual(self.ctx.word_order_presentation()[0][0]['machine_status'], 'Machines ready')
+                if change == 'room':
+                    self.ctx.connected_identity = 'new-room'
+                else:
+                    self.ctx._advance_connection_generation()
+                self.assertEqual(self.ctx.word_order_presentation()[0][0]['machine_status'], 'Requirements unavailable')
 
     async def test_render_getters_never_read_save_or_rebuild_logic(self):
         self.require_feature()
@@ -96,3 +143,37 @@ class ProgressClientTests(unittest.IsolatedAsyncioTestCase):
             await self.scan()
         self.assertIn(self.ctx.active_locations()[0].code, self.ctx.bridge_state.pending_checks)
         self.assertEqual(self.ctx.progress_presentation().freshness, 'unavailable')
+
+
+class LinuxProgressPublicationTests(unittest.IsolatedAsyncioTestCase):
+    asyncSetUp = linux_fixtures.LinuxClientTests.asyncSetUp
+    install = linux_fixtures.LinuxClientTests.install
+    context = linux_fixtures.LinuxClientTests.context
+    write_active_slot = fixtures.ClientLifecycleTests.write_active_slot
+
+    async def test_failed_scans_publish_unavailable_without_other_events(self):
+        with self.install():
+            self.ctx = self.context()
+            self.ctx.dispatch_ledger = DispatchLedger.empty(self.ctx.connected_identity)
+            self.ctx.overlay_state = OverlayState(connection_status='connected')
+            self.assertTrue(self.ctx.prepare_selected_campaign())
+            account = self.factori / 'test-account'
+            (self.factori / 'user_ref.json').write_text(json.dumps({'most_recent_steam': 'test-account'}))
+            self.save_path = account / 'mods' / 'word factori archipelago' / 'save.json'
+            self.save_path.parent.mkdir(parents=True)
+            transport = RecordingTransport()
+            self.ctx.native_mail = NativeMailAdapter(transport)
+            for failure in ('mod_unselected', 'journal_invalid', 'save_mismatch'):
+                with self.subTest(failure=failure):
+                    self.write_active_slot('game-slot-A', set())
+                    await self.ctx.scan_once(ignore_selection_guard=True)
+                    self.assertEqual(transport.values[-1]['progress_freshness'], 'current')
+                    if failure == 'journal_invalid':
+                        self.save_path.write_text('invalid')
+                    elif failure == 'save_mismatch':
+                        self.write_active_slot('other-save', set())
+                    with patch.object(self.ctx, 'selected_mod', return_value=failure != 'mod_unselected'):
+                        await self.ctx.scan_once()
+                    sent = transport.values[-1]
+                    self.assertEqual(sent['progress_freshness'], 'unavailable')
+                    self.assertEqual(sent['recovery']['code'], failure)

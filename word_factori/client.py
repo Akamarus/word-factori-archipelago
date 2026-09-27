@@ -239,6 +239,7 @@ class WordFactoriContext(CommonContext):
     def _invalidate_progress(self, code: str) -> None:
         self._recovery_code = code
         self._progress_observation = self._progress_key = None
+        self._word_machine_details = {}
         if self._progress_identity == self.connected_identity:
             self._progress = replace(self._progress, freshness='unavailable',
                 summary='Save progress unavailable. Check Status for the next step.',
@@ -1244,6 +1245,20 @@ class WordFactoriContext(CommonContext):
         return active
 
     async def scan_once(self, ignore_selection_guard: bool = False) -> None:
+        identity, generation = self.connected_identity, self._connection_generation
+        try:
+            await self._scan_once(ignore_selection_guard)
+        except Exception:
+            if self._connection_epoch_matches(identity, generation):
+                self._invalidate_progress('unknown_error')
+            raise
+        finally:
+            # Linux has no periodic overlay-health publication. Deliver failures
+            # as well as successful observations, but never from an old scan.
+            if self._connection_epoch_matches(identity, generation):
+                self.publish_overlay(identity, generation)
+
+    async def _scan_once(self, ignore_selection_guard: bool) -> None:
         scan_identity, scan_generation = self.connected_identity, self._connection_generation
         if not self.compatible_campaign():
             self._bridge_warning(self._campaign_issue())
@@ -1299,7 +1314,6 @@ class WordFactoriContext(CommonContext):
         )
         if self._connection_epoch_matches(scan_identity, scan_generation):
             self._refresh_progress(active)
-            self.publish_overlay(scan_identity, scan_generation)
 
     async def report_indices(
         self, indices: set[int], *, active_slot: ActiveSlot | None = None,
@@ -1431,9 +1445,14 @@ class WordFactoriContext(CommonContext):
             return (), "Type-a-Word targets unavailable: incompatible room data."
         if not campaign.word_orders:
             return (), "Type-a-Word orders are off for this room."
+        machine_details = self._word_machine_details if (
+            self._progress_key is not None
+            and self._progress_identity == self.connected_identity
+            and self._progress_generation == self._connection_generation
+        ) else {}
         rows = tuple({
             "name": order.name, "word": order.word,
-            "machine_status": self._word_machine_details.get(order.word, 'Requirements unavailable'),
+            "machine_status": machine_details.get(order.word, 'Requirements unavailable'),
             "status": ("Completed" if order.code in self.checked_locations else
                        "Sending" if order.code in self.bridge_state.pending_checks else
                        "Not completed"),
