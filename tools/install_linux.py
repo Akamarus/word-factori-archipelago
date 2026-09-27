@@ -27,10 +27,11 @@ LEGACY_PATCHED_SHA256 = '5a964d5155f8f7acc63fd90bc81882a0559c4586f5de4fd9a0657ba
 PREVIOUS_PATCHED_SHA256 = '33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161'
 RELEASE_150_SHA256 = '39e48a5eb63924b970bc3e3907f62b0b659fc64ba5fa973c45f4e2dcf767c704'
 RELEASE_151_SHA256 = '20ccd780854adcab416f903e8ffb1702930c16fd91c307ec316d746da1567bbe'
-PATCHED_SHA256 = '0284cbb72e966e79f3b4878f2a78d0c9331bab54d3c3780f79364cd912a94d1a'
+RELEASE_160_SHA256 = '0284cbb72e966e79f3b4878f2a78d0c9331bab54d3c3780f79364cd912a94d1a'
+PATCHED_SHA256 = '2c51a6e5e67900d0aa3fb613035332e2a51f1c20afcfca85f248240bf25db46c'
 PATCH_PROTOCOL = 'enhanced_v2'
 ENFORCEMENT_CAPABILITY = 'free_word_machine_enforcement_v1'
-DELTA_SHA256 = 'ec5ac3a3f8d72f71e984dae421ee57d0901ea38970fdb4355a69d6714ef887c5'
+DELTA_SHA256 = 'cec5591dfda00e6e306b2a7c4b6eae071075bb02596ec5080a73f2c43f9fa589'
 MOD_FILES = ('levels.json', 'recipes.json', 'tips.json', 'credits.json', 'archipelago_campaign.json')
 RECEIPT = 'archipelago_enhanced_install.json'
 
@@ -163,7 +164,7 @@ class LinuxInstaller:
         identity = dict(self.identity, ap_worlds=str(self.worlds), config=str(self.config))
         self.transaction = transaction.Transaction(paths.factori_root / 'archipelago/install-transactions',
                                                     self.targets, identity, self.check_closed,
-                                                    {'game': {ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PREVIOUS_PATCHED_SHA256, RELEASE_150_SHA256, RELEASE_151_SHA256, PATCHED_SHA256},
+                                                    {'game': {ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PREVIOUS_PATCHED_SHA256, RELEASE_150_SHA256, RELEASE_151_SHA256, RELEASE_160_SHA256, PATCHED_SHA256},
                                                      'backup': {None, ORIGINAL_SHA256}})
         for target in self.targets.values():
             transaction.safe_path(target)
@@ -183,7 +184,7 @@ class LinuxInstaller:
         paths_api.validate_installation(self.paths)
         snapshot = {key: transaction.read(path) for key, path in self.targets.items()}
         current = transaction.digest(snapshot['game'])
-        if current not in (ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PREVIOUS_PATCHED_SHA256, RELEASE_150_SHA256, RELEASE_151_SHA256, PATCHED_SHA256):
+        if current not in (ORIGINAL_SHA256, LEGACY_PATCHED_SHA256, PREVIOUS_PATCHED_SHA256, RELEASE_150_SHA256, RELEASE_151_SHA256, RELEASE_160_SHA256, PATCHED_SHA256):
             raise ValueError('Unsupported or modified game data; no files changed')
         if snapshot['backup'] is not None and transaction.digest(snapshot['backup']) != ORIGINAL_SHA256:
             raise ValueError('Original backup is unknown or damaged; no files changed')
@@ -197,7 +198,7 @@ class LinuxInstaller:
             legacy_receipt = (isinstance(receipt, dict) and receipt.get('protocol') == 'enhanced_v1'
                               and receipt.get('patched_sha256') == LEGACY_PATCHED_SHA256)
             current_receipt = (isinstance(receipt, dict) and receipt.get('protocol') == PATCH_PROTOCOL
-                               and receipt.get('patched_sha256') in (PREVIOUS_PATCHED_SHA256, RELEASE_150_SHA256, RELEASE_151_SHA256, PATCHED_SHA256)
+                               and receipt.get('patched_sha256') in (PREVIOUS_PATCHED_SHA256, RELEASE_150_SHA256, RELEASE_151_SHA256, RELEASE_160_SHA256, PATCHED_SHA256)
                                and receipt.get('capability') == ENFORCEMENT_CAPABILITY)
             if (not (legacy_receipt or current_receipt)
                     or receipt.get('original_sha256') != ORIGINAL_SHA256
@@ -244,7 +245,7 @@ class LinuxInstaller:
             raise ValueError('Delta does not match this integration')
         patched = apply_delta(source, delta)
         receipt = {'protocol': PATCH_PROTOCOL, 'capability': ENFORCEMENT_CAPABILITY, 'original_sha256': ORIGINAL_SHA256,
-                   'mail_protocol': 1,
+                   'mail_protocol': 2,
                    'patched_sha256': PATCHED_SHA256, 'game_data': str(self.paths.game_data),
                    'platform': 'linux', 'prefix': str(self.paths.prefix),
                    'factori_root': str(self.paths.factori_root), 'ap_worlds': str(self.worlds)}

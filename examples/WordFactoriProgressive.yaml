@@ -1,5 +1,5 @@
 name: WordFactoriProgressive
-description: Tester prerelease with finite machine progression
+description: Optional progressive machines, recipes and three chosen word orders
 game: Word Factori
 requires:
   version: 0.6.7
@@ -9,8 +9,11 @@ Word Factori:
   custom_level_set: discovery_labs
   goal: campaign_count
   campaign_count: 25
-  recipe_checks: false
-  type_a_word_checks: false
+  recipe_checks: true
+  type_a_word_checks: true
+  type_a_word_count: 3
+  type_a_word_words: ['JACK', 'FACTORY', 'PUZZLE', 'ISLAND', 'I=']
+  # The room chooses three; AP Mail > Type-a-Word lists the selected targets.
   # Optional: move extra starting upgrades out of the item pool.
   # start_inventory_from_pool:
   #   Progressive Rotation Access: 1

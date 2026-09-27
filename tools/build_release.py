@@ -16,7 +16,7 @@ RELEASE_ARCHIVE = ROOT / f"word-factori-archipelago-{VERSION}.zip"
 RELEASE_MANIFEST = ROOT / "release-manifest.json"
 PATCH_FILE = ROOT / "tools/enhanced.patch.gz"
 # Independently round-tripped against the verified original and patched game.
-PATCH_SHA256 = "ec5ac3a3f8d72f71e984dae421ee57d0901ea38970fdb4355a69d6714ef887c5"
+PATCH_SHA256 = "cec5591dfda00e6e306b2a7c4b6eae071075bb02596ec5080a73f2c43f9fa589"
 WORLD_SOURCE_NAMES = (
     "word_factori/Components.py",
     "word_factori/__init__.py",

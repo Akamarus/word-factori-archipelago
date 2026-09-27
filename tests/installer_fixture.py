@@ -21,6 +21,7 @@ LEGACY = ORIGINAL[:4096] + b"legacy integration fixture" + ORIGINAL[5000:]
 PREVIOUS = ORIGINAL[:4096] + b"previous v2 integration fixture" + ORIGINAL[5000:]
 RELEASE150 = ORIGINAL[:4096] + b"release 1.5.0 integration fixture" + ORIGINAL[5000:]
 RELEASE151 = ORIGINAL[:4096] + b"release 1.5.1 integration fixture" + ORIGINAL[5000:]
+RELEASE160 = ORIGINAL[:4096] + b"release 1.6.0 integration fixture" + ORIGINAL[5000:]
 
 
 class InstallerFixture(unittest.TestCase):
@@ -40,7 +41,7 @@ class InstallerFixture(unittest.TestCase):
         # Test-only copies replace exact supported hashes; production has no bypass.
         for field, data in (("originalHash", ORIGINAL), ("patchedHash", PATCHED),
                             ("previousPatchedHash", PREVIOUS), ("release150Hash", RELEASE150),
-                            ("release151Hash", RELEASE151)):
+                            ("release151Hash", RELEASE151), ("release160Hash", RELEASE160)):
             script, count = re.subn(rf"(\${field} = ')[0-9a-f]{{64}}(')",
                                    lambda match: match[1] + hashlib.sha256(data).hexdigest() + match[2], script)
             self.assertEqual(1, count)

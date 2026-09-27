@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased — release-candidate polish (not published or stable)
+
+- Added read-only Progress and Status tabs to Windows and native Linux/Proton AP Mail. Campaign rows follow the room's shuffled page order, keep canonical check names and distinguish local page access, server completion and missing machine routes.
+- Added normal and progressive requirement details to Type-a-Word cards, including alternative routes, finite quantities and restricted campaign labs. I sources remain available; no rules, IDs, machine allowances or YAML defaults changed.
+- Cached room/save-bound observations; stale, disconnected and unavailable states are explicit. Cosmetic failures cannot interrupt authoritative checks or item reconciliation.
+- Added safe recovery guidance for connection, patch, room/save, journal and Mail failures without displaying personal paths or exception text.
+- Bumped Windows presentation protocol to 4 and native Mail protocol to 2. Both retain bounded messages, input isolation and regular-client fallback. Tabs wrap on narrow panels; progress text scrolls.
+- Added required Windows/Ubuntu connected CI pinned to official AP 0.6.7, two 263-check/two-goal seeds, duplicate/reconnect/tracker tests and deliberate premature-victory rejection. These simulate the game boundary, not real gameplay.
+- Updated quick-start/troubleshooting and normal/progressive YAML examples. The progressive example enables recipes and three selected word orders; option defaults are unchanged.
+- Rebuild and reinstall the matching native delta and APWorld together with the game/client closed. Upgrade/restore keeps saves and the verified original backup. This update does not introduce per-item reloads.
+- Stable release remains gated on real Windows/Linux installation and playthroughs, password/reconnect behavior, supported display modes and 60-minute performance measurements. Exclusive fullscreen remains unsupported.
+
 ## 1.6.0 — AP Mail and tester feedback follow-up (tester prerelease)
 
 - Added experimental native **Linux/Proton AP Mail**: Items with received/sent filters and paged history, Chat, Type-a-Word targets, Status, and blue item popups on the left. Open with AP MAIL or F8. Initial server/slot/password entry remains in the regular native client; reconnect uses its existing configuration. Windows retains its existing overlay. No extra service, dependency or YAML option is required.

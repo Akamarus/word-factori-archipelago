@@ -13,7 +13,8 @@ $legacyPatchedHash = '5a964d5155f8f7acc63fd90bc81882a0559c4586f5de4fd9a0657badd8
 $previousPatchedHash = '33aeea0ae1429e35a8c8b5a98407d88c07b53eac33b40f1df8d47bb566eb7161'
 $release150Hash = '39e48a5eb63924b970bc3e3907f62b0b659fc64ba5fa973c45f4e2dcf767c704'
 $release151Hash = '20ccd780854adcab416f903e8ffb1702930c16fd91c307ec316d746da1567bbe'
-$patchedHash = '0284cbb72e966e79f3b4878f2a78d0c9331bab54d3c3780f79364cd912a94d1a'
+$release160Hash = '0284cbb72e966e79f3b4878f2a78d0c9331bab54d3c3780f79364cd912a94d1a'
+$patchedHash = '2c51a6e5e67900d0aa3fb613035332e2a51f1c20afcfca85f248240bf25db46c'
 function Hash-Bytes([byte[]]$Bytes) {
     $hasher = [Security.Cryptography.SHA256]::Create()
     try { return ([BitConverter]::ToString($hasher.ComputeHash($Bytes))).Replace('-', '').ToLowerInvariant() }
@@ -51,7 +52,7 @@ $original = [IO.File]::ReadAllBytes($GameData)
 $currentHash = Hash-Bytes $original
 if ($null -ne $existingReceipt) {
     $legacyReceipt = $existingReceipt.protocol -eq 'enhanced_v1' -and $existingReceipt.patched_sha256 -eq $legacyPatchedHash
-    $currentReceipt = $existingReceipt.protocol -eq 'enhanced_v2' -and $existingReceipt.patched_sha256 -in @($previousPatchedHash, $release150Hash, $release151Hash, $patchedHash) -and $existingReceipt.capability -eq 'free_word_machine_enforcement_v1'
+    $currentReceipt = $existingReceipt.protocol -eq 'enhanced_v2' -and $existingReceipt.patched_sha256 -in @($previousPatchedHash, $release150Hash, $release151Hash, $release160Hash, $patchedHash) -and $existingReceipt.capability -eq 'free_word_machine_enforcement_v1'
     if ((-not $legacyReceipt -and -not $currentReceipt) -or $existingReceipt.original_sha256 -ne $originalHash -or ($currentHash -ne $originalHash -and $existingReceipt.patched_sha256 -ne $currentHash)) {
         throw 'Receipt hashes, protocol or enforcement capability are invalid; nothing changed.'
     }
@@ -80,7 +81,7 @@ if ($Restore) {
     Write-Host 'Original game restored. Your saves and the original backup were kept.'
     return
 }
-if ($currentHash -notin @($originalHash, $patchedHash, $previousPatchedHash, $release150Hash, $release151Hash, $legacyPatchedHash)) {
+if ($currentHash -notin @($originalHash, $patchedHash, $previousPatchedHash, $release150Hash, $release151Hash, $release160Hash, $legacyPatchedHash)) {
     throw 'Unsupported or already modified Word Factori build. No files changed.'
 }
 $sourceOriginal = $original

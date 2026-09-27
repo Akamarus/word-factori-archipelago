@@ -6,7 +6,7 @@ requires:
 Word Factori:
   progression_balancing: 50
   accessibility: items
-  # 1.5.0: 187 global Recipe Journal checks; true by default.
+  # 187 global Recipe Journal checks; true by default.
   # Use the matching package, a new room and a fresh empty save.
   recipe_checks: true
   # Optional 1, 2, 3, 4, unlimited placement tiers (default false).
@@ -14,8 +14,7 @@ Word Factori:
   # Optional Type-a-Word orders. Defaults: false, count 5, empty list.
   # Count must not exceed the number of distinct words in the list.
   type_a_word_checks: false
-  type_a_word_count: 3
-  type_a_word_words: [JACK, FACTORY, PUZZLE, ISLAND]
+  # See WordFactoriProgressive.yaml for a complete optional word-order example.
   goal: campaign_count
   campaign_count: 25
   custom_level_set: discovery_labs

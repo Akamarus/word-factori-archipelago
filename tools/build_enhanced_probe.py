@@ -84,7 +84,7 @@ def build_probe(cli: Path, original: Path, output: Path) -> dict:
             "status": "Production providers compiled and reopened; connected acceptance pending",
             "protocol": "enhanced_v2",
             "capability": "free_word_machine_enforcement_v1",
-            "mail_protocol": 1,
+            "mail_protocol": 2,
             "original_sha256": ORIGINAL_SHA256,
             "patched_sha256": hashlib.sha256(patched).hexdigest(),
             "helper_sha256": hashlib.sha256(helpers.encode("utf-8")).hexdigest(),

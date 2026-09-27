@@ -80,7 +80,7 @@ jobs:
           if not (Path(os.environ["WF_AP_SOURCE"]) / "MultiServer.py").is_file():
               raise RuntimeError("Connected tests require AP source; refusing skipped acceptance")
       - name: Connected coverage and premature-victory fault
-        run: python -m unittest tests.test_connected_multiworld tests.test_connected_ci -v
+        run: python -m unittest tests.test_connected_multiworld tests.test_connected_ci tests.test_release_polish_docs -v
       - name: Connected seed 160929
         run: python tools/verify_connected_multiworld.py --ap-source ap-source --seed 160929 --output connected-results/160929
       - name: Connected seed 160930

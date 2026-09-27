@@ -16,12 +16,27 @@ from tools import install_linux as installer
 
 
 class LinuxInstallerTests(unittest.TestCase):
+    def test_release_160_upgrade_and_restore_preserve_original(self):
+        old = b'release 1.6.0 synthetic game'
+        with patch.object(installer, 'RELEASE_160_SHA256', hashlib.sha256(old).hexdigest(), create=True):
+            self.legacy_installation()
+            self.game.write_bytes(old)
+            receipt = json.loads(self.setup.receipt.read_text())
+            receipt.update(protocol='enhanced_v2', patched_sha256=installer.RELEASE_160_SHA256,
+                           capability='free_word_machine_enforcement_v1')
+            self.setup.receipt.write_text(json.dumps(receipt))
+            self.setup.run('install')
+            self.assertEqual(self.patched, self.game.read_bytes())
+            self.assertEqual(self.original, self.setup.backup.read_bytes())
+            self.setup.run('restore')
+            self.assertEqual(self.original, self.game.read_bytes())
+
     def test_native_mail_capability_is_transactional_and_removed_without_touching_history(self):
         self.setup.run('install')
         marker = self.paths.mod_folder / 'archipelago_mail/enabled.json'
         self.assertTrue(marker.is_file(), 'Linux Mail capability marker missing')
         self.assertEqual({'version': 1, 'enabled': True}, json.loads(marker.read_text()))
-        self.assertEqual(1, json.loads(self.setup.receipt.read_text())['mail_protocol'])
+        self.assertEqual(2, json.loads(self.setup.receipt.read_text())['mail_protocol'])
         history = marker.parent / 'snapshot.json'
         history.write_text('retained cosmetic history')
         self.setup.run('uninstall')
