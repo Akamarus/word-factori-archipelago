@@ -66,6 +66,8 @@ from .capabilities import FULL
 from .enhanced_runtime import RUNTIME_NAME, patch_readiness, publish_runtime, machine_counts_for_view, runtime_context
 from .word_orders import checks_contract_digest, missing_machine_options
 from .quantities import describe_allowances, describe_missing
+from .progress_presentation import ProgressPresentation, build_progress, word_machine_status
+from .recovery_presentation import recovery_presentation
 from .quantity_logic import budgets_for_word
 from .overlay_model import OverlayAction, OverlayState, apply_action, apply_events, snapshot
 from .overlay_preferences import OverlayPreferences, load_preferences
@@ -209,6 +211,73 @@ class WordFactoriContext(CommonContext):
         self._client_message_sequence = 0
         self.native_mail = None
         self.native_mail_task: asyncio.Task | None = None
+        self._progress = ProgressPresentation((), 'Connect to view campaign progress.', 'unavailable')
+        self._progress_identity = None
+        self._progress_generation = -1
+        self._progress_observation = None
+        self._progress_key = None
+        self._word_machine_details: dict[str, str] = {}
+        self._recovery_code = 'save_unbound'
+
+    def progress_presentation(self) -> ProgressPresentation:
+        if self._progress_identity != self.connected_identity:
+            return ProgressPresentation((), 'Connect to view this room\'s campaign progress.', 'unavailable')
+        if self._progress_generation != self._connection_generation:
+            return ProgressPresentation((), 'Waiting for current room progress.', 'unavailable')
+        return self._progress
+
+    def recovery_presentation(self):
+        code = self._recovery_code
+        if self.overlay_state.connection_status == 'error':
+            code = 'auth_failed'
+        elif self.server is None:
+            code = 'disconnected'
+        elif self.last_overlay_error and code == 'ready':
+            code = 'mail_stale'
+        return recovery_presentation(code, platform='linux' if self.native_linux else 'win32')
+
+    def _invalidate_progress(self, code: str) -> None:
+        self._recovery_code = code
+        self._progress_observation = self._progress_key = None
+        if self._progress_identity == self.connected_identity:
+            self._progress = replace(self._progress, freshness='unavailable',
+                summary='Save progress unavailable. Check Status for the next step.',
+                rows=tuple(replace(row, page_status='Save progress unavailable') for row in self._progress.rows))
+        else:
+            self._progress = ProgressPresentation((), 'Waiting for this room\'s campaign.', 'unavailable')
+
+    def _refresh_progress(self, active=None) -> None:
+        """Only called by scan/reconciliation, never by a renderer or draw loop."""
+        try:
+            self._build_progress_cache(active)
+        except Exception:
+            # Cosmetic failures must not stop authoritative checks or item delivery.
+            self._invalidate_progress('unknown_error')
+
+    def _build_progress_cache(self, active=None) -> None:
+        campaign = self.selected_campaign()
+        if campaign is None or self.connected_identity is None:
+            self._invalidate_progress('room_mismatch')
+            return
+        identity = (self.connected_identity, self._connection_generation,
+                    checks_contract_digest(self.slot_data), self.bridge_state.game_slot_id)
+        if active is not None and active.random_id == self.bridge_state.game_slot_id:
+            self._progress_observation = (identity, active.beaten_levels)
+        observed = self._progress_observation
+        slots = observed[1] if observed is not None and observed[0] == identity else None
+        items = tuple(self.network_items())
+        key = (identity, slots, items, frozenset(self.checked_locations), self.bridge_state.pending_checks)
+        if key == self._progress_key:
+            return
+        view = inventory_view(items, progressive=campaign.progressive_machines)
+        self._progress = build_progress(campaign, view, local_slots=slots,
+            checked=frozenset(self.checked_locations), pending=self.bridge_state.pending_checks,
+            freshness='current' if slots is not None else 'unavailable')
+        self._word_machine_details = {order.word: word_machine_status(order.word, view)
+                                      for order in campaign.word_orders}
+        self._progress_identity = self.connected_identity
+        self._progress_generation = self._connection_generation
+        self._progress_key = key
 
     def start_native_mail(self) -> bool:
         """Linux presentation only; exact patch verification still gates startup."""
@@ -351,6 +420,10 @@ class WordFactoriContext(CommonContext):
 
     async def connection_closed(self) -> None:
         self._advance_connection_generation()
+        self._progress_observation = self._progress_key = None
+        self._progress_generation = self._connection_generation
+        self._progress = replace(self._progress, freshness='last_known',
+            summary='Last known progress; reconnect to refresh.')
         try:
             await super().connection_closed()
         finally:
@@ -390,6 +463,7 @@ class WordFactoriContext(CommonContext):
 
     def on_package(self, cmd: str, args: dict) -> None:
         if cmd == "ConnectionRefused":
+            self._invalidate_progress('auth_failed')
             self._set_overlay_connection_status("error")
             self.record_client_notice(
                 "connection-refused",
@@ -402,6 +476,7 @@ class WordFactoriContext(CommonContext):
             self.room_seed_name = str(seed_name) if seed_name is not None else None
         elif cmd == "Connected":
             connection_generation = self._advance_connection_generation()
+            self._invalidate_progress('save_unbound')
             self.slot_data = dict(args.get("slot_data") or {})
             self.last_render_signature = None
             self.prepare_selected_campaign()
@@ -488,6 +563,7 @@ class WordFactoriContext(CommonContext):
             if self.connected_identity is not None and self.compatible_campaign():
                 self.bridge_state = acknowledge_checks(self.bridge_state, self.checked_locations)
                 save_state(self.state_path(), self.bridge_state)
+                self._refresh_progress()
                 self.publish_overlay(self.connected_identity)
 
     def state_path(self) -> Path:
@@ -989,6 +1065,7 @@ class WordFactoriContext(CommonContext):
         result = reconcile(self.bridge_state, self.network_items(), set(), set(), authoritative=True)
         self.bridge_state = result.state
         save_state(self.state_path(), self.bridge_state)
+        self._refresh_progress()
         view = inventory_view((ReceivedItem(index, name) for index, name in self.bridge_state.applied.items()),
                               progressive=self.slot_data.get('progressive_machines') is True)
         if self.update_rendered_levels(
@@ -1125,14 +1202,18 @@ class WordFactoriContext(CommonContext):
 
     def _campaign_issue(self) -> str | None:
         if self.setup_error is not None:
+            self._invalidate_progress('patch_missing')
             return self.setup_error
         if self.selected_campaign() is None:
+            self._invalidate_progress('room_mismatch')
             return CAMPAIGN_MISMATCH
         if self.native_linux or self.slot_data.get("integration_mode") == "enhanced":
             readiness = patch_readiness(self.mod_folder, self.installation_paths)
             if not readiness.ready:
+                self._invalidate_progress('patch_missing' if readiness.code == 'receipt_missing' else 'patch_outdated')
                 return readiness.message
         if not campaign_compatible(self.slot_data, self.installed_campaign()):
+            self._invalidate_progress('room_mismatch')
             return CAMPAIGN_MISMATCH
         return None
 
@@ -1151,6 +1232,8 @@ class WordFactoriContext(CommonContext):
                 word_checks=bool(self.selected_campaign().word_orders),
             )
         except (OSError, ValueError, KeyError, TypeError) as error:
+            self._invalidate_progress('save_mismatch' if active is not None and
+                self.bridge_state.game_slot_id not in (None, active.random_id) else 'save_unbound')
             self._bridge_warning(f"Word Factori save binding paused: {error}")
             return None
         if self.bridge_state.game_slot_id is None:
@@ -1160,10 +1243,12 @@ class WordFactoriContext(CommonContext):
         return active
 
     async def scan_once(self, ignore_selection_guard: bool = False) -> None:
+        scan_identity, scan_generation = self.connected_identity, self._connection_generation
         if not self.compatible_campaign():
             self._bridge_warning(self._campaign_issue())
             return
         if not ignore_selection_guard and not self.selected_mod():
+            self._invalidate_progress('mod_unselected')
             self._bridge_warning("Automatic checks paused: the selected Word Factori mod is not the Archipelago mod. Use /wf_scan for an explicit one-time scan.")
             return
         try:
@@ -1171,26 +1256,31 @@ class WordFactoriContext(CommonContext):
                 find_save(self.factori_root.parent, Path("mods") / MOD_FOLDER)
             )
         except (OSError, ValueError, KeyError, TypeError) as error:
+            self._invalidate_progress('journal_invalid')
             self._bridge_warning(f"Word Factori save binding paused: {error}")
             return
         local_checks = set(active.beaten_levels)
         try:
             location_codes_for_native_slots(local_checks, self.active_locations())
         except ValueError as error:
+            self._invalidate_progress('save_mismatch')
             self._bridge_warning(
                 "Campaign/save mismatch: "
                 f"{error}. Use the Word Factori save created for this room and campaign."
             )
             return
         if not ignore_selection_guard and not self.selected_mod():
+            self._invalidate_progress('mod_unselected')
             self._bridge_warning("Automatic check discarded because the selected mod changed during the save read.")
             return
         if self.ensure_game_slot_binding(active) is None:
             return
         self.last_bridge_error = None
+        self._recovery_code = 'ready'
         recipe_codes: frozenset[int] = frozenset()
         if self.slot_data.get("recipe_checks") is True:
             if active.recipe_codes is None:
+                self._invalidate_progress('journal_invalid')
                 self._bridge_warning("Recipe journal is malformed; no recipe checks were reported.")
                 return
             recipe_codes = active.recipe_codes
@@ -1198,6 +1288,7 @@ class WordFactoriContext(CommonContext):
         orders = self.selected_campaign().word_orders
         if orders:
             if active.completed_words is None:
+                self._invalidate_progress('journal_invalid')
                 self._bridge_warning("Word journal is malformed or unavailable; no Type-a-Word checks were reported.")
             else:
                 order_codes = word_order_codes(active.completed_words, orders)
@@ -1205,6 +1296,9 @@ class WordFactoriContext(CommonContext):
             local_checks, active_slot=active,
             recipe_codes=recipe_codes, order_codes=order_codes,
         )
+        if self._connection_epoch_matches(scan_identity, scan_generation):
+            self._refresh_progress(active)
+            self.publish_overlay(scan_identity, scan_generation)
 
     async def report_indices(
         self, indices: set[int], *, active_slot: ActiveSlot | None = None,
@@ -1217,6 +1311,7 @@ class WordFactoriContext(CommonContext):
         expected_identity = self.connected_identity
         expected_generation = self._connection_generation
         if self.slot_data.get('progressive_machines') is True and not self.native_checks_acknowledged():
+            self._recovery_code = 'native_waiting'
             self._bridge_warning('Progressive machine checks are paused until the quantity-capable game patch acknowledges this room.')
             return
         if not self.compatible_campaign():
@@ -1236,6 +1331,7 @@ class WordFactoriContext(CommonContext):
         allowed_codes = set(self.active_check_codes())
         native_codes = (recipe_codes | order_codes) & allowed_codes
         if native_codes and not self.native_checks_acknowledged():
+            self._recovery_code = 'native_waiting'
             native_codes = frozenset()
             self._bridge_warning(
                 "Recipe and Type-a-Word checks are paused until the native enforcement acknowledgment matches this room."
