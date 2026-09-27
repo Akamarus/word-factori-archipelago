@@ -8,9 +8,9 @@ candidate by its commit and hashes, not the version label alone.
 
 | Artifact | SHA-256 / identity |
 | --- | --- |
-| Source | release-polish branch, final verification commit recorded at handoff |
-| APWorld (pre-review) | 2751d7115561235eadf0c0f08adcb2f18b6097a558604804bf8b06b5b9dcd26b |
-| Player ZIP (pre-review) | c22bd116b97eb1f8d90eedb424aab2fe304a74dfe67e4fa66d3d8b4a8d7fc564 |
+| Source | test/connected-multiworld, e3ba89c525adda86196c906adfb37ad93452828a (final implementation; later commits record evidence only) |
+| APWorld | 45df9c95209cb65c87c5e81e2a8d2ea408479b0aa61f7b11dc30011c472ccd18 |
+| Player ZIP | dda229cd0b4ab0964f6013531ba274434b8a3b599b129a5fcdb567e2b32f861d |
 | Native delta | cec5591dfda00e6e306b2a7c4b6eae071075bb02596ec5080a73f2c43f9fa589 |
 | Patched scratch game | 2c51a6e5e67900d0aa3fb613035332e2a51f1c20afcfca85f248240bf25db46c |
 | Verified original | d40ce3c6a37281c0bce46d8a631cd7dd7749334c7892f45669791d64e4e86978 |
@@ -49,13 +49,33 @@ confirmed logic error may remain at stable sign-off.
 - Connected tests: real AP server + real clients + packaged APWorld; synthetic save
   and recipe/word journals. Test-side page model, not actual native page buttons.
   Tracker reconstruction is not Universal Tracker UI testing.
-- Pre-review full verification: 790 tests, five explicit skips (two platform
+- Final full verification: 795 tests run, 790 passed, five explicit skips (two platform
   cases, two opt-in connected cases, one opt-in YAML generation).
-  The opt-in connected cases passed separately; both YAML examples generated
-  successfully with real AP option validation. Source/package integrity passed.
-- Final post-review two-seed results: Pending final verification.
+  All 12 opt-in/CI/example tests passed separately, including a real connected room,
+  deliberate premature-victory rejection and real generation of both shipped YAML
+  examples. Source/package integrity passed.
+- Final post-review seeds 160929 and 160930: **Pass**, each with 263/263 checks,
+  2/2 server-confirmed goals, 20 tracker comparisons and nine replay rounds.
+  Cross-player deliveries: 54/52; page-gate observations: 108/122. Both reports
+  identify the final APWorld hash above. These are not native game playthroughs.
 - New native UI/bridge acceptance assertions: authored, execution Pending.
 - Hosted Windows/Ubuntu CI: Pending authorized push.
+
+The final independent review found two Important presentation defects. Regression
+tests reproduced both, then passed after fixing Linux publication following failed
+scans and preventing word readiness from surviving a room/generation change.
+An additional guard rejects publication from a delayed old-generation scan.
+
+One Minor is deferred: a malformed Type-a-Word journal with valid campaign data
+can show current campaign progress alongside the broad “Completion scanning paused”
+message. Word checks are safely withheld; campaign scanning remains valid. Narrow
+that recovery wording in a later polish pass. Native font/DPI/input behavior and
+the extreme-text 2,500-line rendering limit still require actual UI acceptance.
+
+Local verification logs, the review ledger and both complete seed reports are
+retained in the project workspace at `release-polish-20260927/verification-final/`.
+They contain synthetic test data, not evidence from the installed game. Rerun the
+commands below to reproduce results; hosted evidence will be attached after a push.
 
 See [connected verification](connected-multiworld.md) for rerunnable commands.
 Install development test dependencies with
