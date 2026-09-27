@@ -55,7 +55,8 @@ class NativeMailAdapter:
             self._filter = 'all'
             self._popup_deadlines.clear(); self._expired_popups.clear()
         elif self._source is not None and value.connection_status != 'connected' and not value.word_order_rows:
-            value = replace(value, word_order_rows=self._source.word_order_rows)
+            value = replace(value, word_order_rows=self._source.word_order_rows,
+                            progress_freshness='last_known', progress_status='Last known progress; reconnect to refresh.')
         self.room, self.contract = room, contract
         self._source = value
         self._unread = frozenset(unread_keys)
@@ -95,17 +96,20 @@ class NativeMailAdapter:
         for row in source.ledger_rows:
             prefix.add(row['key'])
             self._remember(self._boundaries, _key(row['key']), frozenset(prefix))
-        value = dict(version=1, session=self.transport.session,
+        value = dict(version=protocol.VERSION, session=self.transport.session,
                      renderer=self.transport.renderer or '0'*32, revision=0,
                      room=self.room, contract=self.contract, connection=source.connection_status,
                      items=[self._item(row) for row in items],
                      chat=[dict(key=_key(row['key']), kind=row['kind'], text=_text(row['text'])) for row in chat],
-                     words=[dict(name=_text(row['name']), word=row['word'], status=row['status'])
+                     words=[dict(name=_text(row['name']), word=row['word'], status=row['status'], machine_status=row['machine_status'])
                             for row in source.word_order_rows],
                      notifications=self._notifications(),
-                     unread=len(self._unread), acks=[], history=dict(items=item_cursor, chat=chat_cursor))
+                     unread=len(self._unread), acks=[], history=dict(items=item_cursor, chat=chat_cursor),
+                     progress_rows=[dict(row) for row in source.progress_rows], progress_status=source.progress_status,
+                     progress_freshness=source.progress_freshness, recovery=dict(source.recovery))
         # Reserve the worst-case acknowledgment budget added by transport later.
         # Keep targets; oldest history gives way to the byte ceiling.
+        protocol.validate_envelope(value, kind='snapshot')
         while True:
             try:
                 raw = protocol.encode_envelope(value, kind='snapshot')

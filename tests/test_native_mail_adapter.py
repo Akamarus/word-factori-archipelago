@@ -60,7 +60,7 @@ class NativeMailAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.adapter.process_once(self.ctx)
 
     def test_words_survive_trimming_and_no_credentials_or_raw_packets(self):
-        words = [dict(name='Order 1', word='HELLO!', status='Sending')]
+        words = [dict(name='Order 1', word='HELLO!', status='Sending', machine_status='Machines ready')]
         self.publish(presentation(200, text='😀'*2000, words=words))
         sent = self.transport.values[-1]
         self.assertEqual(words, sent['words'])
@@ -161,7 +161,7 @@ class NativeMailAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('rejected',self.transport.acks[-1][1])
 
     def test_offline_same_room_retains_targets_but_changed_room_clears_them(self):
-        words = [dict(name='Order', word='CAT', status='Not completed')]
+        words = [dict(name='Order', word='CAT', status='Not completed', machine_status='Missing Bender')]
         self.publish(presentation(words=words))
         offline = replace(presentation(), connection_status='disconnected')
         self.publish(offline)

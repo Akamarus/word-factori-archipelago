@@ -15,7 +15,7 @@ CONNECTION_STATUSES = frozenset((
     "disconnected", "connecting", "connected", "reconnecting", "authenticating", "error",
 ))
 _NO_VALUE_ACTIONS = frozenset((
-    "open", "open-items", "open-chat", "open-words", "open-connect", "request-password",
+    "open", "open-items", "open-chat", "open-words", "open-progress", "open-status", "open-connect", "request-password",
     "close", "toggle", "focus-lost", "focus-returned", "submit-started", "submit-failed",
 ))
 _ACTION_KINDS = _NO_VALUE_ACTIONS | frozenset(("filter", "expire", "connection-status", "reload-required"))
@@ -32,6 +32,8 @@ class OverlayView(str, Enum):
     ITEMS = "items"
     CHAT = "chat"
     WORDS = "words"
+    PROGRESS = "progress"
+    STATUS = "status"
     CONNECT = "connect"
     PASSWORD = "password"
 
@@ -195,6 +197,10 @@ class OverlaySnapshot:
     max_visible: int
     word_order_rows: tuple[JsonObject, ...]
     word_orders_status: str
+    progress_rows: tuple[JsonObject, ...]
+    progress_status: str
+    progress_freshness: str
+    recovery: JsonObject
 
 
 def _event_row(event: DispatchEvent) -> JsonObject:
@@ -302,12 +308,14 @@ def validate_action(action: OverlayAction) -> OverlayAction:
 
 def apply_action(state: OverlayState, action: OverlayAction) -> OverlayState:
     action = validate_action(action)
-    if action.kind in ("open", "open-items", "open-chat", "open-words", "open-connect", "request-password"):
+    if action.kind in ("open", "open-items", "open-chat", "open-words", "open-progress", "open-status", "open-connect", "request-password"):
         view = {
             "open": OverlayView.ITEMS,
             "open-items": OverlayView.ITEMS,
             "open-chat": OverlayView.CHAT,
             "open-words": OverlayView.WORDS,
+            "open-progress": OverlayView.PROGRESS,
+            "open-status": OverlayView.STATUS,
             "open-connect": OverlayView.CONNECT,
             "request-password": OverlayView.PASSWORD,
         }[action.kind]
@@ -368,6 +376,10 @@ def snapshot(
     generation: int = 0,
     word_order_rows: Iterable[Mapping[str, object]] = (),
     word_orders_status: str = "Connect to view this room's Type-a-Word targets.",
+    progress_rows: Iterable[Mapping[str, object]] = (),
+    progress_status: str = 'Connect to view campaign progress.',
+    progress_freshness: str = 'unavailable',
+    recovery: Mapping[str, object] | None = None,
 ) -> OverlaySnapshot:
     """Return a renderer-ready snapshot containing only JSON-compatible values."""
     if not isinstance(state, OverlayState):
@@ -421,6 +433,11 @@ def snapshot(
         notification_duration=preferences.notification_duration,
         reduced_motion=preferences.reduced_motion,
         max_visible=preferences.max_visible,
-        word_order_rows=tuple(JsonObject(row) for row in word_order_rows),
+        word_order_rows=tuple(JsonObject({'machine_status': 'Requirements unavailable', **row}) for row in word_order_rows),
         word_orders_status=word_orders_status,
+        progress_rows=tuple(JsonObject(row) for row in progress_rows),
+        progress_status=progress_status,
+        progress_freshness=progress_freshness,
+        recovery=JsonObject(recovery if recovery is not None else dict(code='disconnected', severity='warning',
+            title='Live updates unavailable', action='Keep the client open and reconnect to the same room.')),
     )

@@ -36,6 +36,8 @@ class OverlayReducerTests(unittest.TestCase):
         payload = dict(snapshot_message(snapshot(OverlayState())).payload)
         del payload["word_order_rows"]
         del payload["word_orders_status"]
+        for field in ("progress_rows", "progress_status", "progress_freshness", "recovery"):
+            del payload[field]
         self.assertEqual("snapshot", decode_parent_message(json.dumps({
             "version": 2, "type": "snapshot", "payload": payload,
         })).kind)
@@ -293,7 +295,8 @@ class OverlayProtocolTests(unittest.TestCase):
         self.assertEqual(OverlayAction("open", generation=7), decode_child_action(encoded))
 
         legacy_payload = dict(snapshot_message(snapshot(OverlayState.closed())).payload)
-        for field in ("active_view", "accepts_keyboard", "transcript_rows", "notice_rows", "word_order_rows", "word_orders_status"):
+        for field in ("active_view", "accepts_keyboard", "transcript_rows", "notice_rows", "word_order_rows", "word_orders_status",
+                      "progress_rows", "progress_status", "progress_freshness", "recovery"):
             del legacy_payload[field]
         legacy_snapshot = json.dumps({
             "version": 1, "type": "snapshot", "payload": legacy_payload,

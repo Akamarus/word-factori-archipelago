@@ -27,7 +27,7 @@ def _safe(path):
 
 class NativeMailTransport:
     def __init__(self, root: Path, session: str, *, clock=time.monotonic):
-        protocol.encode_envelope(dict(version=1, session=session, renderer='0'*32,
+        protocol.encode_envelope(dict(version=protocol.VERSION, session=session, renderer='0'*32,
                                       revision=0, heartbeat=0), kind='manifest')
         self.root, self.session, self.clock = Path(root), session, clock
         self.renderer = None
@@ -108,7 +108,7 @@ class NativeMailTransport:
     def _manifest(self):
         if self.renderer and self._published is not None:
             self._write('manifest.json', protocol.encode_envelope(dict(
-                version=1, session=self.session, renderer=self.renderer,
+                version=protocol.VERSION, session=self.session, renderer=self.renderer,
                 revision=self._revision, heartbeat=self._heartbeat), kind='manifest'))
 
     def publish(self, snapshot):
@@ -135,7 +135,7 @@ class NativeMailTransport:
         self._revision = value['revision']
         try:
             self._write('manifest.json', protocol.encode_envelope(dict(
-                version=1, session=self.session, renderer=self.renderer,
+                version=protocol.VERSION, session=self.session, renderer=self.renderer,
                 revision=self._revision, heartbeat=self._heartbeat), kind='manifest'))
         except Exception:
             self._revision = previous

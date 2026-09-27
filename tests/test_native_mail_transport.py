@@ -23,7 +23,7 @@ class NativeMailTransportTests(unittest.TestCase):
 
     def hello(self, heartbeat=0, renderer='b'*32):
         (self.root / 'hello.json').write_bytes(encode_envelope(
-            dict(version=1, renderer=renderer, heartbeat=heartbeat), kind='hello'))
+            dict(version=2, renderer=renderer, heartbeat=heartbeat), kind='hello'))
 
     def tick(self, delta=.25):
         self.now += delta

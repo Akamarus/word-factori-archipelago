@@ -39,13 +39,40 @@ function wf_mail_item_valid(row) {
 }
 function wf_mail_manifest_valid(value) {
     return wf_mail_fields(value,["version","session","renderer","revision","heartbeat"])
-        && wf_mail_integer(value.version) && value.version==1 && wf_mail_uuid(value.session)
+        && wf_mail_integer(value.version) && value.version==2 && wf_mail_uuid(value.session)
         && wf_mail_uuid(value.renderer) && wf_mail_integer(value.revision) && wf_mail_integer(value.heartbeat);
+}
+function wf_mail_progress_valid(value) {
+    if(!is_array(value.progress_rows) || array_length(value.progress_rows)>40
+        || !wf_mail_text(value.progress_status,512)
+        || !wf_mail_choice(value.progress_freshness,["current","last_known","unavailable"])) return false;
+    var r=value.recovery;
+    if(!wf_mail_fields(r,["code","severity","title","action"]) || !wf_mail_text(r.code,512)
+        || !wf_mail_choice(r.severity,["info","warning","error"])
+        || !wf_mail_text(r.title,512) || !wf_mail_text(r.action,512)) return false;
+    for(var i=0;i<array_length(value.progress_rows);i++) {
+        var row=value.progress_rows[i];
+        if(!wf_mail_fields(row,["code","page","slot","name","target","kind","completion","page_status","machine_status"])
+            || !wf_mail_integer(row.code) || row.code<1
+            || !wf_mail_integer(row.page) || row.page<1 || row.page>7
+            || !wf_mail_integer(row.slot) || row.slot<1 || row.slot>6
+            || !wf_mail_text(row.name,512) || !wf_mail_text(row.target,512)
+            || !wf_mail_choice(row.kind,["Campaign level","Campaign challenge","Campaign lab","Final factory"])
+            || !wf_mail_choice(row.completion,["Not completed","Sending","Completed"])
+            || !wf_mail_text(row.page_status,512) || !wf_mail_text(row.machine_status,512)) return false;
+        for(var j=0;j<i;j++) {
+            var prev=value.progress_rows[j];
+            if(prev.code==row.code || (prev.page==row.page && prev.slot==row.slot)) return false;
+        }
+    }
+    return true;
 }
 function wf_mail_snapshot_valid(value) {
     if(!wf_mail_fields(value,["version","session","renderer","revision","room","contract","connection",
-        "items","chat","words","notifications","unread","acks","history"])) return false;
-    if(!wf_mail_integer(value.version) || value.version!=1 || !wf_mail_uuid(value.session)
+        "items","chat","words","notifications","unread","acks","history",
+        "progress_rows","progress_status","progress_freshness","recovery"])) return false;
+    if(!wf_mail_progress_valid(value)) return false;
+    if(!wf_mail_integer(value.version) || value.version!=2 || !wf_mail_uuid(value.session)
         || !wf_mail_uuid(value.renderer) || !wf_mail_integer(value.revision) || !wf_mail_integer(value.unread)) return false;
     if(!(wf_mail_null(value.room) && wf_mail_null(value.contract))
         && !(wf_mail_id(value.room) && wf_mail_id(value.contract))) return false;
@@ -61,7 +88,8 @@ function wf_mail_snapshot_valid(value) {
     }
     for(var i=0;i<array_length(value.words);i++) {
         var row=value.words[i];
-        if(!wf_mail_fields(row,["name","word","status"]) || !wf_mail_text(row.name,512) || row.name==""
+        if(!wf_mail_fields(row,["name","word","status","machine_status"]) || !wf_mail_text(row.name,512) || row.name==""
+            || !wf_mail_text(row.machine_status,512)
             || !wf_mail_text(row.word,12) || row.word==""
             || !wf_mail_choice(row.status,["Not completed","Sending","Completed"])) return false;
     }
@@ -109,10 +137,10 @@ function wf_mail_write(name, value, limit) {
         // always use the engine's JSON escaping.
         var text="";
         if(name=="hello.json") {
-            text="{\"version\":1,\"renderer\":"+json_stringify(value.renderer)
+            text="{\"version\":2,\"renderer\":"+json_stringify(value.renderer)
                 +",\"heartbeat\":"+string_format(value.heartbeat,0,0)+"}";
         } else if(name=="request.json") {
-            text="{\"version\":1,\"session\":"+json_stringify(value.session)
+            text="{\"version\":2,\"session\":"+json_stringify(value.session)
                 +",\"renderer\":"+json_stringify(value.renderer)+",\"room\":"+json_stringify(value.room)
                 +",\"sequence\":"+string_format(value.sequence,0,0)+",\"action\":"+json_stringify(value.action)
                 +",\"payload\":"+json_stringify(value.payload)+"}";
@@ -154,7 +182,12 @@ function wf_mail_bridge_clear(message) {
 }
 function wf_mail_bridge_accept(manifest, value, now_ms, context) {
     var b=global.wf_mail_bridge;
-    if(!wf_mail_manifest_valid(manifest) || manifest.renderer!=b.renderer) { b.valid=false; return false; }
+    if(!wf_mail_manifest_valid(manifest) || manifest.renderer!=b.renderer) {
+        b.valid=false;
+        if(is_struct(manifest) && variable_struct_exists(manifest,"version") && manifest.version!=2)
+            b.message="Mail versions do not match. Use the matching client and installer.";
+        return false;
+    }
     if(manifest.session!=b.session) {
         var uncertain=!is_undefined(b.pending);
         wf_mail_bridge_clear(uncertain ? "Delivery uncertain. Check chat before resending." : "Connecting to the client...");
@@ -217,7 +250,7 @@ function wf_mail_bridge_step(now_ms) {
         }
         if(now_ms>=b.next_hello) {
             b.next_hello=now_ms+1000; b.hello++;
-            if(!wf_mail_write("hello.json",{version:1,renderer:b.renderer,heartbeat:b.hello},4096)) {
+            if(!wf_mail_write("hello.json",{version:2,renderer:b.renderer,heartbeat:b.hello},4096)) {
                 b.valid=false; b.message="Mail files unavailable. Use the regular client."; return;
             }
         }
@@ -251,7 +284,7 @@ function wf_mail_submit(action, payload) {
             || !wf_mail_id(payload.cursor)) return false;
     } else if(!wf_mail_fields(payload,[])) return false;
     if(is_undefined(b.room_id) && action!="disconnect" && action!="reconnect") return false;
-    var request={version:1,session:b.session,renderer:b.renderer,
+    var request={version:2,session:b.session,renderer:b.renderer,
         sequence:b.sequence+1,action:action,payload:payload};
     variable_struct_set(request,"room",b.room_id);
     if(!wf_mail_write("request.json",request,8192)) {

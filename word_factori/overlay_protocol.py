@@ -8,13 +8,15 @@ import math
 from typing import Mapping, TypeAlias
 
 from .overlay_model import CONNECTION_STATUSES, OverlayAction, OverlaySnapshot, validate_action
+from .progress_protocol import PROGRESS_FIELDS, validate_progress_fields, unavailable_fields, text as progress_text
 
 
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 LEGACY_PROTOCOL_VERSION = 1
 _PARENT_TYPES = frozenset(("snapshot", "settings", "shutdown"))
 _SNAPSHOT_FIELDS = frozenset(OverlaySnapshot.__dataclass_fields__)
-_V2_SNAPSHOT_FIELDS = _SNAPSHOT_FIELDS - {"word_order_rows", "word_orders_status"}
+_V3_SNAPSHOT_FIELDS = _SNAPSHOT_FIELDS - PROGRESS_FIELDS
+_V2_SNAPSHOT_FIELDS = _V3_SNAPSHOT_FIELDS - {"word_order_rows", "word_orders_status"}
 _V1_SNAPSHOT_FIELDS = _V2_SNAPSHOT_FIELDS - frozenset((
     "active_view", "accepts_keyboard", "transcript_rows", "notice_rows",
 ))
@@ -243,11 +245,13 @@ def _validate_parent(
         checked = _require_exact_keys(payload, _SETTINGS_FIELDS, kind)
         _validate_settings_payload(checked)
         return kind, checked
-    fields = {1: _V1_SNAPSHOT_FIELDS, 2: _V2_SNAPSHOT_FIELDS, 3: _SNAPSHOT_FIELDS}[version]
+    fields = {1: _V1_SNAPSHOT_FIELDS, 2: _V2_SNAPSHOT_FIELDS, 3: _V3_SNAPSHOT_FIELDS, 4: _SNAPSHOT_FIELDS}[version]
     checked = _require_exact_keys(payload, fields, kind)
     _validate_snapshot_payload(checked)
     if version != LEGACY_PROTOCOL_VERSION:
         views = ("items", "chat", "connect", "password") + (("words",) if version >= 3 else ())
+        if version >= 4:
+            views += ('progress', 'status')
         if checked["active_view"] not in views:
             raise ValueError("active_view is invalid")
         _require_bool(checked["accepts_keyboard"], "accepts_keyboard")
@@ -265,11 +269,19 @@ def _validate_parent(
         if not isinstance(rows, list) or len(rows) > 20:
             raise ValueError("word_order_rows must contain at most 20 targets")
         for row in rows:
-            _require_exact_keys(row, frozenset(("name", "word", "status")), "word order")
+            _require_exact_keys(row, frozenset(("name", "word", "status")) | ({'machine_status'} if version >= 4 else set()), "word order")
             _require_bounded_text(row["name"], "name", 64)
             _require_bounded_text(row["word"], "word", 64)
             if row["status"] not in ("Completed", "Sending", "Not completed"):
                 raise ValueError("word order status is invalid")
+            if version >= 4:
+                progress_text(row['machine_status'])
+    if version >= 4:
+        validate_progress_fields(checked)
+    else:
+        checked.update(unavailable_fields())
+        for row in checked.get('word_order_rows', []):
+            row['machine_status'] = 'Requirements unavailable'
     return kind, checked
 
 
@@ -308,7 +320,7 @@ def decode_parent_message(encoded: str) -> ParentMessage:
     if set(decoded) != {"version", "type", "payload"}:
         raise ValueError("protocol top-level fields are invalid")
     if type(decoded["version"]) is not int or decoded["version"] not in {
-        LEGACY_PROTOCOL_VERSION, 2, PROTOCOL_VERSION,
+        LEGACY_PROTOCOL_VERSION, 2, 3, PROTOCOL_VERSION,
     }:
         raise ValueError("protocol version is not supported")
     kind, payload = _validate_parent(
@@ -408,7 +420,7 @@ def decode_child_action(encoded: str) -> OverlayIntent:
     if not isinstance(decoded, dict) or set(decoded) != {"version", "type", "payload"}:
         raise ValueError("protocol top-level fields are invalid")
     version = decoded["version"]
-    if type(version) is not int or version not in {LEGACY_PROTOCOL_VERSION, 2, PROTOCOL_VERSION}:
+    if type(version) is not int or version not in {LEGACY_PROTOCOL_VERSION, 2, 3, PROTOCOL_VERSION}:
         raise ValueError("protocol version is not supported")
     kind = decoded["type"]
     if kind == "action":

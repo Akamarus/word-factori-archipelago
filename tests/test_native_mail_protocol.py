@@ -26,15 +26,15 @@ class NativeMailProtocolTests(unittest.TestCase):
         value = mail_snapshot()
         value.update(items=[mail_item()], notifications=[mail_item()],
                      chat=[dict(key='chat-1', kind='hint', text='Hello café')],
-                     words=[dict(name='Order 1', word='A!', status='Sending')],
+                     words=[dict(name='Order 1', word='A!', status='Sending', machine_status='Missing Bender')],
                      acks=[dict(sequence=1, status='forwarded', message='Sent')])
         self.assertEqual(value, self.roundtrip(value, 'snapshot'))
         for kind, data in [('manifest', mail_manifest()), ('request', mail_request()),
-                           ('hello', dict(version=1, renderer='b'*32, heartbeat=0))]:
+                           ('hello', dict(version=2, renderer='b'*32, heartbeat=0))]:
             self.assertEqual(data, self.roundtrip(data, kind))
 
     def test_rejects_wrong_versions_ids_boolean_negative_or_inexact_counters(self):
-        for field, values in [('version', [True, 2, '1']), ('session', ['', 'A'*32, 'x'*32]),
+        for field, values in [('version', [True, 1, 3, '2']), ('session', ['', 'A'*32, 'x'*32]),
                               ('renderer', [None, 'b'*31]),
                               ('revision', [True, -1, 1.0, 2**53]),
                               ('heartbeat', [True, -1, float('inf')])]:
@@ -74,7 +74,7 @@ class NativeMailProtocolTests(unittest.TestCase):
     def test_text_and_row_boundaries(self):
         for field, maximum, row in [('items', 50, mail_item()), ('notifications', 3, mail_item()),
                                    ('chat', 50, dict(key='c', kind='chat', text='x')),
-                                   ('words', 20, dict(name='Order', word='A'*12, status='Completed')),
+                                   ('words', 20, dict(name='Order', word='A'*12, status='Completed', machine_status='Machines ready')),
                                    ('acks', 32, dict(sequence=1, status='queued', message=''))]:
             value = mail_snapshot(); value[field] = [copy.deepcopy(row) for _ in range(maximum)]
             self.roundtrip(value, 'snapshot')

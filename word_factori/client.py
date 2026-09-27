@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, asdict
 import json
 import os
 import re
@@ -293,7 +293,8 @@ class WordFactoriContext(CommonContext):
             if not patch_readiness(self.mod_folder, self.installation_paths).ready:
                 return False
             receipt = json.loads((self.mod_folder / RECEIPT_NAME).read_text(encoding='utf-8'))
-            if type(receipt.get('mail_protocol')) is not int or receipt['mail_protocol'] != 1:
+            from .native_mail_protocol import VERSION as mail_version
+            if type(receipt.get('mail_protocol')) is not int or receipt['mail_protocol'] != mail_version:
                 return False
             transport = NativeMailTransport(self.mod_folder / 'archipelago_mail', uuid.uuid4().hex)
             transport.start()
@@ -320,7 +321,7 @@ class WordFactoriContext(CommonContext):
             return self.native_mail.publish(snapshot(
                 self.overlay_state, self.dispatch_ledger, self.overlay_preferences,
                 self.transcript, self.client_notices, generation=self._presentation_generation,
-                word_order_rows=word_rows, word_orders_status=word_status),
+                word_order_rows=word_rows, word_orders_status=word_status, **self._progress_snapshot_fields()),
                 room=room_token(identity), contract=checks_contract_digest(self.slot_data) if identity else None,
                 unread_keys=self.dispatch_ledger.unread_keys)
         except Exception:
@@ -1432,12 +1433,19 @@ class WordFactoriContext(CommonContext):
             return (), "Type-a-Word orders are off for this room."
         rows = tuple({
             "name": order.name, "word": order.word,
+            "machine_status": self._word_machine_details.get(order.word, 'Requirements unavailable'),
             "status": ("Completed" if order.code in self.checked_locations else
                        "Sending" if order.code in self.bridge_state.pending_checks else
                        "Not completed"),
         } for order in campaign.word_orders)
         count = sum(row["status"] == "Completed" for row in rows)
         return rows, f"{count} of {len(rows)} completed. Make these targets in Type-a-Word."
+
+    def _progress_snapshot_fields(self) -> dict:
+        progress = self.progress_presentation()
+        return dict(progress_rows=tuple(asdict(row) for row in progress.rows),
+                    progress_status=progress.summary, progress_freshness=progress.freshness,
+                    recovery=asdict(self.recovery_presentation()))
 
     def words_text(self) -> str:
         campaign = self.selected_campaign()
@@ -1534,7 +1542,7 @@ class WordFactoriContext(CommonContext):
                 self.overlay_state, self.dispatch_ledger, self.overlay_preferences,
                 self.transcript, self.client_notices,
                 generation=self._presentation_generation,
-                word_order_rows=word_rows, word_orders_status=word_status,
+                word_order_rows=word_rows, word_orders_status=word_status, **self._progress_snapshot_fields(),
             ))
         except Exception as error:
             published = False

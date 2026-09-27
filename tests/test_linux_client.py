@@ -25,7 +25,7 @@ class LinuxClientTests(unittest.IsolatedAsyncioTestCase):
         with self.install():
             receipt_path = self.paths.mod_folder / RECEIPT_NAME
             receipt = json.loads(receipt_path.read_text())
-            receipt['mail_protocol'] = 1
+            receipt['mail_protocol'] = 2
             receipt_path.write_text(json.dumps(receipt))
             ctx = self.context()
             ctx.start_overlay()

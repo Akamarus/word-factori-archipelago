@@ -5,9 +5,11 @@ function wf_access_context() {
     return json_parse("{\"room\":\"test-room\",\"checks_contract\":\"test-contract\"}");
 }
 function wf_bridge_snapshot() {
-    var value={version:1,session:string_repeat("a",32),renderer:global.wf_mail_bridge.renderer,
+    var value={version:2,session:string_repeat("a",32),renderer:global.wf_mail_bridge.renderer,
         revision:1,contract:"test-contract",connection:"connected",
-        items:[],chat:[],words:[{name:"Order 1",word:"CAT",status:"Not completed"}],
+        items:[],chat:[],words:[{name:"Order 1",word:"CAT",status:"Not completed",machine_status:"Missing Bender"}],
+        progress_rows:[],progress_status:"Save progress unavailable",progress_freshness:"unavailable",
+        recovery:{code:"save_unbound",severity:"warning",title:"Select your save",action:"Load the connected campaign."},
         notifications:[],unread:0,acks:[],history:{items:undefined,chat:undefined}};
     variable_struct_set(value,"room","test-room");
     return value;
@@ -35,7 +37,7 @@ function wf_bridge_tests() {
     directory_create("mods"); directory_create("mods/word factori archipelago");
     directory_create("mods/word factori archipelago/archipelago_mail");
     b.enabled=true;
-    var hello={version:1,renderer:b.renderer,heartbeat:1};
+    var hello={version:2,renderer:b.renderer,heartbeat:1};
     wf_expect("bridge native first replacement succeeds",wf_mail_write("hello.json",hello,4096));
     hello.heartbeat=2;
     wf_expect("bridge native existing replacement succeeds",wf_mail_write("hello.json",hello,4096));
@@ -43,7 +45,7 @@ function wf_bridge_tests() {
     wf_expect("bridge native bounded read round trip",is_struct(loaded) && loaded.heartbeat==2);
     wf_expect("bridge oversize file refused before parse",is_undefined(wf_mail_read("hello.json",8)));
     value=wf_bridge_snapshot();
-    var manifest={version:1,session:value.session,renderer:b.renderer,revision:1,heartbeat:1};
+    var manifest={version:2,session:value.session,renderer:b.renderer,revision:1,heartbeat:1};
     var now=current_time;
     wf_expect("bridge accepts matching manifest snapshot",wf_mail_bridge_accept(manifest,value,now,wf_access_context()));
     wf_expect("bridge persisted heartbeat cannot authorize actions",!wf_mail_bridge_ready());

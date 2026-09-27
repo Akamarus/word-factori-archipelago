@@ -8,8 +8,9 @@ from __future__ import annotations
 import json
 import math
 import re
+from .progress_protocol import validate_progress_fields
 
-VERSION = 1
+VERSION = 2
 MANIFEST_BYTES = 4096
 SNAPSHOT_BYTES = 256 * 1024
 REQUEST_BYTES = 8192
@@ -84,10 +85,11 @@ def _chat(value):
 
 
 def _word(value):
-    _keys(value, 'name word status')
+    _keys(value, 'name word status machine_status')
     _text(value['name'], empty=False)
     _text(value['word'], 12, empty=False)
     _enum(value['status'], ('Not completed', 'Sending', 'Completed'))
+    _text(value['machine_status'])
 
 
 def _ack(value):
@@ -103,7 +105,7 @@ def validate_envelope(value, *, kind):
         'manifest': 'version session renderer revision heartbeat',
         'hello': 'version renderer heartbeat',
         'request': 'version session renderer room sequence action payload',
-        'snapshot': 'version session renderer revision room contract connection items chat words notifications unread acks history',
+        'snapshot': 'version session renderer revision room contract connection items chat words notifications unread acks history progress_rows progress_status progress_freshness recovery',
     }
     _keys(value, fields[kind])
     _require(type(value['version']) is int and value['version'] == VERSION)
@@ -114,6 +116,7 @@ def validate_envelope(value, *, kind):
         if field in value:
             _counter(value[field])
     if kind == 'snapshot':
+        validate_progress_fields(value)
         _identity(value['room'], nullable=True)
         _identity(value['contract'], nullable=True)
         _require((value['room'] is None) == (value['contract'] is None))
