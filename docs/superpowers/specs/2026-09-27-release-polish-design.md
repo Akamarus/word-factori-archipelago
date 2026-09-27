@@ -1,6 +1,6 @@
 # Release-candidate polish design
 
-Date: 2026-09-27. Status: proposed specification, awaiting written-spec review.
+Date: 2026-09-27. Status: approved by Jack; implementation plan requires review.
 
 ## Outcome and scope
 
