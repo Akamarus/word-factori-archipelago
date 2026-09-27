@@ -1,0 +1,10 @@
+# Headless AP 0.6.7 core only; no game integrations or GUI dependencies.
+colorama==0.4.6
+websockets==13.1
+PyYAML==6.0.3
+jellyfish==1.2.1
+jinja2==3.1.6
+schema==0.7.8
+platformdirs==4.9.4
+orjson==3.11.7
+typing_extensions==4.15.0
