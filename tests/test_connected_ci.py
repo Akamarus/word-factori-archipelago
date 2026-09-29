@@ -38,5 +38,7 @@ class ConnectedCITests(unittest.TestCase):
         pins = {line for line in path.read_text().splitlines() if line and not line.startswith('#')}
         self.assertIn('websockets==13.1', pins)
         self.assertIn('PyYAML==6.0.3', pins)
+        self.assertIn('pathspec==1.0.4', pins)
+        self.assertIn('bsdiff4==1.2.6', pins)
         self.assertTrue(all('==' in line for line in pins))
         self.assertFalse(any('kivy' in line.lower() for line in pins))
