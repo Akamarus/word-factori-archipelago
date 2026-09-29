@@ -9,6 +9,7 @@ except ModuleNotFoundError as error:
     if error.name != "BaseClasses":
         raise
 else:
+    from Options import OptionError
     from worlds.AutoWorld import WebWorld, World
     from worlds.generic.Rules import set_rule
 
@@ -26,7 +27,7 @@ else:
         ProgressiveMachines,
     )
     from .recipe_checks import RECIPE_CATALOG_DIGEST, RECIPE_CHECKS
-    from .requirements import access_rule_for
+    from .requirements import campaign_access_rules
     from .word_orders import (
         WORD_ORDER_NAME_TO_ID, choose_word_orders, orders_slot_data,
     )
@@ -77,6 +78,17 @@ else:
         @staticmethod
         def interpret_slot_data(slot_data: dict) -> dict:
             """Give UT the room contract, never a newly randomized approximation."""
+            def json_arrays(value):
+                # AP's saved multidata uses tuples; a live JSON connection uses
+                # lists. Older UT test hooks pass the saved representation.
+                # Normalize only ordered arrays, then run all contract checks.
+                if isinstance(value, (list, tuple)):
+                    return [json_arrays(entry) for entry in value]
+                if isinstance(value, dict):
+                    return {key: json_arrays(entry) for key, entry in value.items()}
+                return deepcopy(value)
+
+            slot_data = json_arrays(slot_data)
             resolved = resolve_room_campaign(slot_data)
             if resolved.layout is None or slot_data.get("progression_model") not in {ENHANCED_MACHINE_MODEL, RECIPE_MODEL, WORD_ORDER_MODEL, QUANTITY_MODEL}:
                 raise ValueError("Universal Tracker requires a matching 1.4.0-or-newer machine-only room")
@@ -88,7 +100,7 @@ else:
                 raise ValueError("tracker room goal is missing or invalid")
             if type(count) is not int or not CampaignCount.range_start <= count <= CampaignCount.range_end:
                 raise ValueError("tracker room campaign_count is missing or invalid")
-            return deepcopy(slot_data)
+            return slot_data
 
         def selected_level_set(self) -> str:
             if hasattr(self, "_level_set"):
@@ -129,7 +141,7 @@ else:
                             self.random,
                         )
                     except (TypeError, ValueError) as error:
-                        raise ValueError(
+                        raise OptionError(
                             f"Type-a-Word options for player {self.player} are invalid: {error}"
                         ) from error
                 else:
@@ -164,14 +176,12 @@ else:
                     # names organize content, not additional inventory gates.
                 )
             locations = self.selected_locations()
-            quantity_rules = (campaign_quantity_rules(locations, self._quantity_budgets, self.player)
-                              if self._quantity_budgets is not None else {})
+            campaign_rules = (campaign_quantity_rules(locations, self._quantity_budgets, self.player)
+                              if self._quantity_budgets is not None else
+                              campaign_access_rules(locations, self.player, integration_mode=self._layout.integration_mode))
             for data in locations:
                 location = WordFactoriLocation(self.player, data.name, data.code, regions[data.region])
-                set_rule(location, access_rule_for(data, locations, self.player, integration_mode=self._layout.integration_mode,
-                    quantity_budgets=self._quantity_budgets[data.code] if self._quantity_budgets is not None else None))
-                if quantity_rules:
-                    set_rule(location, quantity_rules[data.code])
+                set_rule(location, campaign_rules[data.code])
                 regions[data.region].locations.append(location)
             if bool(self.options.recipe_checks.value):
                 journal = Region("Recipe Journal", self.player, self.multiworld)
@@ -250,9 +260,10 @@ else:
         def fill_hook(self, progitempool, usefulitempool, filleritempool, fill_locations):
             if self._quantity_budgets is None:
                 return
-            from .quantity_layout import upgrade_path
+            from .quantity_layout import upgrade_path, upgrade_ranks
             records = {record.stable_key:record for record in self._manifest.levels}
-            path = upgrade_path(tuple(records[key] for key in self._layout.ordered_stable_keys))
+            ordered_records = tuple(records[key] for key in self._layout.ordered_stable_keys)
+            path = upgrade_path(ordered_records)
             if path is None:
                 raise ValueError('Progressive campaign has no verified upgrade path')
             positions = [i for i,item in enumerate(progitempool)
@@ -273,10 +284,21 @@ else:
                     ordered.append(available[name].popleft())
             if len(ordered) != len(positions):
                 raise ValueError('Progressive item pool exceeds its verified path')
-            # AP fills in reverse order. Keep its shuffled locations and every
-            # other player's item positions; this never preplaces a check.
+            # AP fills in reverse order. Keep other players' item positions.
             for index,item in zip(positions,ordered):
                 progitempool[index] = item
+            # Reverse fill must also spend the late slots first. Randomly using
+            # early slots for late upgrades can invalidate a funded witness.
+            # Stable sorting retains shuffled ties; other players' positions and
+            # optional checks are untouched. AP still chooses every placement.
+            ranks = upgrade_ranks(ordered_records, path)
+            by_code = {data.code: ranks[data.stable_key] for data in self._locations}
+            positions = [index for index, location in enumerate(fill_locations)
+                         if location.player == self.player and location.address in by_code]
+            ordered_locations = sorted((fill_locations[index] for index in positions),
+                                       key=lambda location: by_code[location.address], reverse=True)
+            for index, location in zip(positions, ordered_locations):
+                fill_locations[index] = location
 
         def set_rules(self) -> None:
             self.multiworld.completion_condition[self.player] = lambda state: state.has("Victory", self.player)

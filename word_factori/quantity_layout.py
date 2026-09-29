@@ -9,6 +9,29 @@ from .quantities import PROGRESSIVE_ITEMS
 from .quantity_logic import budgets_for_location
 
 
+def upgrade_ranks(records, path):
+    """Earliest witness step reaching each campaign check, including page gates."""
+    requirements = tuple(tuple(tuple(min(n, 5) for n in budget)
+                               for budget in budgets_for_location(record)) for record in records)
+    tiers = [1, 0, 0, 0, 0, 0]
+    ranks = {}
+    for step, item in enumerate((None, *path)):
+        if item is not None:
+            tiers[PROGRESSIVE_ITEMS.index(item)] += 1
+        for start in range(0, len(records), 6):
+            count = 0
+            for index in range(start, min(start + 6, len(records))):
+                if any(all(a >= b for a, b in zip(tiers, budget))
+                       for budget in requirements[index]):
+                    ranks.setdefault(records[index].stable_key, step)
+                    count += 1
+            if count < 4:
+                break
+    if len(ranks) != len(records):
+        raise ValueError('Progressive witness does not reach every campaign check')
+    return ranks
+
+
 @lru_cache(maxsize=128)
 def upgrade_path(records, *, max_states=10000):
     """Return a funded 29-upgrade witness, or None (including search exhaustion)."""

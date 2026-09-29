@@ -8,8 +8,8 @@ An experimental public beta for playing **Word Factori** with [Archipelago](http
 
 ## Quick start
 
-The public download below is still the **1.6.0 tester prerelease**, not a stable release.
-Unreleased polish on this branch is not included in that download.
+The public download below is the **1.7.0 tester prerelease**, not a stable release.
+It includes the AP Mail polish and generation fixes described below.
 
 1. Install Archipelago 0.6.7 and Word Factori (Steam build 12616577).
 2. Download and extract the single player ZIP below.
@@ -26,7 +26,7 @@ Detailed [Windows setup](#simple-installation) and [Linux/Proton setup](docs/lin
 For updates, close the game/client and rerun the matching installer; preserve your saves and original backup.
 This one-time update restart is not required each time an item arrives.
 
-### Unreleased candidate polish
+### New in 1.7.0
 
 AP Mail now has **Items**, **Chat**, **Type-a-Word**, **Progress** and **Status**.
 Progress lists your actual shuffled page order, server-confirmed completions,
@@ -34,15 +34,16 @@ local page locks and missing machines or progressive quantities. These are separ
 an unlocked page can still contain puzzles you cannot solve yet.
 Status explains setup/connection problems and the next safe action without exposing personal paths.
 Word-order cards also show missing machinery. Narrow panels use two rows of tabs.
-Installers and clients must come from the same candidate package; replacing only the APWorld is insufficient.
+Installers and clients must come from the same 1.7.0 package; replacing only the APWorld is insufficient.
 No check IDs, item IDs, progression rules or YAML defaults changed.
 
-This candidate has headless verification, not stable-release approval.
+Generation fixes cover Universal Tracker saved-room reconstruction, progressive item placement and repeated page-rule evaluation. The pre-version-bump candidate passed the full 14,500-generation browser run with zero raw timeouts; see the [test evidence](https://github.com/Akamarus/word-factori-archipelago/blob/v1.7.0/docs/testing/aptests-regressions-20260929.md).
+This release has automated verification, not stable-release approval.
 See the [acceptance checklist](https://github.com/Akamarus/word-factori-archipelago/blob/main/docs/testing/release-candidate-acceptance.md).
 
-## Public tester release: 1.6.0
+## Public tester release: 1.7.0
 
-**[Download the 1.6.0 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.6.0)** — adds selected Type-a-Word targets to AP Mail, experimental native Linux/Proton Mail, source-generation support through Archipelago 0.6.8, and a scoped progressive-simulation performance fix. One player ZIP supports Windows and Linux/Proton. This is **not a stable release**. See the [complete changelog](CHANGELOG.md).
+**[Download the 1.7.0 tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.7.0)** — adds AP Mail Progress/Status guidance on Windows and Linux/Proton, clearer missing-machine information, and tested generation/Tracker fixes. One player ZIP supports both platforms. This is **not a stable release**. See the [complete changelog](CHANGELOG.md).
 
 - **Recipe Journal checks:** 187 distinct working letter recipes, enabled by default and configurable.
 - **Type-a-Word orders:** optional checks for a seed-selected subset of your own word list.
@@ -50,11 +51,11 @@ See the [acceptance checklist](https://github.com/Akamarus/word-factori-archipel
 - **Universal Tracker:** reconstructs the actual room's layout, goals, selected words and quantity rules.
 - **Native enforcement:** saved/imported factories cannot bypass locked machinery; progressive over-limit layouts stay editable without awarding invalid checks.
 
-**Updating from 1.5.1 or an earlier supported release:** close the game and Archipelago, extract this ZIP into a separate folder, and rerun its installer. Restart Archipelago, update the tracker-side APWorld too, generate a **new room** and use a **fresh empty mod save**. Do not delete your old saves or original-game backup. Old room compatibility is not promised by this release; changing YAML cannot change an existing room.
+**Updating from 1.6.0 or an earlier supported release:** close the game and Archipelago, extract this ZIP into a separate folder, and rerun its installer. Restart Archipelago, update the tracker-side APWorld too, generate a **new room** and use a **fresh empty mod save**. Do not delete your old saves or original-game backup. Old room compatibility is not promised by this release; changing YAML cannot change an existing room.
 
 ### AP Mail on both platforms
 
-Open **AP MAIL** or press **F8**. The **Type-a-Word** tab lists your room's chosen targets and completion status; targets also appear on connection, in `/wf_words`, and in the generated spoiler. Windows keeps its overlay and Linux uses a native panel, both with blue item popups on the left. The candidate adds Progress and recovery guidance on both. On Linux, enter server, slot and password in the regular client; Mail can reconnect using that configuration. No extra app, service or YAML option is needed. Rerun the matching installer: replacing only the APWorld does not apply native changes.
+Open **AP MAIL** or press **F8**. The **Type-a-Word** tab lists your room's chosen targets and completion status; targets also appear on connection, in `/wf_words`, and in the generated spoiler. Windows keeps its overlay and Linux uses a native panel, both with blue item popups on the left. Version 1.7.0 adds Progress and recovery guidance on both. On Linux, enter server, slot and password in the regular client; Mail can reconnect using that configuration. No extra app, service or YAML option is needed. Rerun the matching installer: replacing only the APWorld does not apply native changes.
 
 ### YAML options
 
@@ -120,9 +121,9 @@ Progressive upgrades are polled during play without reloading. Saved or imported
 - **No World Access items in new seeds.** Your machines and recipe requirements determine which puzzles you can solve, alongside page progression.
 - **I stays available in every level.** Discovery Labs still restrict machine types, and challenge factories retain their machine limits.
 - **Shuffled pages from the start.** The first page is randomized, all six levels on an unlocked page are selectable, and four completions advance. Normal access unlocks refresh on factory entry; progressive quantities update during play.
-- **New rooms start with an empty mod save.** For 1.6.0 testing, generate a new room; updating does not convert existing rooms.
+- **New rooms start with an empty mod save.** For 1.7.0 testing, generate a new room; updating does not convert existing rooms.
 
-There is one integration: enhanced, shuffled, machine-only progression. The player package includes the APWorld, JSON mod, and required reversible native delta patch. There are no integration-mode or fixed-layout choices. Automated connected tests use a real server and clients with simulated game completions; real Windows/Linux gameplay acceptance remains pending. The candidate's Progress tab explains missing campaign requirements.
+There is one integration: enhanced, shuffled, machine-only progression. The player package includes the APWorld, JSON mod, and required reversible native delta patch. There are no integration-mode or fixed-layout choices. Automated connected tests use a real server and clients with simulated game completions; real Windows/Linux gameplay acceptance remains pending. The Progress tab explains missing campaign requirements.
 
 The native patch enables independent first-page buttons and machine refresh on factory entry. It requires your own exact supported copy of the game. The integration does not write Word Factori saves or distribute full game binaries, encoded recipes, or proprietary fonts. See [native integration and playtest details](docs/enhanced-playtest.md) for the technical scope and outstanding acceptance work.
 
@@ -174,11 +175,11 @@ Letters are always manufactured inside Word Factori. Archipelago never sends ind
 
 The required Word Factori depot is Steam build **12616577**, with the exact original `data.win` verified by the installer. Other builds and other binary modifications are rejected.
 
-For a new playthrough, generate a room with the matching APWorld and client and use a **fresh empty mod save**. Use a new 1.6.0 room for this prerelease; keep previous saves as backups rather than reusing their progress.
+For a new playthrough, generate a room with the matching APWorld and client and use a **fresh empty mod save**. Use a new 1.7.0 room for this prerelease; keep previous saves as backups rather than reusing their progress.
 
 ## Simple installation
 
-Download the single **[word-factori-archipelago-1.6.0.zip player package](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.6.0/word-factori-archipelago-1.6.0.zip)** for either platform. Use the player ZIP, not GitHub's automatic source-code archives.
+Download the single **[word-factori-archipelago-1.7.0.zip player package](https://github.com/Akamarus/word-factori-archipelago/releases/download/v1.7.0/word-factori-archipelago-1.7.0.zip)** for either platform. Use the player ZIP, not GitHub's automatic source-code archives.
 
 ### Windows
 
@@ -315,7 +316,7 @@ Discovery Labs use stricter rules: only their declared route is permitted in the
 
 ### Universal Tracker and page progress
 
-Universal Tracker reconstructs the room's saved shuffled layout, goal, recipe checks, word orders and progressive settings instead of regenerating them from local YAML. Install the matching 1.6.0 Word Factori APWorld in the tracker environment too. Connected tracker testing remains a community-test priority.
+Universal Tracker reconstructs the room's saved shuffled layout, goal, recipe checks, word orders and progressive settings instead of regenerating them from local YAML. Install the matching 1.7.0 Word Factori APWorld in the tracker environment too. Connected tracker testing remains a community-test priority.
 
 “In logic” means reachable with your current machines **after completing the required earlier puzzles**, not necessarily clickable right now. The tracker assumes you can finish four solvable levels on the preceding page; the game opens the next page only after you actually finish four there. Conversely, an unlocked page lets you select all six factories even if some still require machines you do not own. Discovery Lab routes and challenge limits also apply.
 
@@ -387,7 +388,7 @@ Sticker deliveries and reconnecting to the same room do not require reloading Wo
 
 ## Troubleshooting
 
-### Progress and Status (unreleased candidate)
+### Progress and Status
 
 **Progress** separates three things: **Completed** is server-confirmed,
 **Sending** is queued locally, and **Unlocked in save** describes the actual local page.
@@ -426,7 +427,7 @@ Complete any four levels on the current full page, including page one. If the th
 
 ## Current limitations
 
-- Version 1.6.0 is a tester prerelease; a complete connected playthrough of the new features remains pending.
+- Version 1.7.0 is a tester prerelease; a complete connected playthrough of the new features remains pending.
 - Recipe checks, Type-a-Word orders and tracker reconstruction have automated/isolated coverage; live game/client/tracker testing is still needed.
 - Linux setup/client behavior have automated coverage. The new native Mail panel has isolated Windows-runner coverage, not an actual Linux/Proton playthrough. Proton, compositor, fullscreen and Flatpak Mail testing remain pending.
 - Arbitrary Workshop packs are not imported into generated seeds.
@@ -448,6 +449,8 @@ The required native patch includes the new machine enforcement and progressive r
 
 ## Development and verification
 
+The source checkout includes an APTests regression guide and valid Type-a-Word fuzz configuration under `docs/testing/`. The pre-version-bump candidate passed the full browser run: 205 unit tests and 14,500 generations across all 11 categories, with zero raw timeouts or restarts. Local regression coverage also includes 74 Universal Tracker cases and 74 mixed-world cases. These automated results do not replace live-game acceptance or constitute a stable-release claim.
+
 From a clean checkout on Windows with Python 3.12 or newer, run the same build, test, and verification sequence used by CI:
 
 ```powershell
@@ -462,7 +465,7 @@ py -3 -m unittest discover -s tests -v
 py -3 tools\verify_release.py
 ```
 
-Building first is required because the installer integration tests exercise the generated `word_factori.apworld`. The verification scope includes deterministic 30/40-level layouts, shuffled first-page and four-of-six progression, stable native-to-canonical mapping, both goals, duplicate deliveries and checks, reconnect reconciliation, campaign identity and mismatch blocking, save-slot selection/binding, installation and restoration, and release hygiene. Internal replay coverage of historical contracts does not promise support for old rooms. Automated results are separate from the pending live acceptance of this candidate.
+Building first is required because the installer integration tests exercise the generated `word_factori.apworld`. The verification scope includes deterministic 30/40-level layouts, shuffled first-page and four-of-six progression, stable native-to-canonical mapping, both goals, duplicate deliveries and checks, reconnect reconciliation, campaign identity and mismatch blocking, save-slot selection/binding, installation and restoration, and release hygiene. Internal replay coverage of historical contracts does not promise support for old rooms. Automated results are separate from the pending live acceptance of this release.
 
 ## Project ownership and attribution
 

@@ -1,0 +1,25 @@
+# APTests "Meta YAML" / Archipelago-fuzzer --meta input, not a player YAML.
+# Leave the enable toggle and count randomized, but provide enough valid targets
+# for every legal count (1-20). No production defaults are changed.
+Word Factori:
+  type_a_word_words:
+    - AP
+    - JACK
+    - WORD
+    - ISLAND
+    - CAT
+    - DOG
+    - BOOK
+    - OX
+    - IVY
+    - OWL
+    - AX
+    - PHONE
+    - FACE
+    - HACK
+    - JEWEL
+    - RABBIT
+    - '99'
+    - '()'
+    - '++'
+    - I2

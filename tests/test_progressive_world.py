@@ -49,6 +49,41 @@ class ProgressiveWorldTests(unittest.TestCase):
     def world(self, **kwargs):
         return fixtures.WorldLayoutTests().make_world(271828, progressive_machines=True, **kwargs)
 
+    def test_reverse_fill_preserves_early_capacity_and_other_player_positions(self):
+        from word_factori.quantity_layout import upgrade_path
+        world = self.world()
+        world.create_regions()
+        world.create_items()
+        records = {record.stable_key: record for record in world._manifest.levels}
+        path = upgrade_path(tuple(records[key] for key in world._layout.ordered_stable_keys))
+        locations = [world.get_location(data.name) for data in world.selected_locations()]
+        class State:
+            counts = Counter({'Progressive Bender Access': 1})
+            def count(self, name, player): return self.counts[name]
+        state = State()
+        first_reachable = {}
+        for step, item in enumerate((None, *path)):
+            if item is not None:
+                state.counts[item] += 1
+            for location in locations:
+                if location.access_rule(state):
+                    first_reachable.setdefault(location.name, step)
+        # Begin in early-first order, which consumes scarce starter slots in
+        # AP's reverse fill. The hook must preserve the random order of ties.
+        locations.sort(key=lambda location: first_reachable[location.name])
+        shuffled_ties = {step: [loc for loc in locations if first_reachable[loc.name] == step]
+                         for step in set(first_reachable.values())}
+        other = fixtures._Location(2, 'Other player', 999, None)
+        locations.insert(3, other)
+        pool = [item for item in world.multiworld.itempool if item.name in PROGRESSIVE_ITEMS]
+        world.fill_hook(pool, [], [], locations)
+        self.assertIs(other, locations[3])
+        own = [loc for loc in locations if loc.player == 1]
+        ranks = [first_reachable[loc.name] for loc in own]
+        self.assertEqual(sorted(ranks, reverse=True), ranks)
+        for step, tied in shuffled_ties.items():
+            self.assertEqual(tied, [loc for loc in own if first_reachable[loc.name] == step])
+
     def test_core_pool_has_29_upgrades_and_starting_bender(self):
         world = self.world()
         world.create_items()

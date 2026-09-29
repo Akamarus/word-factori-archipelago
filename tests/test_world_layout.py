@@ -15,6 +15,10 @@ class _Item:
         self.player = player
 
 
+class _OptionError(ValueError):
+    pass
+
+
 class _Location:
     def __init__(self, player, name, code, parent):
         self.player = player
@@ -142,6 +146,7 @@ def _install_archipelago_stubs():
     options.Toggle = _Toggle
     options.OptionList = _OptionList
     options.StartInventoryPool = _Choice
+    options.OptionError = _OptionError
 
     sys.modules.update({
         "BaseClasses": base_classes,
@@ -191,6 +196,103 @@ class _ReachabilityState:
 
 
 class WorldLayoutTests(unittest.TestCase):
+    def test_normal_campaign_evaluation_visits_each_predecessor_once(self):
+        world = self.make_world(322926241, level_set=1)
+        world.create_regions()
+        by_name = {loc.name: loc for reg in world.multiworld.regions for loc in reg.locations}
+        calls = {}
+        class State:
+            def has_all(self, needs, player): return True
+            def can_reach_location(self, name, player):
+                calls[name] = calls.get(name, 0) + 1
+                if calls[name] > 1:
+                    raise AssertionError('same predecessor traversed twice in one evaluation')
+                return by_name[name].can_reach(self)
+        self.assertTrue(by_name[world.selected_locations()[-1].name].access_rule(State()))
+        self.assertLessEqual(len(calls), len(world.selected_locations()))
+
+    def test_normal_campaign_rules_match_recursive_reference_for_all_inventories(self):
+        from word_factori.requirements import access_rule_for
+        machines = tuple(word_factori.MACHINE_ITEMS)
+        for level_set, seed in itertools.product((0, 1), (1, 43, 322926241)):
+            world = self.make_world(seed, level_set=level_set)
+            world.create_regions()
+            locations = world.selected_locations()
+            actual_rules = {loc.name: loc.access_rule for reg in world.multiworld.regions
+                            for loc in reg.locations if loc.address is not None}
+            reference_rules = {loc.name: access_rule_for(loc, locations, 1, integration_mode="enhanced")
+                               for loc in locations}
+            class State:
+                def __init__(self, rules, owned):
+                    self.rules, self.owned, self.cache = rules, owned, {}
+                def has_all(self, needs, player): return set(needs) <= self.owned
+                def can_reach_location(self, name, player):
+                    if name not in self.cache:
+                        self.cache[name] = self.rules[name](self)
+                    return self.cache[name]
+            for bits in itertools.product((False, True), repeat=len(machines)):
+                owned = {name for name, yes in zip(machines, bits) if yes}
+                actual, expected = State(actual_rules, owned), State(reference_rules, owned)
+                self.assertEqual(
+                    [expected.can_reach_location(loc.name, 1) for loc in locations],
+                    [actual.can_reach_location(loc.name, 1) for loc in locations],
+                    (level_set, seed, owned))
+
+    def test_normal_rule_temporary_results_clear_on_mutation_and_exception(self):
+        world = self.make_world(43, level_set=1)
+        world.create_regions()
+        locations = world.selected_locations()
+        by_name = {loc.name: loc for reg in world.multiworld.regions for loc in reg.locations}
+        rule = by_name[locations[-1].name].access_rule
+        class State:
+            machines = True
+            blocked = False
+            fail_after = None
+            calls = 0
+            def has_all(self, needs, player): return self.machines
+            def can_reach_location(self, name, player):
+                self.calls += 1
+                if self.fail_after is not None and self.calls >= self.fail_after:
+                    raise RuntimeError("synthetic lookup failure")
+                return not self.blocked and by_name[name].can_reach(self)
+        state = State()
+        self.assertTrue(rule(state))
+        state.machines = False
+        self.assertFalse(rule(state))
+        state.machines = True
+        state.calls, state.fail_after = 0, 10
+        with self.assertRaisesRegex(RuntimeError, "synthetic lookup"):
+            rule(state)
+        state.fail_after, state.blocked = None, True
+        self.assertFalse(rule(state))
+        state.blocked = False
+        self.assertTrue(rule(state))
+        entrance = by_name[locations[0].name].parent.entrances[0]
+        old_gate = entrance.access_rule
+        entrance.access_rule = lambda _: False
+        self.assertFalse(rule(state))
+        entrance.access_rule = old_gate
+        self.assertTrue(rule(state))
+
+    def test_normal_rule_nested_different_states_do_not_share_results(self):
+        world = self.make_world(43, level_set=1)
+        world.create_regions()
+        locations = world.selected_locations()
+        by_name = {loc.name: loc for reg in world.multiworld.regions for loc in reg.locations}
+        rule = by_name[locations[-1].name].access_rule
+        observations = []
+        class State:
+            nested = False
+            def __init__(self, allowed): self.allowed = allowed
+            def has_all(self, needs, player): return True
+            def can_reach_location(self, name, player):
+                if self.allowed and not self.nested:
+                    self.nested = True
+                    observations.append(rule(State(False)))
+                return self.allowed and by_name[name].can_reach(self)
+        self.assertTrue(rule(State(True)))
+        self.assertEqual([False], observations)
+
     def test_recipe_checks_default_on(self):
         self.assertEqual(1, world_options.RecipeChecks.default)
 
@@ -266,6 +368,38 @@ class WorldLayoutTests(unittest.TestCase):
         payload["level_order"].reverse()
         self.assertEqual(saved, slot)
         self.assertEqual(saved, self.make_world(31, passthrough={"Other Game": {}}).fill_slot_data())
+
+    def test_tracker_accepts_saved_tuple_arrays_without_losing_room_identity(self):
+        # AP's NetUtils.convert_to_base_types writes arrays as tuples in multidata.
+        # The APTests-bundled UT hook passes that data without a JSON round-trip.
+        def saved(value):
+            if isinstance(value, (list, tuple)):
+                return tuple(saved(entry) for entry in value)
+            if isinstance(value, dict):
+                return {key: saved(entry) for key, entry in value.items()}
+            return value
+
+        for progressive, words in itertools.product((False, True), repeat=2):
+            original = self.make_world(31, progressive_machines=progressive,
+                                       recipe_checks=True, type_a_word_checks=words,
+                                       type_a_word_words=['JACK', '99'], type_a_word_count=2)
+            slot = original.fill_slot_data()
+            raw = saved(slot)
+            with self.subTest(progressive=progressive, words=words):
+                payload = word_factori.WordFactoriWorld.interpret_slot_data(raw)
+                self.assertEqual(slot, payload)
+                restored = self.make_world(99, passthrough={original.game: raw})
+                self.assertEqual(slot, restored.fill_slot_data())
+                payload['level_order'].reverse()
+                self.assertEqual(saved(slot), raw)
+
+    def test_tracker_tuple_compatibility_does_not_accept_corrupt_arrays(self):
+        slot = self.make_world(31).fill_slot_data()
+        for order in (set(slot['level_order']), 'complete-i',
+                      (*slot['level_order'][:-1], 123),
+                      (*slot['level_order'][:-1], slot['level_order'][0])):
+            with self.subTest(order=order), self.assertRaises(ValueError):
+                word_factori.WordFactoriWorld.interpret_slot_data({**slot, 'level_order': order})
 
     def test_tracker_and_generated_world_agree_for_every_machine_inventory(self):
         for level_set in (0, 1):

@@ -85,6 +85,8 @@ jobs:
         run: python tools/verify_connected_multiworld.py --ap-source ap-source --seed 160929 --output connected-results/160929
       - name: Connected seed 160930
         run: python tools/verify_connected_multiworld.py --ap-source ap-source --seed 160930 --output connected-results/160930
+      - name: APTests generation regressions and accessibility
+        run: python tools/verify_aptests_regressions.py --ap-source ap-source --output aptests-results --extra-seeds 12
       - name: Keep synthetic connection evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -94,3 +96,6 @@ jobs:
           path: |
             connected-results/*/report.json
             connected-results/*/worker.log
+            aptests-results/report.json
+            aptests-results/input.json
+            aptests-results/*/worker.log

@@ -1,0 +1,11 @@
+[
+  {"run":17,"seed":968919938,"progression_balancing":83,"accessibility":"minimal","goal":"final_factory","campaign_count":29,"type_a_word_count":16},
+  {"run":117,"seed":328621293,"progression_balancing":17,"accessibility":"minimal","goal":"campaign_count","campaign_count":30,"type_a_word_count":13},
+  {"run":127,"seed":594688752,"progression_balancing":87,"accessibility":"full","goal":"campaign_count","campaign_count":21,"type_a_word_count":20},
+  {"run":298,"seed":169512824,"progression_balancing":50,"accessibility":"full","goal":"campaign_count","campaign_count":29,"type_a_word_count":11},
+  {"run":326,"seed":185105558,"progression_balancing":19,"accessibility":"minimal","goal":"final_factory","campaign_count":29,"type_a_word_count":20},
+  {"run":365,"seed":869297761,"progression_balancing":32,"accessibility":"full","goal":"final_factory","campaign_count":22,"type_a_word_count":9},
+  {"run":407,"seed":485887606,"progression_balancing":45,"accessibility":"minimal","goal":"final_factory","campaign_count":26,"type_a_word_count":3},
+  {"run":431,"seed":174706135,"progression_balancing":5,"accessibility":"minimal","goal":"campaign_count","campaign_count":23,"type_a_word_count":15},
+  {"run":495,"seed":918642523,"progression_balancing":9,"accessibility":"minimal","goal":"final_factory","campaign_count":23,"type_a_word_count":8}
+]

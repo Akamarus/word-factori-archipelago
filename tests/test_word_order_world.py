@@ -129,7 +129,7 @@ class WordOrderWorldTests(unittest.TestCase):
     def test_enabled_option_errors_name_the_option_and_player(self):
         for count, words in ((2, ["JACK"]), (1, ["straße"]), (21, TWENTY_WORDS), (True, ["JACK"])):
             with self.subTest(count=count, words=words), self.assertRaisesRegex(
-                ValueError, r"Type-a-Word options for player 1.*invalid"
+                fixtures.word_factori.OptionError, r"Type-a-Word options for player 1.*invalid"
             ):
                 self.make_world(
                     type_a_word_checks=True,

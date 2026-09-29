@@ -1,8 +1,10 @@
 # Release-candidate acceptance — 2026-09-27
 
-Status: **local candidate, not published; not stable**.
-The release number remains 1.6.0 until publication preparation. Identify this
-candidate by its commit and hashes, not the version label alone.
+Status: **historical pre-publication candidate evidence; not stable acceptance**.
+The work was subsequently prepared as the 1.7.0 tester prerelease. The identities
+below describe the September 27 candidate, not the final release downloads.
+Use the release's SHA256SUMS.txt for current artifact identity and the APTests
+regression report for the later generation fixes. Live gates remain pending.
 
 ## Candidate identity
 

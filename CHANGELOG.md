@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased — release-candidate polish (not published or stable)
+## 1.7.0 — Progress, recovery and generation fixes (tester prerelease)
 
+- Fixed Universal Tracker reconstruction from tuple-based saved room data, including selected Type-a-Word targets. Contract, digest and malformed-data validation remain enforced.
+- Fixed the nine exported APTests progressive-generation failures by preserving early campaign capacity during reverse item placement. Machine tiers, four-of-six page gates, IDs and YAML defaults are unchanged.
+- Reduced repeated normal-machine page-rule evaluation: unavailable machinery is rejected first, and page checks stop once four predecessors are reachable. This improves generation/Tracker evaluation, not in-game rendering performance.
+- Fixed remaining repeated page traversal exposed by mixed-world stress testing. Normal campaigns reuse predecessor results only inside one synchronous reachability evaluation, preserving real location/region rules and clearing results between queries and on exceptions. Added repeatable mixed-world accessibility checks and exhaustive normal-machine inventory comparisons.
+- Invalid Type-a-Word configurations now use Archipelago's option-error classification. Added a valid 20-target APTests meta YAML so randomized word options receive meaningful coverage rather than an empty list.
+- Added packaged real-AP regression replay, saved-room/Tracker sphere comparisons, required-accessibility validation and a deliberately broken-world rejection test. The corrected candidate passed the full browser retest: 205 unit tests and 14,500 generations across all 11 categories, with zero raw timeouts/restarts. Both 74-case local Tracker and mixed-world matrices also passed. See [APTests findings and retest instructions](https://github.com/Akamarus/word-factori-archipelago/blob/v1.7.0/docs/testing/aptests-regressions-20260929.md). These automated results do not replace live-game acceptance.
 - Added read-only Progress and Status tabs to Windows and native Linux/Proton AP Mail. Campaign rows follow the room's shuffled page order, keep canonical check names and distinguish local page access, server completion and missing machine routes.
 - Added normal and progressive requirement details to Type-a-Word cards, including alternative routes, finite quantities and restricted campaign labs. I sources remain available; no rules, IDs, machine allowances or YAML defaults changed.
 - Cached room/save-bound observations; stale, disconnected and unavailable states are explicit. Cosmetic failures cannot interrupt authoritative checks or item reconciliation.

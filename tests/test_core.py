@@ -59,6 +59,29 @@ class State:
 
 
 class DataTests(unittest.TestCase):
+    def test_normal_page_chain_stops_once_four_predecessors_are_reachable(self):
+        rules = {loc.name: access_rule_for(loc, LOCATIONS, 1, integration_mode='enhanced')
+                 for loc in LOCATIONS}
+        class CountingState:
+            calls = 0
+            def has_all(self, names, player): return True
+            def can_reach_location(self, name, player):
+                self.calls += 1
+                if self.calls > 6000:
+                    raise AssertionError('page reachability repeated excessive predecessor work')
+                return rules[name](self)
+        state = CountingState()
+        self.assertTrue(rules[LOCATIONS[-1].name](state))
+        self.assertLessEqual(state.calls, 6000)
+
+    def test_unaffordable_normal_level_does_not_expand_its_page_chain(self):
+        class MissingMachines:
+            def has_all(self, names, player): return False
+            def can_reach_location(self, name, player):
+                raise AssertionError('unaffordable target need not check predecessor pages')
+        rule = access_rule_for(LOCATIONS[-1], LOCATIONS, 1, integration_mode='enhanced')
+        self.assertFalse(rule(MissingMachines()))
+
     def test_world_has_forty_stable_indices_and_pool_items(self):
         self.assertEqual(list(range(40)), [location.canonical_index for location in LOCATIONS])
         self.assertEqual(list(range(40)), [location.slot_index for location in LOCATIONS])
