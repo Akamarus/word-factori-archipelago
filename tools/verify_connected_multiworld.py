@@ -1,4 +1,4 @@
-"""Opt-in AP 0.6.7 connected acceptance. No game, GUI, public server or real saves.
+"""Opt-in AP 0.6.7/0.6.8 connected acceptance. No game, GUI, public server or real saves.
 
 The controller stages trusted AP source and a packaged world into a NEW directory.
 The worker runs real generation, MultiServer, CommonClient and WordFactoriContext.
@@ -23,7 +23,8 @@ import traceback
 
 ROOT = Path(__file__).resolve().parents[1]
 COVERAGE = {"offline_completion", "client_restart", "duplicate_checks", "item_replay",
-            "tracker_reconstruction", "page_gates", "victory", "cross_player_delivery"}
+            "tracker_reconstruction", "page_gates", "victory", "cross_player_delivery",
+            "same_client_reconnect"}
 
 
 def create_run_directory(path: Path) -> None:
@@ -46,6 +47,10 @@ def stage_core(source: Path, target: Path) -> None:
     for relative in ("worlds/generic", "rule_builder"):
         shutil.copytree(source / relative, target / relative,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    # AP 0.6.8 moved server data-package handling into this core package.
+    if (source / "apmw").is_dir():
+        shutil.copytree(source / "apmw", target / "apmw",
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
 
 
 async def wait_until(predicate, description: str, timeout: float = 15) -> None:
@@ -63,6 +68,7 @@ def validate_report(report: dict) -> None:
             or report.get("cross_player_deliveries", 0) < 1
             or report.get("tracker_comparisons", 0) < 3
             or report.get("page_gate_observations", 0) < 1
+            or report.get("same_client_reconnects", 0) < 1
             or report.get("replay_rounds", 0) < 1):
         raise ValueError("incomplete connected acceptance coverage")
 
@@ -99,8 +105,8 @@ def worker_setup(run: Path, dependency_path: str | None, seed: int):
     os.environ["SKIP_REQUIREMENTS_UPDATE"] = "1"
     os.environ["KIVY_NO_ARGS"] = "1"
     import Utils
-    if Utils.__version__ != "0.6.7":
-        raise ValueError("This acceptance runner requires official AP 0.6.7 source")
+    if Utils.__version__ not in ("0.6.7", "0.6.8"):
+        raise ValueError("This acceptance runner requires official AP 0.6.7 or 0.6.8 source")
     for func, folder in ((Utils.user_path, "ap-user"), (Utils.home_path, "ap-user"),
                          (Utils.cache_path, "cache")):
         func.cached_path = str(run / folder)
@@ -235,6 +241,7 @@ def delivered_state(world, clients, *, tracker_player=None):
 
 async def connected_run(run, generated, wf, game_root, seed):
     import MultiServer
+    import Utils
     from NetUtils import ClientStatus
     from worlds.word_factori.client import WordFactoriContext
     from worlds.word_factori.overlay_preferences import OverlayPreferences
@@ -250,9 +257,10 @@ async def connected_run(run, generated, wf, game_root, seed):
             await super()._received_items_reconcile(*args, **kwargs)
             self.reconciled_item_packets += 1
 
-    report = {"status": "running", "ap_version": "0.6.7", "seed": seed,
+    report = {"status": "running", "ap_version": Utils.__version__, "seed": seed,
               "apworld_sha256": hashlib.sha256((run / "word_factori.apworld").read_bytes()).hexdigest(),
               "coverage": [], "tracker_comparisons": 0, "page_gate_observations": 0, "replay_rounds": 0,
+              "same_client_reconnects": 0,
               "simulation": ["installation fixture", "native acknowledgment", "completion journals", "physical page model"],
               "not_tested": ["native puzzle solving", "GUI/Proton", "Universal Tracker UI", "sustained performance"],
               "spheres": []}
@@ -371,6 +379,27 @@ async def connected_run(run, generated, wf, game_root, seed):
                         games[p].complete(clients[p], codes)
                         await clients[p].scan_once()
                 await settled()
+                if not report["same_client_reconnects"]:
+                    # Exercise AP's session-reset path without replacing the client.
+                    ctx = clients[1]
+                    identity, binding = ctx.connected_identity, ctx.bridge_state.game_slot_id
+                    received = tuple(ctx.items_received)
+                    applied = dict(ctx.bridge_state.applied)
+                    allowances = json.loads((games[1].mod / runtime.RUNTIME_NAME).read_text())["machine_counts"]
+                    await ctx.disconnect()
+                    await ctx.connect(address)
+                    await wait_until(lambda: ctx.slot == 1 and ctx.connected_identity == identity
+                                     and tuple(ctx.items_received) == received, "same-client reconnect")
+                    games[1].acknowledge(ctx)
+                    await ctx.scan_once()
+                    await settled()
+                    if ctx.bridge_state.game_slot_id != binding:
+                        raise AssertionError("same-client reconnect lost save binding")
+                    if (dict(ctx.bridge_state.applied) != applied
+                            or json.loads((games[1].mod / runtime.RUNTIME_NAME).read_text())["machine_counts"] != allowances):
+                        raise AssertionError("same-client reconnect changed machine allowances or applied items")
+                    report["same_client_reconnects"] += 1
+                    report["coverage"].append("same_client_reconnect")
                 before = {p: tuple(ctx.items_received) for p, ctx in clients.items()}
                 applied_before = {p: dict(ctx.bridge_state.applied) for p, ctx in clients.items()}
                 allowances_before = {p: json.loads((games[p].mod / runtime.RUNTIME_NAME).read_text())["machine_counts"]

@@ -4,6 +4,24 @@
 `word-factori-archipelago-1.7.0.zip`, not GitHub's automatic source-code archive.
 The same player ZIP supports Windows and experimental Linux/Proton setup.
 
+## Archipelago 0.6.8 compatibility update — October 6
+
+**The existing v1.7.0 download works with final Archipelago 0.6.8.**
+Packaged generation, actual Universal Tracker sphere comparisons, mixed-game
+generation and connected server/client tests passed. No gameplay fix or
+replacement download is required, and 0.6.7 remains supported.
+
+Already on Word Factori v1.7.0? Upgrading AP alone does not require a new
+Word Factori room/save, YAML changes or repatching the game. If you install AP
+in a different folder, install the same v1.7.0 APWorld there. The fresh-room
+instructions below apply to updating the Word Factori integration from an
+older release, not merely upgrading AP.
+
+The published assets and tag have not been replaced. This remains a tester
+prerelease: automated tests simulate game completions and do not constitute
+a new live Windows/Proton playthrough. See the
+[compatibility test record](https://github.com/Akamarus/word-factori-archipelago/blob/main/docs/testing/archipelago-068-20261006.md).
+
 ## What changed
 
 - **AP Mail Progress and Status on both platforms.** See your room's shuffled
@@ -34,7 +52,7 @@ The same player ZIP supports Windows and experimental Linux/Proton setup.
 - **More regression coverage:** packaged generation, actual Tracker sphere
   comparisons, mixed Kingdom Hearts rooms, required accessibility, connected
   duplicate/reconnect handling and deliberate premature-victory rejection.
-  Windows/Ubuntu connected CI is pinned to official Archipelago 0.6.7.
+  Windows/Ubuntu connected CI now covers pinned official Archipelago 0.6.7 and 0.6.8.
 
 ## YAML and progression
 

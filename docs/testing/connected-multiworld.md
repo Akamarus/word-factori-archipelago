@@ -1,14 +1,15 @@
 # Connected multiworld acceptance (developer test)
 
-This opt-in test uses **official Archipelago 0.6.7**, a packaged Word Factori
+This opt-in test uses **official Archipelago 0.6.7 or 0.6.8**, a packaged Word Factori
 APWorld, a real loopback WebSocket server, and two real Word Factori client
 contexts. No public room, installed game, GUI, credentials or player saves are
 used. It is not an automated in-game playthrough.
 
 ## What it verifies
 
-CI now requires this coverage on Windows and Ubuntu, pinned to AP 0.6.7 commit
-`debe4cf035c7c15efe6fb95f72343af0d420c68c`. The job verifies source availability,
+CI requires this coverage on Windows and Ubuntu for both AP 0.6.7 commit
+`debe4cf035c7c15efe6fb95f72343af0d420c68c` and AP 0.6.8 commit
+`54803be064fc7e80c4628777ed0b46a9390f255f`. The job verifies source availability,
 builds the APWorld, runs the successful-room and premature-victory tests, then
 runs seeds 160929 and 160930. Synthetic reports/logs are retained for seven days.
 Dependency or setup failures fail the job; they do not count as skipped acceptance.
@@ -30,6 +31,8 @@ the historical record at the end is not evidence for a changed package.
   save scanning, binding, pending-check and reconciliation paths.
 - Restarts a client after recording completions offline and verifies its saved
   room/save binding and catch-up behavior.
+- Disconnects and reconnects the same client instance after progression, then
+  verifies item reconciliation and preservation of its room/save binding.
 - Repeats checks over the real connection and requests full item replays using
   `Sync`. Waits for real async reconciliation, then verifies that inventory,
   applied item indices and published machine allowances have not increased.
@@ -62,7 +65,7 @@ authentication are not covered by this scenario.
 
 ## Run it
 
-Use Python 3.12 with the dependencies required by the official AP 0.6.7 source
+Use Python 3.12 with the dependencies required by the official AP source
 checkout installed in that environment. The runner never downloads dependencies
 or upgrades packages. It copies only core Python files and framework directories
 from the source, not its settings, installed games/worlds, caches or saves.
@@ -76,8 +79,7 @@ python tools/verify_connected_multiworld.py --ap-source "C:/src/Archipelago" --s
 python tools/verify_connected_multiworld.py --ap-source "C:/src/Archipelago" --seed 160930 --output "../word-factori-test-runs/seed-160930"
 ```
 
-On Linux, use the same CLI with Linux paths (the connected runner itself has
-only been exercised on Windows so far). Use the **0.6.7 source tag**,
+On Linux, use the same CLI with Linux paths. Use the **0.6.7 or 0.6.8 source tag**,
 not the development branch. Output must be a **new directory** each time; an
 existing destination is refused rather than overwritten. Short temporary game
 paths avoid Windows path-length limits and are removed automatically. Reports,

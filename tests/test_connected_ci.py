@@ -4,7 +4,10 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-PIN = 'debe4cf035c7c15efe6fb95f72343af0d420c68c'
+PINS = {
+    '0.6.7': 'debe4cf035c7c15efe6fb95f72343af0d420c68c',
+    '0.6.8': '54803be064fc7e80c4628777ed0b46a9390f255f',
+}
 
 
 class ConnectedCITests(unittest.TestCase):
@@ -17,7 +20,8 @@ class ConnectedCITests(unittest.TestCase):
         self.assertEqual(flow['permissions'], {'contents': 'read'})
         steps = job['steps']
         ap = next(s for s in steps if s.get('with', {}).get('repository') == 'ArchipelagoMW/Archipelago')
-        self.assertEqual(ap['with']['ref'], PIN)
+        self.assertEqual(ap['with']['ref'], '${{ matrix.ap.ref }}')
+        self.assertEqual({entry['version']: entry['ref'] for entry in job['strategy']['matrix']['ap']}, PINS)
         self.assertTrue(any(s.get('with', {}).get('python-version') == '3.12' for s in steps))
         commands = [s.get('run', '') for s in steps]
         build = next(i for i,c in enumerate(commands) if 'python tools/build_release.py' in c)
@@ -30,6 +34,7 @@ class ConnectedCITests(unittest.TestCase):
         artifact = next(s for s in steps if s.get('uses', '').startswith('actions/upload-artifact@'))
         self.assertEqual(artifact['if'], 'always()')
         self.assertEqual(artifact['with']['retention-days'], 7)
+        self.assertIn('${{ matrix.ap.version }}', artifact['with']['name'])
         self.assertNotIn('ap-source', artifact['with']['path'])
 
     def test_headless_dependency_versions_are_pinned(self):

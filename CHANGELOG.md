@@ -1,5 +1,13 @@
 # Changelog
 
+## Compatibility verification — 2026-10-06 (no new player release)
+
+- Verified the existing v1.7.0 APWorld against the final official Archipelago 0.6.8 release, rather than a development snapshot. No gameplay code, native patch, YAML options, defaults, IDs or release assets changed.
+- Expanded connected test tooling to stage AP's new core package and report the actual tested AP version. Added same-client disconnect/reconnect coverage alongside client restart, duplicate checks and full item replay.
+- Added official 0.6.7 and 0.6.8 source pins to the Windows/Ubuntu connected CI matrix; updated the isolated headless dependency pin for 0.6.8.
+- Updated installation guidance to recommend AP 0.6.8 while retaining 0.6.7 support. Upgrading AP alone does not require a new Word Factori room/save or repatching the game; a new AP installation folder needs the same v1.7.0 APWorld installed there.
+- Compatibility tests use simulated game completion journals. This is not a stable-release promotion or a claim of a new live Proton/Windows playthrough.
+
 ## 1.7.0 — Progress, recovery and generation fixes (tester prerelease)
 
 - Fixed Universal Tracker reconstruction from tuple-based saved room data, including selected Type-a-Word targets. Contract, digest and malformed-data validation remain enforced.

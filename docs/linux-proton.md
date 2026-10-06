@@ -13,7 +13,7 @@ is needed. For 1.7.0 testing, generate a new room and bind a fresh empty save; k
 
 ## Before setup
 
-- Install native Archipelago 0.6.7 and Python 3.12 or newer using your normal
+- Install native Archipelago 0.6.8 (0.6.7 is also supported) and Python 3.12 or newer using your normal
   distribution instructions. Setup does not install packages or ask for sudo.
 - Own the supported Steam Word Factori build 12616577. Setup verifies the exact
   original game and bundled patch hashes; unknown binaries are refused.

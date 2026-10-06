@@ -1,6 +1,8 @@
 # Word Factori Experimental Multiworld Setup
 
-Version **[1.7.0 is a tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.7.0)**, not a stable release. It includes Recipe Journal checks, optional Type-a-Word orders, optional progressive machines and Universal Tracker reconstruction fixes. Use Archipelago 0.6.7, the matching APWorld/client/native patch, a **new room**, and a **fresh empty mod save**. Keep old saves and the original-game backup; do not reuse their progress for the new room.
+Version **[1.7.0 is a tester prerelease](https://github.com/Akamarus/word-factori-archipelago/releases/tag/v1.7.0)**, not a stable release. It includes Recipe Journal checks, optional Type-a-Word orders, optional progressive machines and Universal Tracker reconstruction fixes. Use Archipelago 0.6.8 (0.6.7 is also supported), the matching APWorld/client/native patch, a **new room**, and a **fresh empty mod save**. Keep old saves and the original-game backup; do not reuse their progress for the new room.
+
+If you already use Word Factori v1.7.0, upgrading only Archipelago from 0.6.7 to 0.6.8 does not require a new Word Factori room/save or repatching the game. Install the same APWorld in the new AP folder if your AP installation path changes.
 
 One integration and one installer supports both machine modes; there is no fixed-layout or integration-mode selector. Connected game/client/tracker, GUI import/undo/duplicate, large-factory performance and Linux/Proton playthrough acceptance remain pending.
 
@@ -67,7 +69,7 @@ For an update, close the game and Archipelago and double-click the same installe
 
 ## Install on Linux with Steam Proton (experimental)
 
-1. Install native **Archipelago 0.6.7** and **Python 3.12 or newer**. Launch the supported Word Factori build through Steam Proton once, then close the game and Archipelago.
+1. Install native **Archipelago 0.6.8** (or 0.6.7) and **Python 3.12 or newer**. Launch the supported Word Factori build through Steam Proton once, then close the game and Archipelago.
 2. Extract the same player ZIP linked above and open a terminal in its folder.
 3. Run `bash "Install Word Factori Archipelago.sh"`.
 4. Choose the Steam/Proton installation if prompted, enter your existing native Archipelago user-world directory (`worlds` or `custom_worlds`), and confirm the displayed real destinations (directory shortcuts are resolved). Choices remain local.

@@ -56,18 +56,37 @@ class ConnectedRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "coverage"):
             runner.validate_report({"status": "pass", "players": []})
 
+    def test_staging_includes_new_core_package_but_not_its_cache(self):
+        runner = self.runner()
+        with tempfile.TemporaryDirectory() as temp:
+            source, dest = Path(temp) / "source", Path(temp) / "run"
+            (source / "worlds/generic").mkdir(parents=True)
+            (source / "rule_builder").mkdir()
+            package = source / "apmw/multiserver"
+            package.mkdir(parents=True)
+            for name in ("Utils.py", "Generate.py", "Main.py", "MultiServer.py", "CommonClient.py"):
+                (source / name).write_text("# fixture core")
+            (package / "gamespackagecache.py").write_text("MARKER = 68")
+            (package / "__pycache__").mkdir()
+            (package / "__pycache__/cache.pyc").write_bytes(b"stale")
+            runner.stage_core(source, dest)
+            self.assertTrue((dest / "apmw/multiserver/gamespackagecache.py").is_file())
+            self.assertEqual("MARKER = 68", (dest / "apmw/multiserver/gamespackagecache.py").read_text())
+            self.assertFalse((dest / "apmw/multiserver/__pycache__").exists())
+
     def test_report_requires_real_delivery_replay_and_page_observations(self):
         import copy
         runner = self.runner()
         complete = {"status": "pass", "coverage": ["offline_completion", "client_restart",
                     "duplicate_checks", "item_replay", "tracker_reconstruction", "page_gates",
-                    "victory", "cross_player_delivery"],
+                    "victory", "cross_player_delivery", "same_client_reconnect"],
                     "players": [{"checked": 33, "expected": 33, "goal": True},
                                 {"checked": 230, "expected": 230, "goal": True}],
                     "cross_player_deliveries": 5, "tracker_comparisons": 20,
-                    "page_gate_observations": 10, "replay_rounds": 9}
+                    "page_gate_observations": 10, "replay_rounds": 9, "same_client_reconnects": 1}
         runner.validate_report(complete)
-        for field in ("cross_player_deliveries", "tracker_comparisons", "page_gate_observations", "replay_rounds"):
+        for field in ("cross_player_deliveries", "tracker_comparisons", "page_gate_observations", "replay_rounds",
+                      "same_client_reconnects"):
             with self.subTest(field=field):
                 invalid = copy.deepcopy(complete)
                 invalid[field] = 0
@@ -86,7 +105,7 @@ class ConnectedRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(TimeoutError, "never connected"):
             asyncio.run(runner.wait_until(lambda: False, "never connected", timeout=.01))
 
-    @unittest.skipUnless(os.environ.get("WF_AP_SOURCE"), "opt-in real AP 0.6.7 connected test")
+    @unittest.skipUnless(os.environ.get("WF_AP_SOURCE"), "opt-in real AP connected test")
     def test_real_two_client_room_finishes_without_cheats(self):
         runner = self.runner()
         with tempfile.TemporaryDirectory() as temp:
@@ -100,13 +119,18 @@ class ConnectedRunnerTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stdout + result.stderr + log[-8000:])
             report = json.loads((output / "report.json").read_text())
             self.assertEqual("pass", report["status"])
-            self.assertEqual("0.6.7", report["ap_version"])
+            import ast
+            version_assignment = next(
+                node for node in ast.parse((Path(os.environ["WF_AP_SOURCE"]) / "Utils.py").read_text(encoding="utf-8")).body
+                if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__version__" for t in node.targets))
+            self.assertEqual(ast.literal_eval(version_assignment.value), report["ap_version"])
             self.assertEqual([33, 230], [p["checked"] for p in report["players"]])
             self.assertTrue(all(p["goal"] for p in report["players"]))
             self.assertGreater(report["cross_player_deliveries"], 0)
             self.assertGreater(report["tracker_comparisons"], 2)
+            self.assertEqual(1, report.get("same_client_reconnects", 0))
 
-    @unittest.skipUnless(os.environ.get("WF_AP_SOURCE"), "opt-in real AP 0.6.7 fault test")
+    @unittest.skipUnless(os.environ.get("WF_AP_SOURCE"), "opt-in real AP fault test")
     def test_connected_runner_catches_premature_victory(self):
         runner = self.runner()
         with tempfile.TemporaryDirectory() as temp:

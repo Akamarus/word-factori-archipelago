@@ -11,7 +11,14 @@ An experimental public beta for playing **Word Factori** with [Archipelago](http
 The public download below is the **1.7.0 tester prerelease**, not a stable release.
 It includes the AP Mail polish and generation fixes described below.
 
-1. Install Archipelago 0.6.7 and Word Factori (Steam build 12616577).
+**Archipelago 0.6.8:** the existing v1.7.0 download passes packaged generation,
+Universal Tracker reconstruction and connected-client checks against the final
+0.6.8 release. No replacement Word Factori package, YAML changes or new save are
+required solely for the AP 0.6.7 → 0.6.8 upgrade. If the AP upgrade uses a new
+installation folder, reinstall the same v1.7.0 APWorld there. This remains a
+tester prerelease; live Windows/Linux gameplay acceptance is still outstanding.
+
+1. Install Archipelago 0.6.8 (0.6.7 is also supported) and Word Factori (Steam build 12616577).
 2. Download and extract the single player ZIP below.
 3. **Windows:** close the game and Archipelago, then double-click **Install Word Factori Archipelago.cmd**.
    **Linux/Proton:** run the game once through Steam/Proton and close it, then run
@@ -129,8 +136,8 @@ The native patch enables independent first-page buttons and machine refresh on f
 
 ## Engineering highlights
 
-- Python Archipelago APWorld and client integration compatible with Archipelago 0.6.7.
-- Also passes generation on 0.6.8 source, including invocation outside the source directory; connected 0.6.8 client testing remains pending.
+- Python Archipelago APWorld and client integration tested against official Archipelago 0.6.7 and 0.6.8.
+- Final 0.6.8 verification covers packaged generation outside the AP folder, actual Universal Tracker sphere comparisons, mixed-game generation, and real server/client reconciliation with simulated game completions.
 - Word Factori JSON mod integration with a required exact-build native patch and stable 30- and 40-location Archipelago identities even when their native game slots move.
 - Deterministic recipe-graph and progression modeling for automated reachability rules.
 - Idempotent item delivery, completed-check, reconnect, and victory reconciliation.
@@ -169,7 +176,7 @@ Letters are always manufactured inside Word Factori. Archipelago never sends ind
 ## Requirements
 
 - Word Factori on Steam
-- Archipelago **0.6.7**
+- Archipelago **0.6.8** (also supports **0.6.7**)
 - Windows, or Linux with Steam Proton (experimental)
 - On Linux: native Archipelago and Python **3.12 or newer**
 
@@ -213,7 +220,7 @@ To restore the game binary, close Word Factori and double-click the root **Resto
 
 ### Linux with Steam Proton (experimental)
 
-1. Install **native Archipelago 0.6.7** and **Python 3.12 or newer**. Launch Word Factori through Steam Proton once, then close the game and Archipelago.
+1. Install **native Archipelago 0.6.8** (or 0.6.7) and **Python 3.12 or newer**. Launch Word Factori through Steam Proton once, then close the game and Archipelago.
 2. Extract the same player ZIP linked above. Keep all files together.
 3. Open a terminal in the extracted folder and run:
 

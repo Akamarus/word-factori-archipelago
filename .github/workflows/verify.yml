@@ -54,6 +54,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
+        ap:
+          - version: "0.6.7"
+            ref: debe4cf035c7c15efe6fb95f72343af0d420c68c
+          - version: "0.6.8"
+            ref: 54803be064fc7e80c4628777ed0b46a9390f255f
     env:
       WF_AP_SOURCE: ${{ github.workspace }}/ap-source
       PYTHONUTF8: "1"
@@ -62,7 +67,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: ArchipelagoMW/Archipelago
-          ref: debe4cf035c7c15efe6fb95f72343af0d420c68c
+          ref: ${{ matrix.ap.ref }}
           path: ap-source
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -91,7 +96,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: connected-${{ matrix.os }}
+          name: connected-${{ matrix.os }}-${{ matrix.ap.version }}
           retention-days: 7
           path: |
             connected-results/*/report.json
