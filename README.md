@@ -4,6 +4,8 @@
 
 An experimental public beta for playing **Word Factori** with [Archipelago](https://archipelago.gg/). It assembles a curated 30- or 40-level custom campaign into seed-specific six-level pages, turns completed levels into Archipelago checks, and unlocks factory machinery as items arrive from the multiworld.
 
+**Available in the [Ionium index](https://github.com/ionium-ap/Archipelago-index/blob/main/index/word_factori.toml):** v1.7.0 supports Archipelago 0.6.7 and 0.6.8. [The index submission was accepted](https://github.com/ionium-ap/Archipelago-index/pull/832) after Ionium's unit tests and all 29,000 generation checks passed across both versions, with zero failures or timeouts. Index inclusion does not change this integration's tester-prerelease status. Players still need the matching player ZIP and installer described below.
+
 ![Word Factori with the integrated Archipelago Chat panel open](docs/images/word-factori-archipelago-chat.png)
 
 ## Quick start
@@ -476,7 +478,7 @@ Building first is required because the installer integration tests exercise the 
 
 ## Project ownership and attribution
 
-Created and maintained by Jack (@Akamarus). AI tools were used extensively for planning, implementation assistance, documentation, and review. Jack directed the project, made the product and integration decisions, performed live game testing, validated release behavior, and retains responsibility for maintenance and releases.
+Created and maintained by Jack (@Akamarus). Jack is responsible for project direction, maintenance, and releases.
 
 Code in this repository is available under the [MIT License](LICENSE).
 

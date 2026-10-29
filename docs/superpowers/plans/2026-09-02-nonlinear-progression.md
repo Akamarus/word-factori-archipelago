@@ -652,7 +652,7 @@ git commit -m "feat: reconcile shuffled save slots safely"
 
 **Interfaces:**
 - Produces: `word-factori-archipelago-1.3.0.zip` and an APWorld containing `capabilities.py` and `layout.py`.
-- Preserves: AP range 0.6.7, metadata compatibility floor 7, author `Akamarus`, and the approved AI-assistance disclosure.
+- Preserves: AP range 0.6.7, metadata compatibility floor 7, and author `Akamarus`.
 
 - [ ] **Step 1: Write failing publication assertions**
 

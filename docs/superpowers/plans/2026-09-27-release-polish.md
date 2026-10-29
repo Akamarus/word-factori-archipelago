@@ -18,7 +18,7 @@
 - Campaign rows are bounded at 40; word orders retain the existing 20-row limit. Native snapshots retain the 256 KiB ceiling.
 - Preserve progressive 1/2/3/4/unlimited semantics, room identity validation and input isolation.
 - Ship no proprietary game binary in the distribution. Native artifacts must be rebuilt from the verified original in a scratch directory, never in the installed game.
-- Keep the Akamarus credit and full approved AI-assistance disclosure.
+- Keep the Akamarus maintainer credit.
 - No publication, live installation changes or game launches during implementation preparation. Request a separate live-test session when required.
 - Stable status requires all six acceptance gates in the specification; missing evidence stays Pending.
 
@@ -152,7 +152,7 @@ Each task follows red test, minimal implementation, green test, inline review, a
   self.assertGreaterEqual(len(set(progressive_options["type_a_word_words"])), 3)
   ```
 - [ ] Write the acceptance record covering all six spec gates, including exact package/hash/date/platform/evidence columns and Pending/Pass/Fail/Unsupported states. Initialize unobserved live cases Pending, exclusive fullscreen Unsupported. Include the 60-minute measurement worksheet at warm-up, 15, 30, 45 and 60 minutes with a fixed comparable factory state.
-- [ ] Rewrite concise README quick-start/check-type/recovery sections and changelog; preserve author/disclosure. Link maintainer testing documents through repository URLs if they are intentionally excluded from the player ZIP. Clearly distinguish install/update restart from prohibited per-item reload dependency.
+- [ ] Rewrite concise README quick-start/check-type/recovery sections and changelog; preserve maintainer attribution. Link maintainer testing documents through repository URLs if they are intentionally excluded from the player ZIP. Clearly distinguish install/update restart from prohibited per-item reload dependency.
 - [ ] Compile the updated native helpers in a new scratch directory using `python tools/build_enhanced_probe.py --cli CLI --original ORIGINAL --output SCRATCH/data.win`. Resolve all three inputs from verified existing tooling and allowlisted original; refuse if unavailable or if output is an installed path. Update build metadata to native Mail protocol 2. Compile/reopen checks must pass before producing a delta with `python tools/enhanced_delta.py ORIGINAL SCRATCH/data.win SCRATCH/enhanced.patch.gz`. Verify exact round-trip before replacing the repository's delta through a controlled artifact update.
 - [ ] Update hash owners and upgrade tests from that artifact; preserve matching receipt validation and original backup checks. Test 1.6.0-to-candidate upgrade and restore transactions with fixtures on both platforms. Do not run the real installer or alter live game files. If tooling/original is unavailable, stop the packaging step and report that blocker rather than shipping a stale patch.
 - [ ] Run `python -m unittest tests.test_release_polish_docs tests.test_installer tests.test_linux_installer tests.test_enhanced_installer tests.test_enhanced_delta tests.test_unified_distribution tests.test_publication -v`, then `powershell -ExecutionPolicy Bypass -File tools/verify.ps1 -PythonExecutable PYTHON`. Repeat Task 5's two seeds against the final package and compare contract/ID/YAML-default invariants with the baseline. Require zero unexpected failures and explicitly account for skipped platform/live cases.

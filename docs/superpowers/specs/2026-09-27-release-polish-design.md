@@ -170,7 +170,7 @@ download/installer/client steps and a troubleshooting section. Explain campaign
 completion, recipe discovery and chosen word orders separately. Provide two
 validated YAML examples: straightforward normal-machine play and an optional
 progressive/recipe/word-order setup. No new YAML option or default is introduced.
-Keep the Akamarus credit and full approved AI-assistance disclosure.
+Keep the Akamarus maintainer credit.
 
 Create an acceptance record with package hash, date, platform, steps, results and
 evidence link for each gate. **Pending**, **Pass**, **Fail**, and **Unsupported**

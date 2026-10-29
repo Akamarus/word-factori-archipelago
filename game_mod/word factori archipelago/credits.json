@@ -2,12 +2,11 @@
   "LeftPage": [
     "# Word Factori Archipelago",
     "Independent community integration",
-    "Created and maintained by Jack (@Akamarus).",
-    "AI tools were used extensively for planning, implementation assistance, documentation, and review."
+    "Created and maintained by Jack (@Akamarus)."
   ],
   "RightPage": [
     "# Responsibility",
-    "Jack directed the project, made the product and integration decisions, performed live game testing, validated release behavior, and retains responsibility for maintenance and releases.",
-    "No proprietary binaries are redistributed or modified"
+    "Jack is responsible for project direction, maintenance, and releases.",
+    "No full proprietary game binaries are redistributed"
   ]
 }

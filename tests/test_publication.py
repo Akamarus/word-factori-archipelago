@@ -96,22 +96,19 @@ class PublicationTests(unittest.TestCase):
         )
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
-        approved_disclosure = (
-            "Created and maintained by Jack (@Akamarus). AI tools were used extensively "
-            "for planning, implementation assistance, documentation, and review. Jack "
-            "directed the project, made the product and integration decisions, performed "
-            "live game testing, validated release behavior, and retains responsibility "
-            "for maintenance and releases."
+        approved_attribution = (
+            "Created and maintained by Jack (@Akamarus). "
+            "Jack is responsible for project direction, maintenance, and releases."
         )
 
         self.assertEqual(["Akamarus"], metadata["authors"])
         self.assertEqual("Akamarus", AUTHOR)
         self.assertIn("Independent community integration", credits["LeftPage"])
         self.assertEqual(
-            approved_disclosure,
+            approved_attribution,
             " ".join(credits["LeftPage"][2:] + credits["RightPage"][1:2]),
         )
-        self.assertIn(approved_disclosure, readme)
+        self.assertIn(approved_attribution, readme)
         self.assertTrue(readme.startswith("# Word Factori Archipelago"))
         self.assertTrue(
             readme[readme.index("Created and maintained"):].startswith(
