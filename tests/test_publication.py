@@ -12,6 +12,19 @@ from tools.build_release import ROOT, include
 
 
 class PublicationTests(unittest.TestCase):
+    def test_portfolio_readme_retains_release_limits_and_technical_reference(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        for required in (
+            "## Project role", "## Engineering decisions", "## Architecture",
+            "## Validation and limits", "no longer listed in the Archipelago Discord server",
+            "Designated stable by the maintainer on October 29, 2026",
+            "original downloads and tag are unchanged",
+            "actual Linux/Proton gameplay", "Exclusive fullscreen is unsupported",
+            "<details>", "</details>",
+        ):
+            self.assertIn(required, readme)
+        self.assertNotIn("**Available in the [Ionium index]", readme)
+
     def test_native_mail_modules_are_in_the_built_apworld(self):
         build_release.write_world()
         with zipfile.ZipFile(build_release.WORLD_ARCHIVE) as archive:
